@@ -1,3 +1,4 @@
+
 import os
 import sys
 import json
@@ -221,12 +222,11 @@ def load_mapping(file_path: str) -> Dict[str, str]:
         logger.error(f"Invalid JSON format in mapping file: {file_path}")
         sys.exit(1)
 
-def adjust_font_size(runs, orig_len, new_len, ns, W_NAMESPACE):
+def adjust_font_size(runs, orig_len, new_len, p, ns, W_NAMESPACE):
     """
-    Adjust font size for a list of runs so that increased text length fits the shape.
+    Adjust font size for a list of runs and also the paragraph-level rPr so that increased text length fits the shape.
     Uses sqrt scaling for area-proportional fit.
     """
-    # Only shrink font if new text is longer and original length is > 0
     if new_len > orig_len and orig_len > 0:
         ratio = orig_len / new_len
         scale = math.sqrt(ratio)
@@ -245,12 +245,26 @@ def adjust_font_size(runs, orig_len, new_len, ns, W_NAMESPACE):
                     except Exception:
                         continue
         if orig_sz is None:
+            # Try paragraph-level <w:pPr>/<w:rPr>/<w:sz>
+            pPr = p.find('w:pPr', ns)
+            if pPr is not None:
+                rPr_p = pPr.find('w:rPr', ns)
+                if rPr_p is not None:
+                    sz_elem = rPr_p.find('w:sz', ns)
+                    if sz_elem is not None:
+                        try:
+                            sz = int(sz_elem.get(f'{{{W_NAMESPACE}}}val'))
+                            orig_sz = sz
+                        except Exception:
+                            pass
+        if orig_sz is None:
             orig_sz = 28  # default to 14 pt if not specified
-        # Calculate new size (keep even for Word, but int is fine)
+
         new_sz = int(max(orig_sz * scale, min_font))
         if new_sz % 2 == 1:
             new_sz += 1  # make even
         if new_sz < orig_sz:
+            # Set for all runs
             for r in runs:
                 rPr = r.find('w:rPr', ns)
                 if rPr is None:
@@ -263,6 +277,21 @@ def adjust_font_size(runs, orig_len, new_len, ns, W_NAMESPACE):
                 if szcs is None:
                     szcs = ET.SubElement(rPr, f'{{{W_NAMESPACE}}}szCs')
                 szcs.set(f'{{{W_NAMESPACE}}}val', str(new_sz))
+            # Set at paragraph-level <w:pPr>/<w:rPr>
+            pPr = p.find('w:pPr', ns)
+            if pPr is None:
+                pPr = ET.SubElement(p, f'{{{W_NAMESPACE}}}pPr')
+            rPr_p = pPr.find('w:rPr', ns)
+            if rPr_p is None:
+                rPr_p = ET.SubElement(pPr, f'{{{W_NAMESPACE}}}rPr')
+            sz_elem_p = rPr_p.find('w:sz', ns)
+            if sz_elem_p is None:
+                sz_elem_p = ET.SubElement(rPr_p, f'{{{W_NAMESPACE}}}sz')
+            sz_elem_p.set(f'{{{W_NAMESPACE}}}val', str(new_sz))
+            szcs_p = rPr_p.find('w:szCs', ns)
+            if szcs_p is None:
+                szcs_p = ET.SubElement(rPr_p, f'{{{W_NAMESPACE}}}szCs')
+            szcs_p.set(f'{{{W_NAMESPACE}}}val', str(new_sz))
 
 def replace_patterns_in_docx(input_path: str, output_path: str, mapping: Dict[str, str], ocr_processor: OCRProcessor) -> Dict[str, int]:
     """Process DOCX file with text and image replacements"""
@@ -302,28 +331,38 @@ def replace_patterns_in_docx(input_path: str, output_path: str, mapping: Dict[st
                 # Process all paragraphs
                 for p in root.findall('.//w:p', ns):
                     runs = p.findall('w:r', ns)
-                    for r in runs:
-                        t = r.find('w:t', ns)
-                        if t is not None and t.text:
-                            orig_text = t.text
-                            for old_text, new_text in mapping.items():
-                                if old_text in orig_text:
-                                    # Replace text
-                                    new_content = orig_text.replace(old_text, f"{old_text} {new_text}")
-                                    t.text = new_content
-                                    stats['text_matches'] += 1
-                                    stats['text_replacements'] += 1
-                                    logger.info(f"Replaced '{old_text}' with '{new_text}' in text")
-                                    # Adjust font size if new content is longer
-                                    adjust_font_size(
-                                        runs, 
-                                        len(orig_text), 
-                                        len(new_content), 
-                                        ns, 
-                                        W_NAMESPACE
-                                    )
-                                    # Only do one replacement per run (avoid double-resizing if multiple matches)
-                                    break
+                    # Gather full paragraph text (concatenate all <w:t> in .//w:t)
+                    para_text = ''.join([t_el.text or '' for t_el in p.findall('.//w:t', ns)])
+                    replaced = False
+                    for old_text, new_text in mapping.items():
+                        if old_text in para_text:
+                            # Calculate new paragraph text
+                            new_para_text = para_text.replace(old_text, f"{old_text} {new_text}")
+                            # Now do per-run replacement (simple left-to-right, not splitting words across runs)
+                            remaining = new_para_text
+                            for r in runs:
+                                t = r.find('w:t', ns)
+                                if t is not None and t.text:
+                                    # Figure out how much of t.text is in remaining
+                                    orig_run_len = len(t.text)
+                                    # Take from remaining up to original length
+                                    t.text = remaining[:orig_run_len]
+                                    remaining = remaining[orig_run_len:]
+                            stats['text_matches'] += 1
+                            stats['text_replacements'] += 1
+                            logger.info(f"Replaced '{old_text}' with '{new_text}' in paragraph text")
+                            # Adjust font size if new content is longer
+                            adjust_font_size(
+                                runs,
+                                len(para_text),
+                                len(new_para_text),
+                                p,
+                                ns,
+                                W_NAMESPACE
+                            )
+                            replaced = True
+                            break  # Only do one mapping per paragraph
+                    # If not replaced, do nothing
 
                 # Save modified XML
                 tree.write(str(xml_file), encoding='utf-8', xml_declaration=True)
@@ -362,6 +401,9 @@ def replace_patterns_in_docx(input_path: str, output_path: str, mapping: Dict[st
             for folder, _, files in os.walk(tmpdir):
                 for fname in files:
                     full = Path(folder) / fname
+                    # Skip any extra .docx files that might have been created in the temp dir
+                    if full.suffix.lower() == '.docx':
+                        continue
                     arc = full.relative_to(tmpdir_path)
                     zout.write(str(full), str(arc))
 
