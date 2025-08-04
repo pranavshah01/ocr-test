@@ -320,8 +320,8 @@ def adjust_font_size(runs, orig_len, new_len, p, ns, W_NAMESPACE):
             orig_sz = 28  # default to 14 pt if not specified
 
         new_sz = int(max(orig_sz * scale, min_font))
-        if new_sz % 2 == 1:
-            new_sz += 1  # make even
+        if new_sz > min_font:
+            new_sz -= 1  # apply −1 logic so, e.g., 26→25
         if new_sz < orig_sz:
             # Set for all runs
             for r in runs:
