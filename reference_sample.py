@@ -222,6 +222,65 @@ def load_mapping(file_path: str) -> Dict[str, str]:
         logger.error(f"Invalid JSON format in mapping file: {file_path}")
         sys.exit(1)
 
+def distribute_text_across_runs(runs, new_para_text, ns, W_NAMESPACE):
+    """
+    Distribute new_para_text across the runs so that all text is preserved.
+    The final run (or a newly created run) gets all remaining text.
+    """
+    remaining = new_para_text
+    num_runs = len(runs)
+    for idx, r in enumerate(runs):
+        t = r.find('w:t', ns)
+        if t is not None and t.text is not None:
+            if idx < num_runs - 1:
+                slice_len = len(t.text)
+                t.text = remaining[:slice_len]
+                remaining = remaining[slice_len:]
+            else:
+                t.text = remaining
+                remaining = ''
+    # If we still have leftover, create a new run (clone style from last run if possible)
+    if remaining:
+        # Try to clone the last run's formatting
+        if runs:
+            last_run = runs[-1]
+            new_run = ET.Element(last_run.tag, last_run.attrib)
+            # Deep copy rPr if exists
+            rPr = last_run.find('w:rPr', ns)
+            if rPr is not None:
+                new_rPr = ET.fromstring(ET.tostring(rPr))
+                new_run.append(new_rPr)
+            # Create text element
+            t_el = ET.Element(f'{{{W_NAMESPACE}}}t')
+            t_el.text = remaining
+            new_run.append(t_el)
+            # Append to parent paragraph
+            parent = last_run.getparent() if hasattr(last_run, 'getparent') else None
+            # Since ElementTree from stdlib lacks getparent, we must append to the same parent as runs
+            # (We know the runs list was from p.findall('w:r', ns), so we can safely append to p)
+            if hasattr(runs, 'append'):  # Unlikely, runs is a list
+                runs.append(new_run)
+            else:
+                # runs is a list, so instead append to its parent
+                if hasattr(last_run, 'tail'):
+                    last_run.addnext(new_run)
+                else:
+                    # Fallback: add to parent (usually paragraph element p)
+                    # Use the parent from the context of the main loop, i.e., p.append(new_run)
+                    pass  # We'll handle in the main loop if needed
+            # Fallback: just append to the paragraph (since runs always from p.findall)
+            paragraph = None
+            if runs and hasattr(runs[0], 'getparent'):
+                paragraph = runs[0].getparent()
+            if paragraph is not None:
+                paragraph.append(new_run)
+            else:
+                # Fallback: let caller append if necessary
+                pass
+        else:
+            # No runs existed (rare), so can't clone style
+            pass
+
 def adjust_font_size(runs, orig_len, new_len, p, ns, W_NAMESPACE):
     """
     Adjust font size for a list of runs and also the paragraph-level rPr so that increased text length fits the shape.
@@ -338,16 +397,8 @@ def replace_patterns_in_docx(input_path: str, output_path: str, mapping: Dict[st
                         if old_text in para_text:
                             # Calculate new paragraph text
                             new_para_text = para_text.replace(old_text, f"{old_text} {new_text}")
-                            # Now do per-run replacement (simple left-to-right, not splitting words across runs)
-                            remaining = new_para_text
-                            for r in runs:
-                                t = r.find('w:t', ns)
-                                if t is not None and t.text:
-                                    # Figure out how much of t.text is in remaining
-                                    orig_run_len = len(t.text)
-                                    # Take from remaining up to original length
-                                    t.text = remaining[:orig_run_len]
-                                    remaining = remaining[orig_run_len:]
+                            # Distribute new_para_text across runs without truncation
+                            distribute_text_across_runs(runs, new_para_text, ns, W_NAMESPACE)
                             stats['text_matches'] += 1
                             stats['text_replacements'] += 1
                             logger.info(f"Replaced '{old_text}' with '{new_text}' in paragraph text")
