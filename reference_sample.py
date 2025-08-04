@@ -1,3 +1,4 @@
+
 import os
 import sys
 import json
@@ -13,6 +14,7 @@ from PIL import Image, ImageDraw, ImageFont
 import io
 import re
 import time
+import math
 
 
 # Configure logging
@@ -220,6 +222,136 @@ def load_mapping(file_path: str) -> Dict[str, str]:
         logger.error(f"Invalid JSON format in mapping file: {file_path}")
         sys.exit(1)
 
+def distribute_text_across_runs(runs, new_para_text, ns, W_NAMESPACE):
+    """
+    Distribute new_para_text across the runs so that all text is preserved.
+    The final run (or a newly created run) gets all remaining text.
+    """
+    remaining = new_para_text
+    num_runs = len(runs)
+    for idx, r in enumerate(runs):
+        t = r.find('w:t', ns)
+        if t is not None and t.text is not None:
+            if idx < num_runs - 1:
+                slice_len = len(t.text)
+                t.text = remaining[:slice_len]
+                remaining = remaining[slice_len:]
+            else:
+                t.text = remaining
+                remaining = ''
+    # If we still have leftover, create a new run (clone style from last run if possible)
+    if remaining:
+        # Try to clone the last run's formatting
+        if runs:
+            last_run = runs[-1]
+            new_run = ET.Element(last_run.tag, last_run.attrib)
+            # Deep copy rPr if exists
+            rPr = last_run.find('w:rPr', ns)
+            if rPr is not None:
+                new_rPr = ET.fromstring(ET.tostring(rPr))
+                new_run.append(new_rPr)
+            # Create text element
+            t_el = ET.Element(f'{{{W_NAMESPACE}}}t')
+            t_el.text = remaining
+            new_run.append(t_el)
+            # Append to parent paragraph
+            parent = last_run.getparent() if hasattr(last_run, 'getparent') else None
+            # Since ElementTree from stdlib lacks getparent, we must append to the same parent as runs
+            # (We know the runs list was from p.findall('w:r', ns), so we can safely append to p)
+            if hasattr(runs, 'append'):  # Unlikely, runs is a list
+                runs.append(new_run)
+            else:
+                # runs is a list, so instead append to its parent
+                if hasattr(last_run, 'tail'):
+                    last_run.addnext(new_run)
+                else:
+                    # Fallback: add to parent (usually paragraph element p)
+                    # Use the parent from the context of the main loop, i.e., p.append(new_run)
+                    pass  # We'll handle in the main loop if needed
+            # Fallback: just append to the paragraph (since runs always from p.findall)
+            paragraph = None
+            if runs and hasattr(runs[0], 'getparent'):
+                paragraph = runs[0].getparent()
+            if paragraph is not None:
+                paragraph.append(new_run)
+            else:
+                # Fallback: let caller append if necessary
+                pass
+        else:
+            # No runs existed (rare), so can't clone style
+            pass
+
+def adjust_font_size(runs, orig_len, new_len, p, ns, W_NAMESPACE):
+    """
+    Adjust font size for a list of runs and also the paragraph-level rPr so that increased text length fits the shape.
+    Uses sqrt scaling for area-proportional fit.
+    """
+    if new_len > orig_len and orig_len > 0:
+        ratio = orig_len / new_len
+        scale = math.sqrt(ratio)
+        min_font = 16  # 8 pt (Word uses half-points)
+        # Determine the original size (prefer largest among runs, fallback to 28)
+        orig_sz = None
+        for r in runs:
+            rPr = r.find('w:rPr', ns)
+            if rPr is not None:
+                sz_elem = rPr.find('w:sz', ns)
+                if sz_elem is not None:
+                    try:
+                        sz = int(sz_elem.get(f'{{{W_NAMESPACE}}}val'))
+                        if orig_sz is None or sz > orig_sz:
+                            orig_sz = sz
+                    except Exception:
+                        continue
+        if orig_sz is None:
+            # Try paragraph-level <w:pPr>/<w:rPr>/<w:sz>
+            pPr = p.find('w:pPr', ns)
+            if pPr is not None:
+                rPr_p = pPr.find('w:rPr', ns)
+                if rPr_p is not None:
+                    sz_elem = rPr_p.find('w:sz', ns)
+                    if sz_elem is not None:
+                        try:
+                            sz = int(sz_elem.get(f'{{{W_NAMESPACE}}}val'))
+                            orig_sz = sz
+                        except Exception:
+                            pass
+        if orig_sz is None:
+            orig_sz = 28  # default to 14 pt if not specified
+
+        new_sz = int(max(orig_sz * scale, min_font))
+        if new_sz > min_font:
+            new_sz -= 1  # apply −1 logic so, e.g., 26→25
+        if new_sz < orig_sz:
+            # Set for all runs
+            for r in runs:
+                rPr = r.find('w:rPr', ns)
+                if rPr is None:
+                    rPr = ET.SubElement(r, f'{{{W_NAMESPACE}}}rPr')
+                sz_elem = rPr.find('w:sz', ns)
+                if sz_elem is None:
+                    sz_elem = ET.SubElement(rPr, f'{{{W_NAMESPACE}}}sz')
+                sz_elem.set(f'{{{W_NAMESPACE}}}val', str(new_sz))
+                szcs = rPr.find('w:szCs', ns)
+                if szcs is None:
+                    szcs = ET.SubElement(rPr, f'{{{W_NAMESPACE}}}szCs')
+                szcs.set(f'{{{W_NAMESPACE}}}val', str(new_sz))
+            # Set at paragraph-level <w:pPr>/<w:rPr>
+            pPr = p.find('w:pPr', ns)
+            if pPr is None:
+                pPr = ET.SubElement(p, f'{{{W_NAMESPACE}}}pPr')
+            rPr_p = pPr.find('w:rPr', ns)
+            if rPr_p is None:
+                rPr_p = ET.SubElement(pPr, f'{{{W_NAMESPACE}}}rPr')
+            sz_elem_p = rPr_p.find('w:sz', ns)
+            if sz_elem_p is None:
+                sz_elem_p = ET.SubElement(rPr_p, f'{{{W_NAMESPACE}}}sz')
+            sz_elem_p.set(f'{{{W_NAMESPACE}}}val', str(new_sz))
+            szcs_p = rPr_p.find('w:szCs', ns)
+            if szcs_p is None:
+                szcs_p = ET.SubElement(rPr_p, f'{{{W_NAMESPACE}}}szCs')
+            szcs_p.set(f'{{{W_NAMESPACE}}}val', str(new_sz))
+
 def replace_patterns_in_docx(input_path: str, output_path: str, mapping: Dict[str, str], ocr_processor: OCRProcessor) -> Dict[str, int]:
     """Process DOCX file with text and image replacements"""
     stats = {
@@ -229,53 +361,66 @@ def replace_patterns_in_docx(input_path: str, output_path: str, mapping: Dict[st
         'image_matches': 0,
         'image_replacements': 0
     }
-    
+
     # Namespaces
     W_NAMESPACE = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
     ns = {'w': W_NAMESPACE}
-    
+
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
-        
+
         # Unzip DOCX
         with zipfile.ZipFile(input_path, 'r') as zin:
             zin.extractall(tmpdir)
-        
+
         # Process text in all XML parts
         xml_rel_paths = ['word/document.xml'] + \
                        [f"word/header{i}.xml" for i in range(1, 4)] + \
                        [f"word/footer{i}.xml" for i in range(1, 4)]
-        
+
         for rel in xml_rel_paths:
             xml_file = tmpdir_path / rel
             if not xml_file.exists():
                 continue
-            
+
             try:
                 tree = ET.parse(str(xml_file))
                 root = tree.getroot()
-                
+
                 # Process all paragraphs
                 for p in root.findall('.//w:p', ns):
-                    for r in p.findall('w:r', ns):
-                        t = r.find('w:t', ns)
-                        if t is not None and t.text:
-                            orig_text = t.text
-                            for old_text, new_text in mapping.items():
-                                if old_text in orig_text:
-                                    # Replace text
-                                    new_content = orig_text.replace(old_text, f"{old_text} {new_text}")
-                                    t.text = new_content
-                                    stats['text_matches'] += 1
-                                    stats['text_replacements'] += 1
-                                    logger.info(f"Replaced '{old_text}' with '{new_text}' in text")
-                
+                    runs = p.findall('w:r', ns)
+                    # Gather full paragraph text (concatenate all <w:t> in .//w:t)
+                    para_text = ''.join([t_el.text or '' for t_el in p.findall('.//w:t', ns)])
+                    replaced = False
+                    for old_text, new_text in mapping.items():
+                        if old_text in para_text:
+                            # Calculate new paragraph text
+                            new_para_text = para_text.replace(old_text, f"{old_text} {new_text}")
+                            # Distribute new_para_text across runs without truncation
+                            distribute_text_across_runs(runs, new_para_text, ns, W_NAMESPACE)
+                            stats['text_matches'] += 1
+                            stats['text_replacements'] += 1
+                            logger.info(f"Replaced '{old_text}' with '{new_text}' in paragraph text")
+                            # Adjust font size if new content is longer
+                            adjust_font_size(
+                                runs,
+                                len(para_text),
+                                len(new_para_text),
+                                p,
+                                ns,
+                                W_NAMESPACE
+                            )
+                            replaced = True
+                            break  # Only do one mapping per paragraph
+                    # If not replaced, do nothing
+
                 # Save modified XML
                 tree.write(str(xml_file), encoding='utf-8', xml_declaration=True)
-                
+
             except Exception as e:
                 logger.error(f"Error processing XML part {rel}: {e}")
-        
+
         # Process images
         media_dir = tmpdir_path / 'word' / 'media'
         if media_dir.exists():
@@ -283,33 +428,36 @@ def replace_patterns_in_docx(input_path: str, output_path: str, mapping: Dict[st
                 if img_file.suffix.lower() in ['.png', '.jpg', '.jpeg', '.bmp']:
                     try:
                         stats['images_processed'] += 1
-                        
+
                         # Read image
                         with open(img_file, 'rb') as f:
                             img_bytes = f.read()
-                        
+
                         # Process image with OCR
                         new_img_bytes, replaced = ocr_processor.replace_text_in_image(img_bytes, mapping)
-                        
+
                         if replaced:
                             stats['image_matches'] += 1
                             stats['image_replacements'] += 1
-                            
+
                             # Save modified image
                             with open(img_file, 'wb') as f:
                                 f.write(new_img_bytes)
-                        
+
                     except Exception as e:
                         logger.error(f"Error processing image {img_file.name}: {e}")
-        
+
         # Repack DOCX
         with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zout:
             for folder, _, files in os.walk(tmpdir):
                 for fname in files:
                     full = Path(folder) / fname
+                    # Skip any extra .docx files that might have been created in the temp dir
+                    if full.suffix.lower() == '.docx':
+                        continue
                     arc = full.relative_to(tmpdir_path)
                     zout.write(str(full), str(arc))
-    
+
     return stats
 
 def main(input_path: str, mapping_path: str, output_path: str):
