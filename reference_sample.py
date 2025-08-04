@@ -13,6 +13,7 @@ from PIL import Image, ImageDraw, ImageFont
 import io
 import re
 import time
+import math
 
 
 # Configure logging
@@ -220,6 +221,49 @@ def load_mapping(file_path: str) -> Dict[str, str]:
         logger.error(f"Invalid JSON format in mapping file: {file_path}")
         sys.exit(1)
 
+def adjust_font_size(runs, orig_len, new_len, ns, W_NAMESPACE):
+    """
+    Adjust font size for a list of runs so that increased text length fits the shape.
+    Uses sqrt scaling for area-proportional fit.
+    """
+    # Only shrink font if new text is longer and original length is > 0
+    if new_len > orig_len and orig_len > 0:
+        ratio = orig_len / new_len
+        scale = math.sqrt(ratio)
+        min_font = 16  # 8 pt (Word uses half-points)
+        # Determine the original size (prefer largest among runs, fallback to 28)
+        orig_sz = None
+        for r in runs:
+            rPr = r.find('w:rPr', ns)
+            if rPr is not None:
+                sz_elem = rPr.find('w:sz', ns)
+                if sz_elem is not None:
+                    try:
+                        sz = int(sz_elem.get(f'{{{W_NAMESPACE}}}val'))
+                        if orig_sz is None or sz > orig_sz:
+                            orig_sz = sz
+                    except Exception:
+                        continue
+        if orig_sz is None:
+            orig_sz = 28  # default to 14 pt if not specified
+        # Calculate new size (keep even for Word, but int is fine)
+        new_sz = int(max(orig_sz * scale, min_font))
+        if new_sz % 2 == 1:
+            new_sz += 1  # make even
+        if new_sz < orig_sz:
+            for r in runs:
+                rPr = r.find('w:rPr', ns)
+                if rPr is None:
+                    rPr = ET.SubElement(r, f'{{{W_NAMESPACE}}}rPr')
+                sz_elem = rPr.find('w:sz', ns)
+                if sz_elem is None:
+                    sz_elem = ET.SubElement(rPr, f'{{{W_NAMESPACE}}}sz')
+                sz_elem.set(f'{{{W_NAMESPACE}}}val', str(new_sz))
+                szcs = rPr.find('w:szCs', ns)
+                if szcs is None:
+                    szcs = ET.SubElement(rPr, f'{{{W_NAMESPACE}}}szCs')
+                szcs.set(f'{{{W_NAMESPACE}}}val', str(new_sz))
+
 def replace_patterns_in_docx(input_path: str, output_path: str, mapping: Dict[str, str], ocr_processor: OCRProcessor) -> Dict[str, int]:
     """Process DOCX file with text and image replacements"""
     stats = {
@@ -229,35 +273,36 @@ def replace_patterns_in_docx(input_path: str, output_path: str, mapping: Dict[st
         'image_matches': 0,
         'image_replacements': 0
     }
-    
+
     # Namespaces
     W_NAMESPACE = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
     ns = {'w': W_NAMESPACE}
-    
+
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
-        
+
         # Unzip DOCX
         with zipfile.ZipFile(input_path, 'r') as zin:
             zin.extractall(tmpdir)
-        
+
         # Process text in all XML parts
         xml_rel_paths = ['word/document.xml'] + \
                        [f"word/header{i}.xml" for i in range(1, 4)] + \
                        [f"word/footer{i}.xml" for i in range(1, 4)]
-        
+
         for rel in xml_rel_paths:
             xml_file = tmpdir_path / rel
             if not xml_file.exists():
                 continue
-            
+
             try:
                 tree = ET.parse(str(xml_file))
                 root = tree.getroot()
-                
+
                 # Process all paragraphs
                 for p in root.findall('.//w:p', ns):
-                    for r in p.findall('w:r', ns):
+                    runs = p.findall('w:r', ns)
+                    for r in runs:
                         t = r.find('w:t', ns)
                         if t is not None and t.text:
                             orig_text = t.text
@@ -269,13 +314,23 @@ def replace_patterns_in_docx(input_path: str, output_path: str, mapping: Dict[st
                                     stats['text_matches'] += 1
                                     stats['text_replacements'] += 1
                                     logger.info(f"Replaced '{old_text}' with '{new_text}' in text")
-                
+                                    # Adjust font size if new content is longer
+                                    adjust_font_size(
+                                        runs, 
+                                        len(orig_text), 
+                                        len(new_content), 
+                                        ns, 
+                                        W_NAMESPACE
+                                    )
+                                    # Only do one replacement per run (avoid double-resizing if multiple matches)
+                                    break
+
                 # Save modified XML
                 tree.write(str(xml_file), encoding='utf-8', xml_declaration=True)
-                
+
             except Exception as e:
                 logger.error(f"Error processing XML part {rel}: {e}")
-        
+
         # Process images
         media_dir = tmpdir_path / 'word' / 'media'
         if media_dir.exists():
@@ -283,25 +338,25 @@ def replace_patterns_in_docx(input_path: str, output_path: str, mapping: Dict[st
                 if img_file.suffix.lower() in ['.png', '.jpg', '.jpeg', '.bmp']:
                     try:
                         stats['images_processed'] += 1
-                        
+
                         # Read image
                         with open(img_file, 'rb') as f:
                             img_bytes = f.read()
-                        
+
                         # Process image with OCR
                         new_img_bytes, replaced = ocr_processor.replace_text_in_image(img_bytes, mapping)
-                        
+
                         if replaced:
                             stats['image_matches'] += 1
                             stats['image_replacements'] += 1
-                            
+
                             # Save modified image
                             with open(img_file, 'wb') as f:
                                 f.write(new_img_bytes)
-                        
+
                     except Exception as e:
                         logger.error(f"Error processing image {img_file.name}: {e}")
-        
+
         # Repack DOCX
         with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zout:
             for folder, _, files in os.walk(tmpdir):
@@ -309,7 +364,7 @@ def replace_patterns_in_docx(input_path: str, output_path: str, mapping: Dict[st
                     full = Path(folder) / fname
                     arc = full.relative_to(tmpdir_path)
                     zout.write(str(full), str(arc))
-    
+
     return stats
 
 def main(input_path: str, mapping_path: str, output_path: str):
