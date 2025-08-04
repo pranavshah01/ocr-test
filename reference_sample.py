@@ -353,8 +353,16 @@ def replace_patterns_in_docx(input_path: str, output_path: str, mapping: Dict[st
                 tree = ET.parse(str(xml_file))
                 root = tree.getroot()
 
-                # Process all paragraphs
-                for p in root.findall('.//w:p', ns):
+                # Only process paragraphs within text boxes (w:txbxContent)
+                textboxes = root.findall('.//w:txbxContent', ns)
+                if textboxes:
+                    paragraphs = []
+                    for tbx in textboxes:
+                        paragraphs.extend(tbx.findall('.//w:p', ns))
+                else:
+                    paragraphs = root.findall('.//w:p', ns)  # fallback (shouldn't happen in normal flow)
+
+                for p in paragraphs:
                     runs = p.findall('w:r', ns)
                     # Gather full paragraph text (concatenate all <w:t> in .//w:t)
                     para_text = ''.join([t_el.text or '' for t_el in p.findall('.//w:t', ns)])
