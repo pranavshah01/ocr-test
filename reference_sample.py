@@ -8,7 +8,7 @@ import zipfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 import shutil
-import tempfile
+from typing import List, Dict, Any, Tuple
 
 ET.register_namespace('xml', 'http://www.w3.org/XML/1998/namespace')
 ET.register_namespace('w', 'http://schemas.openxmlformats.org/wordprocessingml/2006/main')
