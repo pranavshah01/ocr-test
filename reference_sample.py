@@ -123,7 +123,43 @@ class OCRProcessor:
         return results
 
     def replace_text_in_image(self, image_bytes: bytes, mapping: Dict[str, str], original_ext: str) -> Tuple[bytes, bool]:
-        """Replace text in image and return new image bytes, preserving original format"""
+        """Replace text in image and return new image bytes, preserving original format.
+           Only mapped substring is replaced; the rest of the detected text is preserved (per region).
+           Font sizing is iteratively chosen to fit the updated text inside the region.
+        """
+        def choose_font_size(draw, font_path, updated_text, width, height, floor=8):
+            # Start with largest possible size
+            candidate_size = min(height, width)
+            candidate_size = max(candidate_size, floor)
+            # Try reducing until it fits
+            while candidate_size >= floor:
+                try:
+                    font = ImageFont.truetype(font_path, candidate_size)
+                except Exception:
+                    font = ImageFont.load_default()
+                try:
+                    # PIL >=8: draw.textbbox; fallback: font.getbbox
+                    if hasattr(draw, "textbbox"):
+                        bbox = draw.textbbox((0, 0), updated_text, font=font)
+                        text_width = bbox[2] - bbox[0]
+                        text_height = bbox[3] - bbox[1]
+                    elif hasattr(font, "getbbox"):
+                        bbox = font.getbbox(updated_text)
+                        text_width = bbox[2] - bbox[0]
+                        text_height = bbox[3] - bbox[1]
+                    else:  # fallback, may be less accurate
+                        text_width, text_height = draw.textsize(updated_text, font=font)
+                except Exception:
+                    text_width, text_height = draw.textsize(updated_text, font=font)
+                if text_width <= width and text_height <= height:
+                    return font
+                candidate_size -= 1
+            # Fallback to floor size
+            try:
+                return ImageFont.truetype(font_path, floor)
+            except Exception:
+                return ImageFont.load_default()
+
         try:
             # Detect text in image
             text_regions = self.detect_text_in_image(image_bytes)
@@ -138,7 +174,7 @@ class OCRProcessor:
             # Try to find a suitable font (cross-platform)
             try:
                 import platform
-                font_size = 12
+                base_font_size = 12
                 if platform.system() == 'Windows':
                     font_paths = ['arial.ttf', 'C:/Windows/Fonts/arial.ttf']
                 elif platform.system() == 'Darwin':  # macOS
@@ -147,9 +183,11 @@ class OCRProcessor:
                     font_paths = ['/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf']
                 
                 font = None
+                chosen_font_path = None
                 for font_path in font_paths:
                     try:
-                        font = ImageFont.truetype(font_path, font_size)
+                        font = ImageFont.truetype(font_path, base_font_size)
+                        chosen_font_path = font_path
                         break
                     except:
                         continue
@@ -159,57 +197,60 @@ class OCRProcessor:
             except:
                 try:
                     font = ImageFont.load_default()
+                    chosen_font_path = None
                 except:
                     font = None
+                    chosen_font_path = None
             
             replacements_made = False
             
             # Check each text region for matches
             for region in text_regions:
                 text = region['text']
+                updated_text = text
+                found = False
                 for old_text, new_text in mapping.items():
-                    if old_text in text:
-                        # Calculate position and size
-                        x = region['x']
-                        y = region['y']
-                        width = region['width']
-                        height = region['height']
-                        
-                        # Create white rectangle to cover original text
-                        draw.rectangle([x, y, x + width, y + height], fill='white')
-                        
-                        # Draw new text
-                        if font:
-                            # Calculate font size to fit the region
-                            font_size = min(width // len(new_text), height) if len(new_text) > 0 else height
-                            font_size = max(font_size, 8)  # Minimum font size
-                            try:
-                                # Try to create font with calculated size
-                                if platform.system() == 'Windows':
-                                    new_font = ImageFont.truetype('arial.ttf', font_size)
-                                elif platform.system() == 'Darwin':
-                                    new_font = ImageFont.truetype('/System/Library/Fonts/Arial.ttf', font_size)
-                                else:
-                                    new_font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', font_size)
-                            except:
-                                new_font = font
-                            
-                            # Center text in region
-                            text_bbox = draw.textbbox((0, 0), new_text, font=new_font)
-                            text_width = text_bbox[2] - text_bbox[0]
-                            text_height = text_bbox[3] - text_bbox[1]
-                            
-                            text_x = x + (width - text_width) // 2
-                            text_y = y + (height - text_height) // 2
-                            
-                            draw.text((text_x, text_y), new_text, font=new_font, fill='black')
+                    if old_text in updated_text:
+                        updated_text = updated_text.replace(old_text, new_text)
+                        found = True
+                if found and updated_text != text:
+                    x = region['x']
+                    y = region['y']
+                    width = region['width']
+                    height = region['height']
+
+                    # Create white rectangle to cover original text
+                    draw.rectangle([x, y, x + width, y + height], fill='white')
+
+                    if font:
+                        # Choose font size to fit updated_text in the region
+                        if chosen_font_path:
+                            best_font = choose_font_size(draw, chosen_font_path, updated_text, width, height, floor=8)
                         else:
-                            # Fallback without font
-                            draw.text((x, y), new_text, fill='black')
-                        
-                        replacements_made = True
-                        logger.info(f"Replaced '{old_text}' with '{new_text}' in image")
-                        break
+                            best_font = font  # fallback
+
+                        # Center text in region
+                        if hasattr(draw, "textbbox"):
+                            bbox = draw.textbbox((0, 0), updated_text, font=best_font)
+                            text_width = bbox[2] - bbox[0]
+                            text_height = bbox[3] - bbox[1]
+                        elif hasattr(best_font, "getbbox"):
+                            bbox = best_font.getbbox(updated_text)
+                            text_width = bbox[2] - bbox[0]
+                            text_height = bbox[3] - bbox[1]
+                        else:
+                            text_width, text_height = draw.textsize(updated_text, font=best_font)
+
+                        text_x = x + (width - text_width) // 2
+                        text_y = y + (height - text_height) // 2
+
+                        draw.text((text_x, text_y), updated_text, font=best_font, fill='black')
+                    else:
+                        # Fallback without font
+                        draw.text((x, y), updated_text, fill='black')
+
+                    replacements_made = True
+                    logger.info(f"Replaced text in image region: '{text}' -> '{updated_text}'")
             
             if replacements_made:
                 # Convert back to bytes
