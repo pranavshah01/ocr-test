@@ -8,6 +8,9 @@ import zipfile
 import xml.etree.ElementTree as ET
 from typing import List, Dict, Any, Tuple
 from pathlib import Path
+
+# Register xml: namespace so attributes are serialized properly
+ET.register_namespace('xml', 'http://www.w3.org/XML/1998/namespace')
 import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
@@ -235,17 +238,16 @@ def set_paragraph_text(p, runs, new_text, ns, W_NAMESPACE):
         t_first = ET.SubElement(first_run, f'{{{W_NAMESPACE}}}t')
     # Preserve leading/trailing spaces per Word spec
     if new_text.startswith(' ') or new_text.endswith(' '):
-        t_first.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+        t_first.set('xml:space', 'preserve')
     else:
-        # Remove xml:space if present
-        if '{http://www.w3.org/XML/1998/namespace}space' in t_first.attrib:
-            del t_first.attrib['{http://www.w3.org/XML/1998/namespace}space']
+        if 'xml:space' in t_first.attrib:
+            del t_first.attrib['xml:space']
     t_first.text = new_text
-    # Remove or clear text from remaining runs
+    # Remove <w:t> elements from remaining runs
     for r in runs[1:]:
         t = r.find('w:t', ns)
         if t is not None:
-            t.text = ''
+            r.remove(t)
 
 def adjust_font_size(runs, orig_len, new_len, p, ns, W_NAMESPACE):
     """
