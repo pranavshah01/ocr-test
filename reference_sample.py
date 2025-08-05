@@ -127,9 +127,9 @@ class OCRProcessor:
            Only mapped substring is replaced; the rest of the detected text is preserved (per region).
            Font sizing is iteratively chosen to fit the updated text inside the region.
         """
-        def choose_font_size(draw, font_path, updated_text, width, height, floor=8):
-            # Start with largest possible size
-            candidate_size = min(height, width)
+        def choose_font_size(draw, font_path, new_text, width, height, floor=8):
+            # Start with region height
+            candidate_size = height
             candidate_size = max(candidate_size, floor)
             # Try reducing until it fits
             while candidate_size >= floor:
@@ -140,17 +140,17 @@ class OCRProcessor:
                 try:
                     # PIL >=8: draw.textbbox; fallback: font.getbbox
                     if hasattr(draw, "textbbox"):
-                        bbox = draw.textbbox((0, 0), updated_text, font=font)
+                        bbox = draw.textbbox((0, 0), new_text, font=font)
                         text_width = bbox[2] - bbox[0]
                         text_height = bbox[3] - bbox[1]
                     elif hasattr(font, "getbbox"):
-                        bbox = font.getbbox(updated_text)
+                        bbox = font.getbbox(new_text)
                         text_width = bbox[2] - bbox[0]
                         text_height = bbox[3] - bbox[1]
                     else:  # fallback, may be less accurate
-                        text_width, text_height = draw.textsize(updated_text, font=font)
+                        text_width, text_height = draw.textsize(new_text, font=font)
                 except Exception:
-                    text_width, text_height = draw.textsize(updated_text, font=font)
+                    text_width, text_height = draw.textsize(new_text, font=font)
                 if text_width <= width and text_height <= height:
                     return font
                 candidate_size -= 1
@@ -207,50 +207,46 @@ class OCRProcessor:
             # Check each text region for matches
             for region in text_regions:
                 text = region['text']
-                updated_text = text
-                found = False
                 for old_text, new_text in mapping.items():
-                    if old_text in updated_text:
-                        updated_text = updated_text.replace(old_text, new_text)
-                        found = True
-                if found and updated_text != text:
-                    x = region['x']
-                    y = region['y']
-                    width = region['width']
-                    height = region['height']
+                    # Only replace if region text exactly matches mapping key (case-insensitive, stripping whitespace)
+                    if text.strip().lower() == old_text.strip().lower():
+                        x = region['x']
+                        y = region['y']
+                        width = region['width']
+                        height = region['height']
 
-                    # Create white rectangle to cover original text
-                    draw.rectangle([x, y, x + width, y + height], fill='white')
+                        # Create white rectangle to cover original text
+                        draw.rectangle([x, y, x + width, y + height], fill='white')
 
-                    if font:
-                        # Choose font size to fit updated_text in the region
-                        if chosen_font_path:
-                            best_font = choose_font_size(draw, chosen_font_path, updated_text, width, height, floor=8)
+                        if font:
+                            # Choose font size to fit new_text in the region
+                            if chosen_font_path:
+                                best_font = choose_font_size(draw, chosen_font_path, new_text, width, height, floor=8)
+                            else:
+                                best_font = font  # fallback
+
+                            # Align left and vertically center
+                            if hasattr(draw, "textbbox"):
+                                bbox = draw.textbbox((0, 0), new_text, font=best_font)
+                                text_height = bbox[3] - bbox[1]
+                            elif hasattr(best_font, "getbbox"):
+                                bbox = best_font.getbbox(new_text)
+                                text_height = bbox[3] - bbox[1]
+                            else:
+                                # fallback
+                                _, text_height = draw.textsize(new_text, font=best_font)
+
+                            text_x = x
+                            text_y = y + (height - text_height) // 2
+
+                            draw.text((text_x, text_y), new_text, font=best_font, fill='black')
                         else:
-                            best_font = font  # fallback
+                            # Fallback without font
+                            draw.text((x, y), new_text, fill='black')
 
-                        # Center text in region
-                        if hasattr(draw, "textbbox"):
-                            bbox = draw.textbbox((0, 0), updated_text, font=best_font)
-                            text_width = bbox[2] - bbox[0]
-                            text_height = bbox[3] - bbox[1]
-                        elif hasattr(best_font, "getbbox"):
-                            bbox = best_font.getbbox(updated_text)
-                            text_width = bbox[2] - bbox[0]
-                            text_height = bbox[3] - bbox[1]
-                        else:
-                            text_width, text_height = draw.textsize(updated_text, font=best_font)
-
-                        text_x = x + (width - text_width) // 2
-                        text_y = y + (height - text_height) // 2
-
-                        draw.text((text_x, text_y), updated_text, font=best_font, fill='black')
-                    else:
-                        # Fallback without font
-                        draw.text((x, y), updated_text, fill='black')
-
-                    replacements_made = True
-                    logger.info(f"Replaced text in image region: '{text}' -> '{updated_text}'")
+                        replacements_made = True
+                        logger.info(f"Replaced text in image region: '{text}' -> '{new_text}'")
+                        break  # Only do one mapping per region
             
             if replacements_made:
                 # Convert back to bytes
