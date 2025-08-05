@@ -122,8 +122,8 @@ class OCRProcessor:
         
         return results
 
-    def replace_text_in_image(self, image_bytes: bytes, mapping: Dict[str, str], original_ext: str) -> Tuple[bytes, bool]:
-        """Replace text in image and return new image bytes, preserving original format"""
+    def replace_text_in_image(self, image_bytes: bytes, mapping: Dict[str, str], file_extension: str = '.png') -> Tuple[bytes, bool]:
+        """Replace text in image and return new image bytes"""
         try:
             # Detect text in image
             text_regions = self.detect_text_in_image(image_bytes)
@@ -138,7 +138,6 @@ class OCRProcessor:
             # Try to find a suitable font (cross-platform)
             try:
                 import platform
-                font_size = 12
                 if platform.system() == 'Windows':
                     font_paths = ['arial.ttf', 'C:/Windows/Fonts/arial.ttf']
                 elif platform.system() == 'Darwin':  # macOS
@@ -146,21 +145,21 @@ class OCRProcessor:
                 else:  # Linux
                     font_paths = ['/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf']
                 
-                font = None
+                base_font = None
                 for font_path in font_paths:
                     try:
-                        font = ImageFont.truetype(font_path, font_size)
+                        base_font = ImageFont.truetype(font_path, 12)
                         break
                     except:
                         continue
                 
-                if font is None:
-                    font = ImageFont.load_default()
+                if base_font is None:
+                    base_font = ImageFont.load_default()
             except:
                 try:
-                    font = ImageFont.load_default()
+                    base_font = ImageFont.load_default()
                 except:
-                    font = None
+                    base_font = None
             
             replacements_made = False
             
@@ -169,59 +168,81 @@ class OCRProcessor:
                 text = region['text']
                 for old_text, new_text in mapping.items():
                     if old_text in text:
-                        # Calculate position and size
-                        x = region['x']
+                        # Find position of the specific pattern within the text
+                        pattern_start = text.find(old_text)
+                        if pattern_start == -1:
+                            continue
+                        
+                        # Calculate position and size of the specific pattern
+                        total_chars = len(text)
+                        char_width = region['width'] / total_chars
+                        pattern_width = len(old_text) * char_width
+                        
+                        start_x = region['x'] + pattern_start * char_width
+                        end_x = start_x + pattern_width
                         y = region['y']
-                        width = region['width']
                         height = region['height']
                         
-                        # Create white rectangle to cover original text
-                        draw.rectangle([x, y, x + width, y + height], fill='white')
+                        # Create white rectangle with padding to ensure complete coverage
+                        padding = 2  # Add padding to ensure complete coverage
+                        draw.rectangle([start_x - padding, y - padding, end_x + padding, y + height + padding], fill='white')
                         
-                        # Draw new text
-                        if font:
-                            # Calculate font size to fit the region
-                            font_size = min(width // len(new_text), height) if len(new_text) > 0 else height
-                            font_size = max(font_size, 8)  # Minimum font size
-                            try:
-                                # Try to create font with calculated size
-                                if platform.system() == 'Windows':
-                                    new_font = ImageFont.truetype('arial.ttf', font_size)
-                                elif platform.system() == 'Darwin':
-                                    new_font = ImageFont.truetype('/System/Library/Fonts/Arial.ttf', font_size)
-                                else:
-                                    new_font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', font_size)
-                            except:
-                                new_font = font
+                        # Draw new text with adjusted font size to match original width
+                        if base_font:
+                            # Find optimal font size to fit the pattern width
+                            font_size = 1
+                            best_font = base_font
                             
-                            # Center text in region
-                            text_bbox = draw.textbbox((0, 0), new_text, font=new_font)
+                            # Find max font size that fits the pattern width (with padding consideration)
+                            available_width = pattern_width - (2 * padding)
+                            for size in range(8, 100):  # Try sizes from 8 to 100
+                                try:
+                                    if platform.system() == 'Windows':
+                                        test_font = ImageFont.truetype('arial.ttf', size)
+                                    elif platform.system() == 'Darwin':
+                                        test_font = ImageFont.truetype('/System/Library/Fonts/Arial.ttf', size)
+                                    else:
+                                        test_font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', size)
+                                    
+                                    # Measure new text width
+                                    test_width = test_font.getlength(new_text)
+                                    if test_width <= available_width:
+                                        best_font = test_font
+                                        font_size = size
+                                    else:
+                                        break  # Stop when we exceed width
+                                except:
+                                    continue
+                            
+                            # Get text dimensions for better positioning
+                            text_bbox = draw.textbbox((0, 0), new_text, font=best_font)
                             text_width = text_bbox[2] - text_bbox[0]
                             text_height = text_bbox[3] - text_bbox[1]
                             
-                            text_x = x + (width - text_width) // 2
+                            # Position text to align with the original text baseline
+                            # Use the original region's top position for better alignment
                             text_y = y + (height - text_height) // 2
+                            text_x = start_x + (pattern_width - text_width) // 2
                             
-                            draw.text((text_x, text_y), new_text, font=new_font, fill='black')
+                            draw.text((text_x, text_y), new_text, font=best_font, fill='black')
                         else:
                             # Fallback without font
-                            draw.text((x, y), new_text, fill='black')
+                            draw.text((start_x, y), new_text, fill='black')
                         
                         replacements_made = True
                         logger.info(f"Replaced '{old_text}' with '{new_text}' in image")
-                        break
             
             if replacements_made:
                 # Convert back to bytes
                 output_buffer = io.BytesIO()
-                ext_to_format = {
-                    '.png': 'PNG',
-                    '.jpg': 'JPEG',
-                    '.jpeg': 'JPEG',
-                    '.bmp': 'BMP'
-                }
-                fmt = ext_to_format.get(original_ext, 'PNG')
-                image.save(output_buffer, format=fmt)
+                # Use appropriate format based on file extension
+                if file_extension.lower() in ['.jpg', '.jpeg']:
+                    save_format = 'JPEG'
+                elif file_extension.lower() == '.bmp':
+                    save_format = 'BMP'
+                else:
+                    save_format = 'PNG'  # Default to PNG for .png and others
+                image.save(output_buffer, format=save_format)
                 return output_buffer.getvalue(), True
             
             return image_bytes, False
@@ -229,6 +250,7 @@ class OCRProcessor:
             logger.error(f"Error replacing text in image: {e}")
             return image_bytes, False
 
+            
 def load_mapping(file_path: str) -> Dict[str, str]:
     """Load mapping from JSON file"""
     try:
