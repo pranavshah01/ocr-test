@@ -222,64 +222,30 @@ def load_mapping(file_path: str) -> Dict[str, str]:
         logger.error(f"Invalid JSON format in mapping file: {file_path}")
         sys.exit(1)
 
-def distribute_text_across_runs(runs, new_para_text, ns, W_NAMESPACE):
+def set_paragraph_text(p, runs, new_text, ns, W_NAMESPACE):
     """
-    Distribute new_para_text across the runs so that all text is preserved.
-    The final run (or a newly created run) gets all remaining text.
+    Replace the entire paragraph text with new_text in the first run.
+    All other runs are cleared.
     """
-    remaining = new_para_text
-    num_runs = len(runs)
-    for idx, r in enumerate(runs):
+    if not runs:
+        return
+    first_run = runs[0]
+    t_first = first_run.find('w:t', ns)
+    if t_first is None:
+        t_first = ET.SubElement(first_run, f'{{{W_NAMESPACE}}}t')
+    # Preserve leading/trailing spaces per Word spec
+    if new_text.startswith(' ') or new_text.endswith(' '):
+        t_first.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+    else:
+        # Remove xml:space if present
+        if '{http://www.w3.org/XML/1998/namespace}space' in t_first.attrib:
+            del t_first.attrib['{http://www.w3.org/XML/1998/namespace}space']
+    t_first.text = new_text
+    # Remove or clear text from remaining runs
+    for r in runs[1:]:
         t = r.find('w:t', ns)
-        if t is not None and t.text is not None:
-            if idx < num_runs - 1:
-                slice_len = len(t.text)
-                t.text = remaining[:slice_len]
-                remaining = remaining[slice_len:]
-            else:
-                t.text = remaining
-                remaining = ''
-    # If we still have leftover, create a new run (clone style from last run if possible)
-    if remaining:
-        # Try to clone the last run's formatting
-        if runs:
-            last_run = runs[-1]
-            new_run = ET.Element(last_run.tag, last_run.attrib)
-            # Deep copy rPr if exists
-            rPr = last_run.find('w:rPr', ns)
-            if rPr is not None:
-                new_rPr = ET.fromstring(ET.tostring(rPr))
-                new_run.append(new_rPr)
-            # Create text element
-            t_el = ET.Element(f'{{{W_NAMESPACE}}}t')
-            t_el.text = remaining
-            new_run.append(t_el)
-            # Append to parent paragraph
-            parent = last_run.getparent() if hasattr(last_run, 'getparent') else None
-            # Since ElementTree from stdlib lacks getparent, we must append to the same parent as runs
-            # (We know the runs list was from p.findall('w:r', ns), so we can safely append to p)
-            if hasattr(runs, 'append'):  # Unlikely, runs is a list
-                runs.append(new_run)
-            else:
-                # runs is a list, so instead append to its parent
-                if hasattr(last_run, 'tail'):
-                    last_run.addnext(new_run)
-                else:
-                    # Fallback: add to parent (usually paragraph element p)
-                    # Use the parent from the context of the main loop, i.e., p.append(new_run)
-                    pass  # We'll handle in the main loop if needed
-            # Fallback: just append to the paragraph (since runs always from p.findall)
-            paragraph = None
-            if runs and hasattr(runs[0], 'getparent'):
-                paragraph = runs[0].getparent()
-            if paragraph is not None:
-                paragraph.append(new_run)
-            else:
-                # Fallback: let caller append if necessary
-                pass
-        else:
-            # No runs existed (rare), so can't clone style
-            pass
+        if t is not None:
+            t.text = ''
 
 def adjust_font_size(runs, orig_len, new_len, p, ns, W_NAMESPACE):
     """
@@ -387,8 +353,16 @@ def replace_patterns_in_docx(input_path: str, output_path: str, mapping: Dict[st
                 tree = ET.parse(str(xml_file))
                 root = tree.getroot()
 
-                # Process all paragraphs
-                for p in root.findall('.//w:p', ns):
+                # Only process paragraphs within text boxes (w:txbxContent)
+                textboxes = root.findall('.//w:txbxContent', ns)
+                if textboxes:
+                    paragraphs = []
+                    for tbx in textboxes:
+                        paragraphs.extend(tbx.findall('.//w:p', ns))
+                else:
+                    paragraphs = root.findall('.//w:p', ns)  # fallback (shouldn't happen in normal flow)
+
+                for p in paragraphs:
                     runs = p.findall('w:r', ns)
                     # Gather full paragraph text (concatenate all <w:t> in .//w:t)
                     para_text = ''.join([t_el.text or '' for t_el in p.findall('.//w:t', ns)])
@@ -397,8 +371,8 @@ def replace_patterns_in_docx(input_path: str, output_path: str, mapping: Dict[st
                         if old_text in para_text:
                             # Calculate new paragraph text
                             new_para_text = para_text.replace(old_text, f"{old_text} {new_text}")
-                            # Distribute new_para_text across runs without truncation
-                            distribute_text_across_runs(runs, new_para_text, ns, W_NAMESPACE)
+                            # Set new paragraph text in FIRST run, clear others
+                            set_paragraph_text(p, runs, new_para_text, ns, W_NAMESPACE)
                             stats['text_matches'] += 1
                             stats['text_replacements'] += 1
                             logger.info(f"Replaced '{old_text}' with '{new_text}' in paragraph text")
@@ -452,8 +426,8 @@ def replace_patterns_in_docx(input_path: str, output_path: str, mapping: Dict[st
             for folder, _, files in os.walk(tmpdir):
                 for fname in files:
                     full = Path(folder) / fname
-                    # Skip any extra .docx files that might have been created in the temp dir
-                    if full.suffix.lower() == '.docx':
+                    # Only skip .docx files in the root temp dir, not embedded objects
+                    if full.suffix.lower() == '.docx' and full.parent == tmpdir_path:
                         continue
                     arc = full.relative_to(tmpdir_path)
                     zout.write(str(full), str(arc))
