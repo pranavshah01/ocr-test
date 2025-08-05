@@ -173,19 +173,29 @@ class OCRProcessor:
                         if pattern_start == -1:
                             continue
                         
-                        # Calculate position and size of the specific pattern
+                        # Calculate position and size of the specific pattern more precisely
                         total_chars = len(text)
                         char_width = region['width'] / total_chars
+                        
+                        # Calculate the exact width of the matched pattern
+                        # Instead of using average char width for the entire text, use it only for the pattern
                         pattern_width = len(old_text) * char_width
                         
-                        start_x = region['x'] + pattern_start * char_width
+                        # Fine-tune starting position with slight adjustment to better match original text
+                        position_adjust_x = 1  # Slight adjustment right (reduced from 2)
+                        position_adjust_y = -1  # Slight adjustment upward
+                        start_x = region['x'] + pattern_start * char_width + position_adjust_x
                         end_x = start_x + pattern_width
-                        y = region['y']
+                        y = region['y'] + position_adjust_y  # Shift slightly upward
                         height = region['height']
                         
-                        # Create white rectangle with padding to ensure complete coverage
-                        padding = 2  # Add padding to ensure complete coverage
-                        draw.rectangle([start_x - padding, y - padding, end_x + padding, y + height + padding], fill='white')
+                        # Create white rectangle with adaptive padding based on the font size
+                        # Smaller padding for horizontal edges to avoid overwriting adjacent text
+                        h_padding = max(1, min(2, height * 0.05))  # Horizontal padding: between 1-2px, adaptive to text height
+                        v_padding = max(1, min(2, height * 0.1))   # Vertical padding: slightly larger
+                        
+                        # Draw tighter white rectangle over the exact pattern only
+                        draw.rectangle([start_x - h_padding, y - v_padding, end_x + h_padding, y + height + v_padding], fill='white')
                         
                         # Draw new text with adjusted font size to match original width
                         if base_font:
@@ -194,7 +204,7 @@ class OCRProcessor:
                             best_font = base_font
                             
                             # Find max font size that fits the pattern width (with padding consideration)
-                            available_width = pattern_width - (2 * padding)
+                            available_width = pattern_width - (2 * h_padding)
                             for size in range(8, 100):  # Try sizes from 8 to 100
                                 try:
                                     if platform.system() == 'Windows':
