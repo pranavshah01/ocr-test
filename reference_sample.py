@@ -5,11 +5,22 @@ import json
 import logging
 import tempfile
 import zipfile
-import xml.etree.ElementTree as ET
-from xml.etree.ElementTree import Element
+# Conditional import: prefer lxml, fallback to xml.etree.ElementTree
+try:
+    import lxml.etree as LET
+    ET = LET
+    LXML_AVAILABLE = True
+except ImportError:
+    import xml.etree.ElementTree as ET
+    LXML_AVAILABLE = False
 from pathlib import Path
 import shutil
 from typing import List, Dict, Any, Tuple
+
+if not LXML_AVAILABLE:
+    from xml.etree.ElementTree import Element
+else:
+    Element = ET.Element
 
 ET.register_namespace('xml', 'http://www.w3.org/XML/1998/namespace')
 ET.register_namespace('w', 'http://schemas.openxmlformats.org/wordprocessingml/2006/main')
@@ -397,7 +408,10 @@ def replace_patterns_in_docx(input_path: str, output_path: str, mapping: Dict[st
                     # If not replaced, do nothing
 
                 # Save modified XML
-                tree.write(str(xml_file), encoding='utf-8', xml_declaration=True)
+                if LXML_AVAILABLE:
+                    tree.write(str(xml_file), pretty_print=False, xml_declaration=True, encoding='UTF-8')
+                else:
+                    tree.write(str(xml_file), encoding='UTF-8', xml_declaration=True)
 
             except Exception as e:
                 logger.error(f"Error processing XML part {rel}: {e}")
