@@ -6,6 +6,7 @@ import logging
 import tempfile
 import zipfile
 import xml.etree.ElementTree as ET
+from xml.etree.ElementTree import Element
 from pathlib import Path
 import shutil
 from typing import List, Dict, Any, Tuple
@@ -16,8 +17,6 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 import io
-import re
-import time
 import math
 
 
@@ -112,8 +111,8 @@ class OCRProcessor:
         
         return results
 
-    def replace_text_in_image(self, image_bytes: bytes, mapping: Dict[str, str]) -> Tuple[bytes, bool]:
-        """Replace text in image and return new image bytes"""
+    def replace_text_in_image(self, image_bytes: bytes, mapping: Dict[str, str], original_ext: str) -> Tuple[bytes, bool]:
+        """Replace text in image and return new image bytes, preserving original format"""
         try:
             # Detect text in image
             text_regions = self.detect_text_in_image(image_bytes)
@@ -204,7 +203,14 @@ class OCRProcessor:
             if replacements_made:
                 # Convert back to bytes
                 output_buffer = io.BytesIO()
-                image.save(output_buffer, format='PNG')
+                ext_to_format = {
+                    '.png': 'PNG',
+                    '.jpg': 'JPEG',
+                    '.jpeg': 'JPEG',
+                    '.bmp': 'BMP'
+                }
+                fmt = ext_to_format.get(original_ext, 'PNG')
+                image.save(output_buffer, format=fmt)
                 return output_buffer.getvalue(), True
             
             return image_bytes, False
@@ -226,10 +232,10 @@ def load_mapping(file_path: str) -> Dict[str, str]:
         logger.error(f"Invalid JSON format in mapping file: {file_path}")
         sys.exit(1)
 
-def set_paragraph_text(p, runs, new_text, ns, W_NAMESPACE):
+def set_paragraph_text(p: Element, runs, new_text, ns, W_NAMESPACE):
     """
     Replace the entire paragraph text with new_text in the first run.
-    All other runs are cleared.
+    All other runs are cleared (runs themselves removed from the paragraph).
     """
     if not runs:
         return
@@ -244,11 +250,9 @@ def set_paragraph_text(p, runs, new_text, ns, W_NAMESPACE):
         if 'xml:space' in t_first.attrib:
             del t_first.attrib['xml:space']
     t_first.text = new_text
-    # Remove <w:t> elements from remaining runs
+    # Remove runs themselves (not just <w:t>) from the paragraph except first
     for r in runs[1:]:
-        t = r.find('w:t', ns)
-        if t is not None:
-            r.remove(t)
+        p.remove(r)
 
 def adjust_font_size(runs, orig_len, new_len, p, ns, W_NAMESPACE):
     """
@@ -411,7 +415,7 @@ def replace_patterns_in_docx(input_path: str, output_path: str, mapping: Dict[st
                             img_bytes = f.read()
 
                         # Process image with OCR
-                        new_img_bytes, replaced = ocr_processor.replace_text_in_image(img_bytes, mapping)
+                        new_img_bytes, replaced = ocr_processor.replace_text_in_image(img_bytes, mapping, img_file.suffix.lower())
 
                         if replaced:
                             stats['image_matches'] += 1
