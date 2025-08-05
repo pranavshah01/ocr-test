@@ -6,11 +6,12 @@ import logging
 import tempfile
 import zipfile
 import xml.etree.ElementTree as ET
-from typing import List, Dict, Any, Tuple
 from pathlib import Path
+import shutil
+import tempfile
 
-# Register xml: namespace so attributes are serialized properly
 ET.register_namespace('xml', 'http://www.w3.org/XML/1998/namespace')
+ET.register_namespace('w', 'http://schemas.openxmlformats.org/wordprocessingml/2006/main')
 import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
@@ -431,8 +432,8 @@ def replace_patterns_in_docx(input_path: str, output_path: str, mapping: Dict[st
                     # Only skip .docx files in the root temp dir, not embedded objects
                     if full.suffix.lower() == '.docx' and full.parent == tmpdir_path:
                         continue
-                    arc = full.relative_to(tmpdir_path)
-                    zout.write(str(full), str(arc))
+                    arc = full.relative_to(tmpdir_path).as_posix()
+                    zout.write(str(full), arc)
 
     return stats
 
