@@ -9,6 +9,7 @@ from docx import Document
 import json
 import re
 import unicodedata
+import math
 from datetime import datetime
 from .ocr_engine import run_ocr
 from PIL import Image
@@ -504,7 +505,7 @@ def extract_document_text(docx_path: Path) -> Dict[str, Any]:
 
 def extract_image_ocr_text(docx_path: Path, ocr_engine: str = "easyocr", gpu: bool = True, confidence_min: float = 0.7) -> Dict[str, Any]:
     """
-    Extract OCR text from all images in a DOCX document.
+    Extract OCR text from all images in a DOCX document with orientation information.
     
     Args:
         docx_path: Path to the DOCX file
@@ -513,7 +514,7 @@ def extract_image_ocr_text(docx_path: Path, ocr_engine: str = "easyocr", gpu: bo
         confidence_min: Minimum confidence threshold
         
     Returns:
-        Dict containing OCR results from all images
+        Dict containing OCR results from all images with orientation data
     """
     doc = Document(str(docx_path))
     rels = doc.part.rels
@@ -527,7 +528,8 @@ def extract_image_ocr_text(docx_path: Path, ocr_engine: str = "easyocr", gpu: bo
         "total_images": 0,
         "total_ocr_text_blocks": 0,
         "total_ocr_words": 0,
-        "total_ocr_characters": 0
+        "total_ocr_characters": 0,
+        "orientations_found": []
     }
     
     image_index = 0
@@ -545,7 +547,7 @@ def extract_image_ocr_text(docx_path: Path, ocr_engine: str = "easyocr", gpu: bo
             if img.mode != 'RGB':
                 img = img.convert('RGB')
             
-            # Run OCR on the image
+            # Run OCR on the image with orientation detection
             ocr_result = run_ocr(img, use_gpu=gpu, engine=ocr_engine)
             
             image_data = {
@@ -553,26 +555,57 @@ def extract_image_ocr_text(docx_path: Path, ocr_engine: str = "easyocr", gpu: bo
                 "image_size": {"width": img.width, "height": img.height},
                 "image_mode": img.mode,
                 "ocr_blocks": [],
+                "ocr_text_by_orientation": {},
                 "image_total_words": 0,
-                "image_total_characters": 0
+                "image_total_characters": 0,
+                "orientations_detected": []
             }
+            
+            # Group OCR results by orientation
+            orientation_groups = {}
             
             # Process OCR results
             for block in ocr_result:
                 text = block.get("text", "").strip()
                 conf = block.get("conf", 0.0)
+                bbox = block.get("bbox", [])
                 
                 if text and conf >= confidence_min:
+                    # Calculate orientation from bounding box
+                    orientation = 0.0
+                    if bbox and len(bbox) >= 4:
+                        try:
+                            # Calculate angle from bounding box points
+                            if len(bbox) == 4 and isinstance(bbox[0], list):
+                                # EasyOCR format: [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
+                                x1, y1 = bbox[0]
+                                x2, y2 = bbox[1]
+                                if x2 != x1:
+                                    angle = math.atan2(y2 - y1, x2 - x1) * 180 / math.pi
+                                    orientation = angle
+                        except:
+                            orientation = 0.0
+                    
+                    # Round orientation to nearest 90 degrees for grouping
+                    orientation_group = round(orientation / 90) * 90
+                    orientation_key = f"{orientation_group}deg"
+                    
+                    if orientation_key not in orientation_groups:
+                        orientation_groups[orientation_key] = []
+                    
                     block_data = {
                         "text": text,
                         "confidence": conf,
-                        "bbox": block.get("bbox"),
+                        "bbox": bbox,
+                        "orientation": orientation,
+                        "orientation_group": orientation_group,
                         "word_count": len(text.split()),
                         "char_count": len(text),
                         "engine": block.get("engine", ocr_engine),
                         "fallback_used": block.get("fallback_used", False)
                     }
                     
+                    orientation_groups[orientation_key].append(block_data)
                     image_data["ocr_blocks"].append(block_data)
                     image_data["image_total_words"] += block_data["word_count"]
                     image_data["image_total_characters"] += block_data["char_count"]
@@ -580,6 +613,20 @@ def extract_image_ocr_text(docx_path: Path, ocr_engine: str = "easyocr", gpu: bo
                     ocr_results["total_ocr_text_blocks"] += 1
                     ocr_results["total_ocr_words"] += block_data["word_count"]
                     ocr_results["total_ocr_characters"] += block_data["char_count"]
+            
+            # Create orientation-specific text summaries
+            for orientation_key, blocks in orientation_groups.items():
+                all_text = " ".join([block["text"] for block in blocks])
+                image_data["ocr_text_by_orientation"][orientation_key] = {
+                    "text": all_text,
+                    "blocks_count": len(blocks),
+                    "total_words": sum(block["word_count"] for block in blocks),
+                    "total_characters": sum(block["char_count"] for block in blocks),
+                    "average_confidence": sum(block["confidence"] for block in blocks) / len(blocks) if blocks else 0.0
+                }
+                image_data["orientations_detected"].append(orientation_key)
+                if orientation_key not in ocr_results["orientations_found"]:
+                    ocr_results["orientations_found"].append(orientation_key)
             
             if image_data["ocr_blocks"]:
                 ocr_results["images"].append(image_data)

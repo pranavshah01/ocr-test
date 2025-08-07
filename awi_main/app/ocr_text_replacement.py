@@ -284,20 +284,20 @@ class OCRTextReplacementProcessor:
     
     def _text_matches(self, text1: str, text2: str) -> bool:
         """
-        Check if two text strings match with normalization.
+        Check if two text strings match exactly with minimal whitespace normalization.
         
         Args:
             text1: First text string
             text2: Second text string
             
         Returns:
-            True if texts match
+            True if texts match exactly
         """
-        # Normalize both texts
-        norm1 = ''.join(text1.lower().split())
-        norm2 = ''.join(text2.lower().split())
+        # Basic whitespace normalization only
+        norm1 = text1.strip()
+        norm2 = text2.strip()
         
-        return norm1 == norm2 or text1.lower() == text2.lower()
+        return norm1 == norm2
     
     def _apply_replace_mode(self, 
                            image: Image.Image, 

@@ -1,7 +1,6 @@
 from pathlib import Path
 import json
 import numpy as np
-import csv
 import html
 from datetime import datetime
 from typing import Dict, Any, List, Optional
@@ -137,16 +136,18 @@ class EnhancedReportGenerator:
     - Export to multiple formats (JSON, HTML, CSV)
     """
     
-    def __init__(self, output_dir: Path = None):
+    def __init__(self, output_dir: Path = None, filename: str = None):
         """
         Initialize enhanced report generator.
         
         Args:
             output_dir: Directory to save reports (default: ./reports)
+            filename: Base filename for reports (without extension)
         """
         self.output_dir = output_dir or Path("./reports")
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
+        self.filename = filename
         self.processing_logs: List[Dict[str, Any]] = []
         self.generation_time = datetime.now()
     
@@ -185,13 +186,31 @@ class EnhancedReportGenerator:
         processing_times = [log.get('processing_summary', {}).get('processing_time', 0.0) for log in self.processing_logs]
         processing_times = [t for t in processing_times if t > 0]
         
-        # OCR confidence metrics
+        # OCR confidence metrics and text data
         ocr_scores = []
+        ocr_text_data = {}
+        
         for log in self.processing_logs:
+            # Extract OCR confidence scores from matches
             matches_detail = log.get('matches_detail', [])
             for match in matches_detail:
                 if match.get('confidence_score') is not None:
                     ocr_scores.append(match['confidence_score'])
+            
+            # Extract OCR text data if available
+            if 'ocr_text_data' in log and isinstance(log['ocr_text_data'], dict):
+                ocr_data = log['ocr_text_data']
+                file_info = log.get('file_info', {})
+                file_path = file_info.get('path', 'unknown')
+                ocr_text_data[file_path] = ocr_data
+                
+                # Also extract confidence scores from OCR blocks
+                if 'images' in ocr_data:
+                    for image in ocr_data['images']:
+                        if 'ocr_blocks' in image:
+                            for block in image['ocr_blocks']:
+                                if 'confidence' in block:
+                                    ocr_scores.append(block['confidence'])
         
         # Error and warning metrics
         total_errors = sum(len(log.get('errors', [])) for log in self.processing_logs)
@@ -221,6 +240,7 @@ class EnhancedReportGenerator:
                 'warnings_generated': total_warnings
             },
             'ocr_analysis': self._generate_ocr_analysis(ocr_scores),
+            'ocr_text_data': ocr_text_data,
             'performance_analysis': self._generate_performance_analysis(processing_times),
             'error_analysis': self._generate_error_analysis(),
             'file_processing_details': self.processing_logs
@@ -318,8 +338,12 @@ class EnhancedReportGenerator:
             Path to exported JSON file
         """
         if filename is None:
-            timestamp = self.generation_time.strftime("%Y%m%d_%H%M%S")
-            filename = f"enhanced_processing_report_{timestamp}.json"
+            if self.filename:
+                timestamp = self.generation_time.strftime("%Y%m%d_%H%M%S")
+                filename = f"{self.filename}_report_{timestamp}.json"
+            else:
+                timestamp = self.generation_time.strftime("%Y%m%d_%H%M%S")
+                filename = f"enhanced_processing_report_{timestamp}.json"
         
         json_path = self.output_dir / filename
         report_data = self.generate_comprehensive_statistics()
@@ -340,8 +364,12 @@ class EnhancedReportGenerator:
             Path to exported HTML file
         """
         if filename is None:
-            timestamp = self.generation_time.strftime("%Y%m%d_%H%M%S")
-            filename = f"processing_report_{timestamp}.html"
+            if self.filename:
+                timestamp = self.generation_time.strftime("%Y%m%d_%H%M%S")
+                filename = f"{self.filename}_report_{timestamp}.html"
+            else:
+                timestamp = self.generation_time.strftime("%Y%m%d_%H%M%S")
+                filename = f"processing_report_{timestamp}.html"
         
         html_path = self.output_dir / filename
         report_data = self.generate_comprehensive_statistics()
@@ -353,49 +381,7 @@ class EnhancedReportGenerator:
         
         return html_path
     
-    def export_to_csv(self, filename: str = None) -> Path:
-        """
-        Export report to CSV format (summary data).
-        
-        Args:
-            filename: Custom filename (default: auto-generated)
-            
-        Returns:
-            Path to exported CSV file
-        """
-        if filename is None:
-            timestamp = self.generation_time.strftime("%Y%m%d_%H%M%S")
-            filename = f"processing_summary_{timestamp}.csv"
-        
-        csv_path = self.output_dir / filename
-        
-        # Create CSV data from processing logs
-        csv_data = []
-        for log in self.processing_logs:
-            file_info = log.get('file_info', {})
-            summary = log.get('processing_summary', {})
-            
-            csv_data.append({
-                'File': file_info.get('path', 'Unknown'),
-                'Processed At': file_info.get('processed_at', ''),
-                'Success': log.get('success', False),
-                'Total Matches': summary.get('total_matches', 0),
-                'Text Replacements': summary.get('text_replacements', 0),
-                'OCR Replacements': summary.get('ocr_replacements', 0),
-                'Textbox Replacements': summary.get('textbox_replacements', 0),
-                'Section Replacements': summary.get('section_replacements', 0),
-                'Processing Time (s)': summary.get('processing_time', 0.0),
-                'Errors': len(log.get('errors', [])),
-                'Warnings': len(log.get('warnings', []))
-            })
-        
-        if csv_data:
-            with open(csv_path, 'w', newline='', encoding='utf-8') as f:
-                writer = csv.DictWriter(f, fieldnames=csv_data[0].keys())
-                writer.writeheader()
-                writer.writerows(csv_data)
-        
-        return csv_path
+
     
     def _generate_html_report(self, report_data: Dict[str, Any]) -> str:
         """Generate HTML report content with enhanced styling."""
@@ -505,6 +491,9 @@ class EnhancedReportGenerator:
                 </div>
             </div>"""
         
+        # Add OCR text section
+        html_content += self._generate_ocr_text_section(report_data)
+        
         html_content += f"""
         </div>
         <div class="footer">
@@ -515,6 +504,51 @@ class EnhancedReportGenerator:
 </html>"""
         
         return html_content
+    
+    def _generate_ocr_text_section(self, report_data: Dict[str, Any]) -> str:
+        """Generate HTML section for OCR text data."""
+        ocr_text_data = report_data.get('ocr_text_data', {})
+        
+        if not ocr_text_data:
+            return ""
+        
+        html_section = """
+            <div class="section">
+                <h2>OCR Text Data</h2>"""
+        
+        for file_path, ocr_data in ocr_text_data.items():
+            if isinstance(ocr_data, dict) and 'images' in ocr_data:
+                html_section += f"""
+                <div style="margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px;">
+                    <h3 style="color: #007acc; margin-top: 0;">File: {file_path.split('/')[-1]}</h3>
+                    <p><strong>Total Images:</strong> {ocr_data.get('total_images', 0)}</p>
+                    <p><strong>Orientations Found:</strong> {', '.join(ocr_data.get('orientations_found', []))}</p>"""
+                
+                for i, image in enumerate(ocr_data.get('images', [])):
+                    html_section += f"""
+                    <div style="margin: 10px 0; padding: 10px; background: #f8f9fa; border-radius: 5px;">
+                        <h4>Image {i+1}</h4>
+                        <p><strong>Size:</strong> {image.get('image_size', {}).get('width', 0)}x{image.get('image_size', {}).get('height', 0)}</p>
+                        <p><strong>Orientations:</strong> {', '.join(image.get('orientations_detected', []))}</p>"""
+                    
+                    # Add text by orientation
+                    for orientation, text_data in image.get('ocr_text_by_orientation', {}).items():
+                        html_section += f"""
+                        <div style="margin: 5px 0; padding: 8px; background: white; border-left: 3px solid #007acc;">
+                            <p><strong>{orientation}:</strong> {text_data.get('text', '')}</p>
+                            <p style="font-size: 0.9em; color: #666;">Blocks: {text_data.get('blocks_count', 0)}, Confidence: {text_data.get('average_confidence', 0):.2f}</p>
+                        </div>"""
+                    
+                    html_section += """
+                    </div>"""
+                
+                html_section += """
+                </div>"""
+        
+        html_section += """
+            </div>"""
+        
+        return html_section
 
 
 # Enhanced convenience functions
@@ -549,6 +583,5 @@ def generate_comprehensive_report(processing_logs: List[Dict[str, Any]], output_
     
     return {
         'json': generator.export_to_enhanced_json(),
-        'html': generator.export_to_html(),
-        'csv': generator.export_to_csv()
+        'html': generator.export_to_html()
     }

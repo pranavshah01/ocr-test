@@ -2,7 +2,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from pathlib import Path
 import json
 import re
-from .text_extractor import EnhancedPatternMatcher, find_patterns_across_split_tags
+from .text_extractor import EnhancedPatternMatcher, find_patterns_across_split_tags, extract_image_ocr_text
 from .ocr_engine import EnhancedOCREngine
 from .comprehensive_image_detector import ComprehensiveImageDetector
 from .ocr_text_replacement import OCRTextReplacementProcessor
@@ -67,7 +67,7 @@ class EnhancedMappingProcessor:
     
     def find_mapping_match(self, matched_text: str, mapping_dict: Dict[str, str]) -> Optional[str]:
         """
-        Enhanced mapping lookup with multiple normalization strategies.
+        Exact mapping lookup with minimal normalization for whitespace only.
         
         Args:
             matched_text: Text that was matched by pattern
@@ -82,87 +82,50 @@ class EnhancedMappingProcessor:
         # Strategy 1: Direct exact match
         if cleaned_text in mapping_dict:
             self.mapping_hits += 1
-            self.processing_log.append(f"Found direct mapping: '{cleaned_text}' -> '{mapping_dict[cleaned_text]}'")
+            self.processing_log.append(f"Found exact mapping: '{cleaned_text}' -> '{mapping_dict[cleaned_text]}'")
             return mapping_dict[cleaned_text]
         
-        # Strategy 2: Normalized whitespace and separators
+        # Strategy 2: Basic whitespace normalization only
         normalized_variants = self._normalize_text_for_mapping(cleaned_text)
         for variant in normalized_variants:
             if variant in mapping_dict:
                 self.mapping_hits += 1
-                self.processing_log.append(f"Found mapping via normalization: '{cleaned_text}' -> '{variant}'")
+                self.processing_log.append(f"Found mapping via whitespace normalization: '{cleaned_text}' -> '{variant}'")
                 return mapping_dict[variant]
-        
-        # Strategy 3: Case-insensitive matching
-        for key, value in mapping_dict.items():
-            if key.lower() == cleaned_text.lower():
-                self.mapping_hits += 1
-                self.processing_log.append(f"Found mapping via case-insensitive: '{cleaned_text}' -> '{key}'")
-                return value
-        
-        # Strategy 4: Alphanumeric-only matching (for OCR variations)
-        matched_clean = re.sub(r'[^A-Z0-9]', '', cleaned_text.upper())
-        for key, value in mapping_dict.items():
-            key_clean = re.sub(r'[^A-Z0-9]', '', key.upper())
-            if key_clean == matched_clean and len(key_clean) > 0:
-                self.mapping_hits += 1
-                self.processing_log.append(f"Found mapping via alphanumeric: '{cleaned_text}' -> '{key}'")
-                return value
-        
-        # Strategy 5: Fuzzy matching for close matches
-        for key, value in mapping_dict.items():
-            if abs(len(key) - len(cleaned_text)) <= 2:  # Similar length
-                # Check character similarity
-                common_chars = sum(1 for a, b in zip(key.upper(), cleaned_text.upper()) if a == b)
-                similarity = common_chars / max(len(key), len(cleaned_text))
-                if similarity >= 0.9:  # 90% similarity
-                    self.mapping_hits += 1
-                    self.processing_log.append(f"Found mapping via fuzzy match: '{cleaned_text}' -> '{key}' (similarity: {similarity:.2f})")
-                    return value
         
         # No mapping found
         self.mapping_misses += 1
-        self.processing_log.append(f"No mapping found for: '{cleaned_text}' (length: {len(cleaned_text)})")
+        self.processing_log.append(f"No exact mapping found for: '{cleaned_text}' (length: {len(cleaned_text)})")
         return None
     
     def _normalize_text_for_mapping(self, text: str) -> List[str]:
         """
-        Generate normalized variants of text for mapping lookup.
+        Generate basic whitespace-normalized variants for exact mapping lookup.
         
         Args:
             text: Input text to normalize
             
         Returns:
-            List of normalized text variants
+            List of normalized text variants with basic whitespace handling
         """
         variants = []
         
-        # Variant 1: Remove all whitespace, keep separators
-        variant1 = re.sub(r'\s+', '', text)
-        variants.append(variant1)
+        # Variant 1: Strip leading/trailing whitespace only
+        variant1 = text.strip()
+        if variant1 != text:
+            variants.append(variant1)
         
-        # Variant 2: Normalize separators (spaces/hyphens)
-        variant2 = re.sub(r'\s*-\s*', '-', text)  # Normalize around hyphens
-        variant2 = re.sub(r'\s+', '', variant2)   # Remove remaining spaces
-        variants.append(variant2)
+        # Variant 2: Replace multiple spaces with single space
+        variant2 = re.sub(r'\s+', ' ', text.strip())
+        if variant2 != text and variant2 != variant1:
+            variants.append(variant2)
         
-        # Variant 3: Strip leading/trailing whitespace only
-        variant3 = text.strip()
-        variants.append(variant3)
+        # Variant 3: Remove all whitespace (for cases where spaces are inconsistent)
+        variant3 = re.sub(r'\s+', '', text)
+        if variant3 != text and variant3 != variant1 and variant3 != variant2:
+            variants.append(variant3)
         
-        # Variant 4: Replace multiple spaces with single space
-        variant4 = re.sub(r'\s+', ' ', text.strip())
-        variants.append(variant4)
-        
-        # Remove duplicates while preserving order
-        seen = set()
-        unique_variants = []
-        for variant in variants:
-            if variant not in seen and variant != text:  # Don't include original
-                seen.add(variant)
-                unique_variants.append(variant)
-        
-        return unique_variants
+        return variants
     
     def apply_xml_replacement(self, docx_path: Path, pattern_matches: List[Dict], 
                             mapping_dict: Dict[str, str]) -> Tuple[Path, Dict[str, Any]]:
@@ -411,8 +374,11 @@ def process_docx(
         level=20  # INFO level
     )
     
-    # Initialize enhanced report generator
-    report_generator = EnhancedReportGenerator(output_dir=Path("./reports"))
+    # Initialize enhanced report generator with file-specific naming
+    report_generator = EnhancedReportGenerator(
+        output_dir=Path("./reports"),
+        filename=docx_path.stem
+    )
     
     # Start processing timer
     start_time = time.time()
@@ -648,6 +614,20 @@ def process_docx(
         
         print(f"Phase 3 processing complete: {textbox_replacements} textbox replacements, {sections_results.get('total_replacements', 0)} section replacements")
         
+        # Extract OCR text and include in processing summary
+        try:
+            ocr_text_result = extract_image_ocr_text(
+                docx_path=docx_path,
+                ocr_engine=ocr_engine,
+                gpu=gpu,
+                confidence_min=confidence_min
+            )
+            combined_results["ocr_text_data"] = ocr_text_result
+            logger.info(f"Extracted OCR text from {ocr_text_result.get('total_images', 0)} images with orientations: {ocr_text_result.get('orientations_found', [])}")
+        except Exception as text_err:
+            logger.warning(f"OCR text extraction failed: {text_err}")
+            combined_results["ocr_text_data"] = {"error": str(text_err)}
+        
         # Final summary with enhanced logging and reporting
         total_processing_time = time.time() - start_time
         total_replacements = combined_results["body_replacements"] + combined_results["image_replacements"] + combined_results["textbox_replacements"] + combined_results["sections_total_replacements"]
@@ -683,8 +663,7 @@ def process_docx(
         try:
             report_paths = {
                 'json': report_generator.export_to_enhanced_json(),
-                'html': report_generator.export_to_html(),
-                'csv': report_generator.export_to_csv()
+                'html': report_generator.export_to_html()
             }
             logger.info(f"Enhanced reports generated: {list(report_paths.keys())}")
             combined_results["report_paths"] = {k: str(v) for k, v in report_paths.items()}
@@ -757,8 +736,7 @@ def process_docx(
             try:
                 report_paths = {
                     'json': report_generator.export_to_enhanced_json(),
-                    'html': report_generator.export_to_html(),
-                    'csv': report_generator.export_to_csv()
+                    'html': report_generator.export_to_html()
                 }
                 combined_results["report_paths"] = {k: str(v) for k, v in report_paths.items()}
                 logger.info(f"Error reports generated: {list(report_paths.keys())}")

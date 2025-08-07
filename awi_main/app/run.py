@@ -50,20 +50,7 @@ def process_file(file_path: Path, config_data: dict, mapping_dict, patterns_list
 
         report.write_report(summary, config.reports_dir)
 
-        try:
-            text_result = text_extractor.create_combined_text_file(
-                docx_path=docx_path,
-                ocr_dir=config.ocr_dir,
-                file_name=file_path.stem,
-                ocr_engine=config.ocr_engine,
-                gpu=config.gpu,
-                confidence_min=config.confidence_min
-            )
-            summary["combined_text_file"] = text_result.get("text_file")
-            summary["combined_json_file"] = text_result.get("json_file")
-            per_file_log.info(f"Created combined text files: {summary['combined_text_file']}")
-        except Exception as text_err:
-            per_file_log.warning(f"Combined text extraction failed for {file_path}: {text_err}")
+
 
         try:
             diff_generator.generate_html_diff(file_path, docx_path, config.reports_dir)
