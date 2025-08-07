@@ -1,0 +1,1 @@
+"""OCR Replacer package for DOCX OCR and text replacement."""

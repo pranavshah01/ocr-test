@@ -1,0 +1,17 @@
+{
+  "documents": 9,
+  "total_header_replacements": 0,
+  "total_body_replacements": 0,
+  "total_callout_replacements": 0,
+  "total_ocr_replacements": 0,
+  "total_text_replacements": 0,
+  "total_textbox_replacements": 0,
+  "total_section_replacements": 0,
+  "files": [
+    "testimages_092051.docx"
+  ],
+  "errors": [],
+  "success_rate": 0.0,
+  "total_processing_time": 0,
+  "invalid_entries_skipped": 0
+}

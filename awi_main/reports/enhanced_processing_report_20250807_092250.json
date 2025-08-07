@@ -1,0 +1,82 @@
+{
+  "report_metadata": {
+    "generated_at": "2025-08-07T09:22:50.044810",
+    "report_version": "2.0",
+    "generator": "Enhanced Report Generator v2.0",
+    "total_files_analyzed": 1
+  },
+  "processing_metrics": {
+    "total_files_processed": 1,
+    "successful_files": 0,
+    "failed_files": 1,
+    "success_rate": 0.0,
+    "total_processing_time": 12.313668966293335,
+    "average_processing_time": 12.313668966293335,
+    "total_matches": 0,
+    "total_replacements": 0,
+    "text_replacements": 0,
+    "ocr_replacements": 0,
+    "textbox_replacements": 0,
+    "section_replacements": 0,
+    "errors_encountered": 1,
+    "warnings_generated": 0
+  },
+  "ocr_analysis": {
+    "ocr_enabled": false,
+    "message": "No OCR processing detected in analyzed files"
+  },
+  "performance_analysis": {
+    "processing_time_analysis": {
+      "total_time": 12.313668966293335,
+      "average_time": 12.313668966293335,
+      "median_time": 12.313668966293335,
+      "fastest_file": 12.313668966293335,
+      "slowest_file": 12.313668966293335,
+      "std_deviation": 0.0
+    },
+    "throughput_metrics": {
+      "files_per_second": 0.08121056386502977,
+      "total_matches_per_second": 0.0
+    }
+  },
+  "error_analysis": {
+    "error_summary": {
+      "total_errors": 1,
+      "files_with_errors": 1,
+      "error_rate": 100.0
+    },
+    "warning_summary": {
+      "total_warnings": 0,
+      "files_with_warnings": 0,
+      "warning_rate": 0.0
+    },
+    "recent_errors": [
+      "Processing failed: 'processing_log'"
+    ],
+    "recent_warnings": []
+  },
+  "file_processing_details": [
+    {
+      "file_info": {
+        "path": "/Users/pranavshah/pranav_projects/new-ocr-project/awi_main/source_documents/testimages_092051.docx",
+        "processed_at": "2025-08-07T09:23:02.358648",
+        "size_mb": 2.250542640686035
+      },
+      "processing_summary": {
+        "total_matches": 0,
+        "text_replacements": 0,
+        "ocr_replacements": 0,
+        "textbox_replacements": 0,
+        "section_replacements": 0,
+        "processing_time": 12.313668966293335,
+        "formatting_preserved": 0
+      },
+      "matches_detail": [],
+      "errors": [
+        "Processing failed: 'processing_log'"
+      ],
+      "warnings": [],
+      "success": false
+    }
+  ]
+}

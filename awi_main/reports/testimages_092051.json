@@ -1,0 +1,6 @@
+[
+  {
+    "file": "testimages_092051.docx",
+    "error": "Object of type Image is not JSON serializable"
+  }
+]
