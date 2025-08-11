@@ -210,7 +210,13 @@ class DocumentProcessor:
                 media_dir = self._get_media_directory(document)
                 image_results = self.image_processor.process_images(document, media_dir)
                 processing_log.image_matches.extend(image_results)
+                
+                # Collect OCR comparison data for reporting
+                ocr_comparison_data = self.image_processor.get_ocr_comparison_data()
+                processing_log.ocr_comparison_data.extend(ocr_comparison_data)
+                
                 logger.info(f"Image processing completed: {len(image_results)} matches")
+                logger.info(f"OCR comparison data collected for {len(ocr_comparison_data)} images")
             except Exception as e:
                 error_msg = f"Image processing failed: {e}"
                 logger.error(error_msg)

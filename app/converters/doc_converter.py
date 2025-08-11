@@ -36,6 +36,10 @@ class DocConverter:
         
         if not self.preferred_tool:
             logger.warning("No conversion tools detected. Conversion may fail.")
+            logger.info("To fix this issue:")
+            logger.info("  - Install LibreOffice for .doc file support")
+            logger.info("  - On macOS: Download from https://www.libreoffice.org/")
+            logger.info("  - On Windows: Word COM interface can also be used if Microsoft Word is installed")
         else:
             logger.info(f"Using conversion tool: {self.preferred_tool}")
     
@@ -72,7 +76,7 @@ class DocConverter:
             logger.info(f"Output file already exists: {output_path}")
             return output_path
         
-        logger.info(f"Converting {doc_path} to {output_path}")
+        logger.info(f"🔄 CONVERTING: {doc_path.name} -> {output_path.name} (using {self.preferred_tool})")
         
         # Try conversion with available tools
         if self.preferred_tool == 'libreoffice':
@@ -129,7 +133,7 @@ class DocConverter:
             if not output_path.exists():
                 raise ConversionError(f"Conversion completed but output file not found: {output_path}")
             
-            logger.info(f"Successfully converted to: {output_path}")
+            logger.info(f"✅ CONVERSION SUCCESS: {output_path.name}")
             return output_path
             
         except subprocess.TimeoutExpired:
@@ -178,7 +182,7 @@ class DocConverter:
             if not output_path.exists():
                 raise ConversionError(f"Conversion completed but output file not found: {output_path}")
             
-            logger.info(f"Successfully converted to: {output_path}")
+            logger.info(f"✅ CONVERSION SUCCESS: {output_path.name}")
             return output_path
             
         except Exception as e:

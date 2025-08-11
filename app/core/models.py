@@ -82,6 +82,7 @@ class ProcessingLog:
     image_matches: List[OCRMatch] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
+    ocr_comparison_data: List[Dict[str, Any]] = field(default_factory=list)
     
     @property
     def total_matches(self) -> int:
@@ -105,7 +106,8 @@ class ProcessingLog:
             'errors': self.errors,
             'warnings': self.warnings,
             'total_matches': self.total_matches,
-            'success': self.success
+            'success': self.success,
+            'ocr_comparison_data': self.ocr_comparison_data
         }
 
 @dataclass

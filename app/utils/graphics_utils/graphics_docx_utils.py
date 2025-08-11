@@ -1,6 +1,6 @@
 """
-DOCX manipulation utilities for text processing and formatting preservation.
-Handles text reconstruction, font management, and document structure operations.
+DOCX manipulation utilities for graphics processing and formatting preservation.
+Handles text reconstruction, font management, and document structure operations for textboxes and graphics.
 """
 
 import re
@@ -14,12 +14,12 @@ from docx.text.paragraph import Paragraph
 from docx.shared import RGBColor, Pt
 from docx.enum.text import WD_COLOR_INDEX
 
-from .shared_constants import XML_NAMESPACES, DEFAULT_FONT_SIZE, DEFAULT_FONT_FAMILY
+from ..shared_constants import XML_NAMESPACES, DEFAULT_FONT_SIZE, DEFAULT_FONT_FAMILY
 
 logger = logging.getLogger(__name__)
 
-class TextReconstructor:
-    """Reconstructs text across multiple <w:t> elements for pattern matching."""
+class GraphicsTextReconstructor:
+    """Reconstructs text across multiple <w:t> elements for graphics pattern matching."""
     
     @staticmethod
     def reconstruct_paragraph_text(paragraph: Paragraph) -> Tuple[str, List[Run]]:
@@ -83,8 +83,8 @@ class TextReconstructor:
         
         return match_start, match_end, affected_runs
 
-class FontManager:
-    """Manages font information and formatting preservation."""
+class GraphicsFontManager:
+    """Manages font information and formatting preservation for graphics elements."""
     
     @staticmethod
     def get_font_info(run: Run) -> Dict[str, Any]:
@@ -189,95 +189,14 @@ class FontManager:
         for run in runs:
             run.font.size = Pt(target_size)
 
-class PatternMatcher:
-    """Handles regex pattern matching with text reconstruction."""
-    
-    def __init__(self, patterns: Dict[str, str], mappings: Dict[str, str]):
-        """
-        Initialize pattern matcher.
-        
-        Args:
-            patterns: Dictionary of pattern names to regex patterns
-            mappings: Dictionary of original text to replacement text
-        """
-        self.patterns = patterns
-        self.mappings = mappings
-        self.compiled_patterns = {}
-        
-        # Compile regex patterns
-        for name, pattern in patterns.items():
-            if not name.startswith('_'):  # Skip metadata
-                try:
-                    self.compiled_patterns[name] = re.compile(pattern, re.IGNORECASE)
-                except re.error as e:
-                    logger.error(f"Invalid regex pattern '{name}': {e}")
-    
-    def find_matches(self, text: str) -> List[Tuple[str, str, int, int]]:
-        """
-        Find all pattern matches in text, deduplicating overlapping matches.
-        
-        Args:
-            text: Text to search
-            
-        Returns:
-            List of tuples (pattern_name, matched_text, start_pos, end_pos)
-        """
-        all_matches = []
-        
-        for pattern_name, compiled_pattern in self.compiled_patterns.items():
-            for match in compiled_pattern.finditer(text):
-                matched_text = match.group()
-                
-                # Check if we have a mapping for this text
-                replacement = self.get_replacement(matched_text)
-                if replacement:
-                    all_matches.append((pattern_name, matched_text, match.start(), match.end()))
-        
-        # Sort matches by position
-        all_matches.sort(key=lambda x: x[2])
-        
-        # Deduplicate overlapping matches - keep only the first match for each position
-        deduplicated_matches = []
-        used_positions = set()
-        
-        for pattern_name, matched_text, start_pos, end_pos in all_matches:
-            # Check if this position range overlaps with any already used position
-            position_range = set(range(start_pos, end_pos))
-            if not position_range.intersection(used_positions):
-                deduplicated_matches.append((pattern_name, matched_text, start_pos, end_pos))
-                used_positions.update(position_range)
-        
-        return deduplicated_matches
-    
-    def get_replacement(self, original_text: str) -> Optional[str]:
-        """
-        Get replacement text for original text.
-        
-        Args:
-            original_text: Original text to replace
-            
-        Returns:
-            Replacement text or None if no mapping exists
-        """
-        # Try exact match first
-        if original_text in self.mappings:
-            return self.mappings[original_text]
-        
-        # Try normalized match (remove spaces and hyphens)
-        normalized_original = re.sub(r'[\s-]', '', original_text)
-        for key, value in self.mappings.items():
-            normalized_key = re.sub(r'[\s-]', '', key)
-            if normalized_original == normalized_key:
-                return value
-        
-        return None
+# GraphicsPatternMatcher moved to shared utils/pattern_matcher.py
 
-class TextReplacer:
-    """Handles text replacement while preserving formatting."""
+class GraphicsTextReplacer:
+    """Handles text replacement while preserving formatting for graphics elements."""
     
     def __init__(self, mode: str = "append"):
         """
-        Initialize text replacer.
+        Initialize graphics text replacer.
         
         Args:
             mode: Replacement mode ('append' or 'replace')
@@ -324,7 +243,7 @@ class TextReplacer:
             
             # Get font info from the first affected run
             first_run = affected_runs[0][0]
-            font_info = FontManager.get_font_info(first_run)
+            font_info = GraphicsFontManager.get_font_info(first_run)
             
             # Clear text from all affected runs except the first
             for i, (run, run_start, run_end) in enumerate(affected_runs):
@@ -339,7 +258,7 @@ class TextReplacer:
                     run.text = before_text + final_text + after_text
                     
                     # Apply original formatting
-                    FontManager.apply_font_info(run, font_info)
+                    GraphicsFontManager.apply_font_info(run, font_info)
                 else:
                     # Clear subsequent runs that were part of the match
                     run_match_start = max(0, start_pos - run_start)
@@ -355,27 +274,16 @@ class TextReplacer:
             logger.error(f"Failed to replace text: {e}")
             return False
 
-def create_pattern_matcher(patterns: Dict[str, str], mappings: Dict[str, str]) -> PatternMatcher:
-    """
-    Factory function to create a PatternMatcher instance.
-    
-    Args:
-        patterns: Dictionary of pattern names to regex patterns
-        mappings: Dictionary of original text to replacement text
-        
-    Returns:
-        PatternMatcher instance
-    """
-    return PatternMatcher(patterns, mappings)
+# create_graphics_pattern_matcher moved to shared utils/pattern_matcher.py
 
-def create_text_replacer(mode: str = "append") -> TextReplacer:
+def create_graphics_text_replacer(mode: str = "append") -> GraphicsTextReplacer:
     """
-    Factory function to create a TextReplacer instance.
+    Factory function to create a GraphicsTextReplacer instance.
     
     Args:
         mode: Replacement mode ('append' or 'replace')
         
     Returns:
-        TextReplacer instance
+        GraphicsTextReplacer instance
     """
-    return TextReplacer(mode)
+    return GraphicsTextReplacer(mode)

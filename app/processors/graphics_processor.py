@@ -14,10 +14,12 @@ from docx.text.run import Run
 from docx.shared import Pt
 
 from ..core.models import Match, create_match
-from ..utils.docx_utils import (
-    PatternMatcher, TextReplacer, FontManager,
-    create_pattern_matcher, create_text_replacer
+from ..utils.graphics_utils.graphics_docx_utils import (
+    GraphicsTextReplacer as TextReplacer, 
+    GraphicsFontManager as FontManager,
+    create_graphics_text_replacer as create_text_replacer
 )
+from ..utils.pattern_matcher import PatternMatcher, create_pattern_matcher
 from ..utils.shared_constants import XML_NAMESPACES, DEFAULT_FONT_SIZE, DEFAULT_FONT_FAMILY
 
 logger = logging.getLogger(__name__)

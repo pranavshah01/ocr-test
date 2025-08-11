@@ -38,13 +38,37 @@ def setup_logging(config) -> logging.Logger:
     # Create logs directory
     config.logs_dir.mkdir(parents=True, exist_ok=True)
     
-    # Set up detailed logger with file output
-    log_file = config.logs_dir / "processing.log"
-    main_logger = SharedUtilities.setup_detailed_logger(
-        "document_processor", 
-        str(log_file), 
-        log_level
+    # Set up root logger to capture all logging
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level)
+    
+    # Clear any existing handlers
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+    
+    # Console handler
+    console_handler = logging.StreamHandler()
+    console_formatter = logging.Formatter(
+        "%(asctime)s | %(levelname)8s | %(name)s | %(message)s",
+        "%H:%M:%S"
     )
+    console_handler.setFormatter(console_formatter)
+    console_handler.setLevel(log_level)
+    root_logger.addHandler(console_handler)
+    
+    # File handler
+    log_file = config.logs_dir / "processing.log"
+    file_handler = logging.FileHandler(log_file, mode='w', encoding='utf-8')
+    file_formatter = logging.Formatter(
+        "%(asctime)s | %(levelname)8s | %(name)s:%(funcName)s:%(lineno)d | %(message)s",
+        "%Y-%m-%d %H:%M:%S"
+    )
+    file_handler.setFormatter(file_formatter)
+    file_handler.setLevel(logging.DEBUG)  # File gets all details
+    root_logger.addHandler(file_handler)
+    
+    # Get main logger
+    main_logger = logging.getLogger(__name__)
     
     return main_logger
 
@@ -128,20 +152,29 @@ def discover_and_filter_documents(config) -> list[Path]:
         List of document paths to process
     """
     logger.info(f"Discovering documents in: {config.source_dir}")
+    logger.info(f"Looking for supported formats: {SUPPORTED_FORMATS}")
     
     # Discover documents
     documents = FileDiscovery.discover_documents(config.source_dir, SUPPORTED_FORMATS)
     
     if not documents:
         logger.warning("No documents found for processing")
+        logger.info(f"Searched directory: {config.source_dir}")
+        logger.info(f"Supported formats: {SUPPORTED_FORMATS}")
         return []
+    
+    logger.info(f"Found {len(documents)} documents before filtering")
     
     # Filter documents
     filtered_documents = FileDiscovery.filter_documents(documents, max_size_mb=100.0)
     
-    logger.info(f"Found {len(filtered_documents)} documents to process")
-    for doc in filtered_documents:
-        logger.info(f"  - {doc.name}")
+    if len(filtered_documents) != len(documents):
+        logger.info(f"Filtered out {len(documents) - len(filtered_documents)} documents (size > 100MB)")
+    
+    logger.info(f"Final document list ({len(filtered_documents)} files):")
+    for i, doc in enumerate(filtered_documents, 1):
+        file_size_mb = doc.stat().st_size / (1024 * 1024)
+        logger.info(f"  {i}. {doc.name} ({file_size_mb:.2f} MB)")
     
     return filtered_documents
 
@@ -161,6 +194,11 @@ def process_documents(config, documents: list[Path]):
         return None
     
     logger.info(f"Starting processing of {len(documents)} documents with {config.max_workers} workers")
+    
+    # Log each file that will be processed
+    logger.info("Files queued for processing:")
+    for i, doc in enumerate(documents, 1):
+        logger.info(f"  {i}. {doc.name} -> {config.output_dir / doc.name}")
     
     # Create processor factory
     processor_factory = create_processor_factory(config)
@@ -253,7 +291,11 @@ def main():
         config = load_config_from_args(args)
         
         # Set up logging
-        setup_logging(config)
+        main_logger = setup_logging(config)
+        
+        # Test logging is working
+        main_logger.info("🚀 Starting Document Processing Pipeline")
+        main_logger.info(f"Log file: {config.logs_dir / 'processing.log'}")
         
         # Display system information
         display_system_info(config)

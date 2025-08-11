@@ -78,27 +78,54 @@ class PlatformUtils:
 class ConversionToolDetector:
     """Detects and manages document conversion tools."""
     
+    _instance = None
+    _detection_done = False
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+    
     def __init__(self):
-        self.platform = get_current_platform()
-        self.detected_tools = {}
-        self._detect_tools()
+        if not self._detection_done:
+            self.platform = get_current_platform()
+            self.detected_tools = {}
+            self._detect_tools()
+            ConversionToolDetector._detection_done = True
     
     def _detect_tools(self):
         """Detect available conversion tools on the current platform."""
         logger.info(f"Detecting conversion tools on {self.platform}")
         
+        # Log which tools we're checking for
+        logger.info(f"Checking for conversion tools: {CONVERSION_TOOLS}")
+        
         # Detect LibreOffice
+        logger.info("Checking for LibreOffice...")
         libreoffice_path = self._detect_libreoffice()
         if libreoffice_path:
             self.detected_tools['libreoffice'] = libreoffice_path
-            logger.info(f"LibreOffice detected at: {libreoffice_path}")
+            logger.info(f"✓ LibreOffice detected at: {libreoffice_path}")
+        else:
+            logger.warning("✗ LibreOffice not found")
         
         # Detect Word COM (Windows only)
         if is_windows():
+            logger.info("Checking for Microsoft Word COM interface...")
             word_com_available = self._detect_word_com()
             if word_com_available:
                 self.detected_tools['word_com'] = True
-                logger.info("Microsoft Word COM interface detected")
+                logger.info("✓ Microsoft Word COM interface detected")
+            else:
+                logger.warning("✗ Microsoft Word COM interface not available")
+        else:
+            logger.info("Skipping Word COM detection (not Windows platform)")
+        
+        # Log final detection summary
+        if self.detected_tools:
+            logger.info(f"Detection complete. Available tools: {list(self.detected_tools.keys())}")
+        else:
+            logger.warning("Detection complete. No conversion tools found!")
     
     def _detect_libreoffice(self) -> Optional[str]:
         """Detect LibreOffice installation."""
@@ -106,20 +133,39 @@ class ConversionToolDetector:
         
         # Try primary LibreOffice command
         primary_cmd = commands.get('libreoffice')
-        if primary_cmd and self._test_command(primary_cmd):
-            return primary_cmd
+        if primary_cmd:
+            logger.debug(f"Testing primary LibreOffice command: {primary_cmd}")
+            if self._test_command(primary_cmd):
+                logger.debug(f"✓ Primary command works: {primary_cmd}")
+                return primary_cmd
+            else:
+                logger.debug(f"✗ Primary command failed: {primary_cmd}")
         
         # Try alternative command
         alt_cmd = commands.get('libreoffice_alt')
-        if alt_cmd and self._test_command(alt_cmd):
-            return alt_cmd
+        if alt_cmd:
+            logger.debug(f"Testing alternative LibreOffice command: {alt_cmd}")
+            if self._test_command(alt_cmd):
+                logger.debug(f"✓ Alternative command works: {alt_cmd}")
+                return alt_cmd
+            else:
+                logger.debug(f"✗ Alternative command failed: {alt_cmd}")
         
         # Try finding in PATH
         libreoffice_exe = 'soffice' + PlatformUtils.get_executable_extension()
+        logger.debug(f"Searching for '{libreoffice_exe}' in PATH...")
         path_cmd = shutil.which(libreoffice_exe)
-        if path_cmd and self._test_command(path_cmd):
-            return path_cmd
+        if path_cmd:
+            logger.debug(f"Found in PATH: {path_cmd}")
+            if self._test_command(path_cmd):
+                logger.debug(f"✓ PATH command works: {path_cmd}")
+                return path_cmd
+            else:
+                logger.debug(f"✗ PATH command failed: {path_cmd}")
+        else:
+            logger.debug(f"'{libreoffice_exe}' not found in PATH")
         
+        logger.debug("LibreOffice detection failed - no working installation found")
         return None
     
     def _detect_word_com(self) -> bool:

@@ -1,0 +1,9 @@
+{
+  "pattern_77_enforced_structure": "77-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+",
+  "_metadata": {
+    "description": "Pattern for 77-*-*-* format matching alphanumeric sections",
+    "pattern_explanation": "Matches 77 followed by exactly 3 alphanumeric sections separated by dashes",
+    "structure_requirement": "Must have exactly 3 dashes creating 4 sections with alphanumeric characters",
+    "section_content": "Each section after 77 contains letters and/or digits"
+  }
+}

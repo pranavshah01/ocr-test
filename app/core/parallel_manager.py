@@ -221,6 +221,10 @@ class ParallelManager:
             ProcessingResult
         """
         worker_id = threading.get_ident() if not self.use_processes else multiprocessing.current_process().pid
+        start_time = time.time()
+        
+        # Log file processing start
+        logger.info(f"🔄 PROCESSING: {doc_path.name} (Worker: {worker_id})")
         
         try:
             # Update worker status
@@ -228,13 +232,23 @@ class ParallelManager:
                 status = self.worker_statuses[worker_id]
                 status.is_busy = True
                 status.current_file = doc_path
-                status.start_time = time.time()
+                status.start_time = start_time
             
             # Create processor instance for this worker
             processor = processor_factory()
             
             # Process the document
             result = processor.process_document(doc_path)
+            
+            # Calculate processing time
+            processing_time = time.time() - start_time
+            
+            # Log completion status
+            if result.success:
+                matches = getattr(result, 'total_matches', 0)
+                logger.info(f"✅ COMPLETED: {doc_path.name} ({processing_time:.2f}s, {matches} matches)")
+            else:
+                logger.error(f"❌ FAILED: {doc_path.name} ({processing_time:.2f}s) - {result.error_message}")
             
             # Update worker statistics
             if worker_id in self.worker_statuses:
@@ -249,7 +263,8 @@ class ParallelManager:
             return result
             
         except Exception as e:
-            logger.error(f"Worker {worker_id} failed processing {doc_path}: {e}")
+            processing_time = time.time() - start_time
+            logger.error(f"❌ EXCEPTION: {doc_path.name} ({processing_time:.2f}s) - Worker {worker_id} failed: {e}")
             
             # Update error count
             if worker_id in self.worker_statuses:
@@ -362,6 +377,11 @@ class FileDiscovery:
         
         for doc_path in documents:
             try:
+                # Skip temporary Office files (start with ~$)
+                if doc_path.name.startswith('~$'):
+                    logger.debug(f"Skipping temporary Office file: {doc_path.name}")
+                    continue
+                
                 # Check if file exists and is readable
                 if not doc_path.exists():
                     logger.warning(f"File does not exist: {doc_path}")

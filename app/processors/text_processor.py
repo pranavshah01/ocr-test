@@ -12,10 +12,11 @@ from docx.text.paragraph import Paragraph
 from docx.table import Table
 
 from ..core.models import Match, create_match
-from ..utils.docx_utils import (
-    TextReconstructor, FontManager, PatternMatcher, TextReplacer,
-    create_pattern_matcher, create_text_replacer
+from ..utils.text_utils.text_docx_utils import (
+    TextReconstructor, FontManager, TextReplacer,
+    create_text_replacer
 )
+from ..utils.pattern_matcher import PatternMatcher, create_pattern_matcher
 
 logger = logging.getLogger(__name__)
 
