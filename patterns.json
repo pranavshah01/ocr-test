@@ -1,10 +1,10 @@
 {
-  "pattern_77_enforced_structure": "77-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+",
-  "pattern_77_two_dash_structure": "77-[A-Za-z0-9]+-[A-Za-z0-9]+",
+  "pattern_77_enforced_structure": "77-[0-9]{3}-[A-Za-z0-9]{6,7}-[0-9]{2,3}",
+  "pattern_77_two_dash_structure": "77-[0-9]{3}-[A-Za-z0-9]+",
   "_metadata": {
-    "description": "Patterns for 77-*-*-* and 77-*-* format matching alphanumeric sections",
-    "pattern_explanation": "Matches 77 followed by 2 or 3 alphanumeric sections separated by dashes",
-    "structure_requirement": "Must have exactly 2 or 3 dashes creating 3 or 4 sections with alphanumeric characters",
-    "section_content": "Each section after 77 contains letters and/or digits"
+    "description": "Patterns for 77-*-*-* and 77-*-* format with flexible matching",
+    "pattern_explanation": "Flexible patterns: 77-XXX-XXXXXX(X)-XX format and 77-XXX-XXXXXXX format",
+    "structure_requirement": "Three-dash: 77-[3 digits]-[6-7 alphanumeric]-[2-3 digits], Two-dash: 77-[3 digits]-[alphanumeric]",
+    "section_content": "Flexible length constraints to match various part number formats"
   }
 }
