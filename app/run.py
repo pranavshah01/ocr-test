@@ -91,6 +91,7 @@ def display_system_info(config):
     logger.info("Configuration:")
     logger.info(f"Text mode: {config.text_mode}")
     logger.info(f"OCR mode: {config.ocr_mode}")
+    logger.info(f"OCR engine: {config.ocr_engine}")
     logger.info(f"GPU enabled: {config.use_gpu}")
     logger.info(f"GPU device: {getattr(config, 'gpu_device', 'unknown')}")
     logger.info(f"Max workers: {config.max_workers}")
@@ -129,7 +130,7 @@ def create_processor_factory(config):
             processor.patterns, 
             processor.mappings, 
             config.ocr_mode,
-            ocr_engine="easyocr",  # Default to EasyOCR
+            ocr_engine=config.ocr_engine,  # Use configured OCR engine
             use_gpu=config.use_gpu,
             confidence_threshold=config.confidence_min
         )

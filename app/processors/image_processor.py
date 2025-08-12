@@ -22,7 +22,7 @@ from docx.shared import Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 # Import existing components
-from ..core.models import OCRResult, OCRMatch, Match, create_ocr_result, create_ocr_match
+from ..core.models import OCRResult, OCRMatch, Match, HybridOCRResult, create_ocr_result, create_ocr_match, create_hybrid_ocr_result
 from ..utils.shared_constants import DEFAULT_OCR_CONFIDENCE, FALLBACK_FONTS
 from ..utils.platform_utils import PathManager
 
@@ -33,11 +33,12 @@ from ..utils.image_utils.preprocessing_strategies import PreprocessingStrategyMa
 from ..utils.image_utils.text_analyzer import TextAnalyzer, TextProperties, create_text_analyzer
 from ..utils.image_utils.precise_text_replacer import PreciseTextReplacer, create_precise_text_replacer
 from ..utils.image_utils.pattern_debugger import PatternDebugger, create_pattern_debugger
+from ..utils.image_utils.hybrid_ocr_manager import HybridOCRManager, create_hybrid_ocr_manager
 
 logger = logging.getLogger(__name__)
 
 class OCREngine:
-    """Enhanced OCR engine with preprocessing and multiple strategy support."""
+    """Enhanced OCR engine with preprocessing and hybrid mode support."""
     
     def __init__(self, engine: str = "easyocr", use_gpu: bool = True, 
                  confidence_threshold: float = DEFAULT_OCR_CONFIDENCE, enable_preprocessing: bool = True):
@@ -45,7 +46,7 @@ class OCREngine:
         Initialize enhanced OCR engine.
         
         Args:
-            engine: OCR engine to use ('easyocr' or 'tesseract')
+            engine: OCR engine to use ('easyocr', 'tesseract', or 'hybrid')
             use_gpu: Whether to use GPU acceleration
             confidence_threshold: Minimum confidence threshold for OCR results
             enable_preprocessing: Whether to enable image preprocessing
@@ -55,6 +56,7 @@ class OCREngine:
         self.confidence_threshold = confidence_threshold
         self.enable_preprocessing = enable_preprocessing
         self.reader = None
+        self.hybrid_manager = None
         
         # Initialize enhanced components
         if self.enable_preprocessing:
@@ -70,6 +72,8 @@ class OCREngine:
                 self._initialize_easyocr()
             elif self.engine == "tesseract":
                 self._initialize_tesseract()
+            elif self.engine == "hybrid":
+                self._initialize_hybrid()
             else:
                 raise ValueError(f"Unsupported OCR engine: {self.engine}")
                 
@@ -79,7 +83,7 @@ class OCREngine:
         except Exception as e:
             logger.error(f"Failed to initialize enhanced OCR engine '{self.engine}': {e}")
             # Try fallback to CPU
-            if self.use_gpu:
+            if self.use_gpu and self.engine != "hybrid":
                 logger.info("Attempting fallback to CPU...")
                 self.use_gpu = False
                 self._initialize_engine()
@@ -125,6 +129,21 @@ class OCREngine:
             logger.error(f"Enhanced Tesseract initialization failed: {e}")
             raise
     
+    def _initialize_hybrid(self):
+        """Initialize Hybrid OCR Manager."""
+        try:
+            self.hybrid_manager = create_hybrid_ocr_manager(
+                max_workers=2,
+                confidence_threshold=self.confidence_threshold,
+                use_gpu=self.use_gpu,
+                overlap_threshold=0.5
+            )
+            logger.info("Hybrid OCR Manager initialized successfully")
+            
+        except Exception as e:
+            logger.error(f"Hybrid OCR Manager initialization failed: {e}")
+            raise
+    
     def extract_text(self, image_path: Path) -> List[OCRResult]:
         """
         Extract text using enhanced preprocessing and multiple strategies.
@@ -133,10 +152,12 @@ class OCREngine:
             image_path: Path to image file
             
         Returns:
-            List of OCRResult objects
+            List of OCRResult objects (converted from HybridOCRResult for hybrid mode)
         """
         try:
-            if self.enable_preprocessing:
+            if self.engine == "hybrid":
+                return self._extract_with_hybrid(image_path)
+            elif self.enable_preprocessing:
                 return self._extract_with_preprocessing(image_path)
             else:
                 return self._extract_without_preprocessing(image_path)
@@ -162,21 +183,32 @@ class OCREngine:
         }
         
         try:
-            # Extract with EasyOCR
-            try:
-                easyocr_results = self._extract_with_easyocr(image_path)
-                comparison_results['easyocr'] = easyocr_results
-                logger.debug(f"EasyOCR extracted {len(easyocr_results)} text regions from {image_path}")
-            except Exception as e:
-                logger.error(f"EasyOCR extraction failed: {e}")
-            
-            # Extract with Tesseract
-            try:
-                tesseract_results = self._extract_with_tesseract(image_path)
-                comparison_results['tesseract'] = tesseract_results
-                logger.debug(f"Tesseract extracted {len(tesseract_results)} text regions from {image_path}")
-            except Exception as e:
-                logger.error(f"Tesseract extraction failed: {e}")
+            # For hybrid mode, use the hybrid manager to get individual results
+            if self.engine == "hybrid" and self.hybrid_manager:
+                try:
+                    easyocr_results, tesseract_results = self.hybrid_manager.execute_ocr_parallel(image_path)
+                    comparison_results['easyocr'] = easyocr_results
+                    comparison_results['tesseract'] = tesseract_results
+                    logger.debug(f"Hybrid comparison: EasyOCR={len(easyocr_results)}, Tesseract={len(tesseract_results)}")
+                except Exception as e:
+                    logger.error(f"Hybrid comparison extraction failed: {e}")
+            else:
+                # Extract with EasyOCR
+                try:
+                    if self.engine in ["easyocr", "hybrid"] and self.reader:
+                        easyocr_results = self._extract_with_easyocr(image_path)
+                        comparison_results['easyocr'] = easyocr_results
+                        logger.debug(f"EasyOCR extracted {len(easyocr_results)} text regions from {image_path}")
+                except Exception as e:
+                    logger.error(f"EasyOCR extraction failed: {e}")
+                
+                # Extract with Tesseract
+                try:
+                    tesseract_results = self._extract_with_tesseract(image_path)
+                    comparison_results['tesseract'] = tesseract_results
+                    logger.debug(f"Tesseract extracted {len(tesseract_results)} text regions from {image_path}")
+                except Exception as e:
+                    logger.error(f"Tesseract extraction failed: {e}")
                 
         except Exception as e:
             logger.error(f"OCR comparison extraction failed for {image_path}: {e}")
@@ -200,6 +232,12 @@ class OCREngine:
             # Try OCR on each variant
             for i, variant in enumerate(image_variants):
                 try:
+                    # Log variant info for debugging
+                    if variant is not None and hasattr(variant, 'shape'):
+                        logger.debug(f"Processing variant {i}: shape={variant.shape}, dtype={variant.dtype}")
+                    else:
+                        logger.debug(f"Processing variant {i}: invalid variant (None or no shape)")
+                    
                     # Extract text from variant
                     variant_results = self._extract_from_image_array(variant)
                     
@@ -235,6 +273,42 @@ class OCREngine:
             logger.error(f"Preprocessing-based extraction failed: {e}")
             return self._extract_without_preprocessing(image_path)
     
+    def _extract_with_hybrid(self, image_path: Path) -> List[OCRResult]:
+        """Extract text using hybrid OCR manager."""
+        try:
+            if self.hybrid_manager is None:
+                logger.error("Hybrid OCR manager not initialized")
+                return []
+            
+            # Process with hybrid OCR manager
+            hybrid_results = self.hybrid_manager.process_hybrid(image_path)
+            
+            # Convert HybridOCRResult objects to OCRResult objects for compatibility
+            ocr_results = []
+            for hybrid_result in hybrid_results:
+                ocr_result = create_ocr_result(
+                    text=hybrid_result.text,
+                    confidence=hybrid_result.confidence,
+                    bbox=hybrid_result.bounding_box
+                )
+                # Store hybrid information as metadata for debugging
+                ocr_result._hybrid_info = {
+                    'source_engine': hybrid_result.source_engine,
+                    'selection_reason': hybrid_result.selection_reason,
+                    'conflict_resolved': hybrid_result.conflict_resolved
+                }
+                ocr_results.append(ocr_result)
+            
+            # TODO: Text region merging needs refinement - disabled for now
+            # merged_results = self._merge_adjacent_text_regions(ocr_results)
+            
+            logger.info(f"Hybrid OCR extracted {len(ocr_results)} text regions from {image_path}")
+            return ocr_results
+            
+        except Exception as e:
+            logger.error(f"Hybrid OCR extraction failed: {e}")
+            return []
+    
     def _extract_without_preprocessing(self, image_path: Path) -> List[OCRResult]:
         """Extract text without preprocessing (fallback method)."""
         try:
@@ -242,6 +316,8 @@ class OCREngine:
                 return self._extract_with_easyocr(image_path)
             elif self.engine == "tesseract":
                 return self._extract_with_tesseract(image_path)
+            elif self.engine == "hybrid":
+                return self._extract_with_hybrid(image_path)
             else:
                 raise ValueError(f"Unsupported OCR engine: {self.engine}")
                 
@@ -252,6 +328,24 @@ class OCREngine:
     def _extract_from_image_array(self, image_array: np.ndarray) -> List[OCRResult]:
         """Extract text from numpy image array."""
         try:
+            # Validate image array
+            if image_array is None:
+                logger.warning("Image array is None, skipping OCR extraction")
+                return []
+            
+            if not isinstance(image_array, np.ndarray):
+                logger.warning(f"Invalid image array type: {type(image_array)}, skipping OCR extraction")
+                return []
+            
+            if image_array.size == 0:
+                logger.warning("Empty image array, skipping OCR extraction")
+                return []
+            
+            # Check if image has valid dimensions
+            if len(image_array.shape) < 2:
+                logger.warning(f"Invalid image array shape: {image_array.shape}, skipping OCR extraction")
+                return []
+            
             if self.engine == "easyocr":
                 return self._extract_with_easyocr_array(image_array)
             elif self.engine == "tesseract":
@@ -268,6 +362,15 @@ class OCREngine:
         results = []
         
         try:
+            # Validate image path
+            if not image_path.exists():
+                logger.warning(f"Image file does not exist: {image_path}")
+                return []
+            
+            if image_path.stat().st_size == 0:
+                logger.warning(f"Image file is empty: {image_path}")
+                return []
+            
             # Read image and perform OCR
             ocr_results = self.reader.readtext(str(image_path))
             
@@ -301,6 +404,11 @@ class OCREngine:
         results = []
         
         try:
+            # Additional validation for EasyOCR specific requirements
+            if image_array.dtype not in [np.uint8, np.float32, np.float64]:
+                logger.warning(f"Invalid image array dtype for EasyOCR: {image_array.dtype}")
+                return []
+            
             # EasyOCR can work with numpy arrays directly
             ocr_results = self.reader.readtext(image_array)
             
@@ -331,8 +439,28 @@ class OCREngine:
         results = []
         
         try:
+            # Validate image path
+            if not image_path.exists():
+                logger.warning(f"Image file does not exist: {image_path}")
+                return []
+            
+            if image_path.stat().st_size == 0:
+                logger.warning(f"Image file is empty: {image_path}")
+                return []
+            
+            # Check file extension for supported formats
+            supported_formats = {'.png', '.jpg', '.jpeg', '.tiff', '.tif', '.bmp', '.gif'}
+            if image_path.suffix.lower() not in supported_formats:
+                logger.warning(f"Unsupported image format: {image_path.suffix} for {image_path}")
+                return []
+            
             # Load image
             image = Image.open(image_path)
+            
+            # Validate loaded image
+            if image is None:
+                logger.warning(f"Failed to load image: {image_path}")
+                return []
             
             # Get detailed OCR data
             ocr_data = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT)
@@ -367,10 +495,24 @@ class OCREngine:
             # Convert numpy array to PIL Image
             if len(image_array.shape) == 3:
                 # BGR to RGB conversion for OpenCV arrays
-                image_rgb = cv2.cvtColor(image_array, cv2.COLOR_BGR2RGB)
-                image = Image.fromarray(image_rgb)
+                try:
+                    image_rgb = cv2.cvtColor(image_array, cv2.COLOR_BGR2RGB)
+                    image = Image.fromarray(image_rgb)
+                except Exception as e:
+                    logger.warning(f"Failed to convert BGR to RGB: {e}")
+                    # Try direct conversion
+                    image = Image.fromarray(image_array)
             else:
                 image = Image.fromarray(image_array)
+            
+            # Validate converted image
+            if image is None:
+                logger.warning("Failed to convert numpy array to PIL Image")
+                return []
+            
+            if image.size[0] == 0 or image.size[1] == 0:
+                logger.warning(f"Invalid image dimensions: {image.size}")
+                return []
             
             # Get detailed OCR data
             ocr_data = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT)
@@ -418,18 +560,174 @@ class OCREngine:
     def _try_fallback_extraction(self, image_path: Path) -> List[OCRResult]:
         """Try fallback OCR engine if primary fails."""
         try:
-            fallback_engine = "tesseract" if self.engine == "easyocr" else "easyocr"
-            logger.info(f"Trying fallback enhanced OCR engine: {fallback_engine}")
-            
-            # Create temporary fallback engine
-            fallback = OCREngine(fallback_engine, use_gpu=False, 
-                               confidence_threshold=self.confidence_threshold,
-                               enable_preprocessing=False)  # Disable preprocessing for fallback
-            return fallback.extract_text(image_path)
+            # For hybrid mode, try individual engines as fallback
+            if self.engine == "hybrid":
+                logger.info("Trying fallback to individual OCR engines after hybrid failure")
+                # Try EasyOCR first, then Tesseract
+                for fallback_engine in ["easyocr", "tesseract"]:
+                    try:
+                        fallback = OCREngine(fallback_engine, use_gpu=False, 
+                                           confidence_threshold=self.confidence_threshold,
+                                           enable_preprocessing=False)
+                        results = fallback.extract_text(image_path)
+                        if results:
+                            logger.info(f"Fallback {fallback_engine} succeeded with {len(results)} results")
+                            return results
+                    except Exception as e:
+                        logger.warning(f"Fallback {fallback_engine} also failed: {e}")
+                return []
+            else:
+                # For single engines, try the other engine
+                fallback_engine = "tesseract" if self.engine == "easyocr" else "easyocr"
+                logger.info(f"Trying fallback enhanced OCR engine: {fallback_engine}")
+                
+                # Create temporary fallback engine
+                fallback = OCREngine(fallback_engine, use_gpu=False, 
+                                   confidence_threshold=self.confidence_threshold,
+                                   enable_preprocessing=False)  # Disable preprocessing for fallback
+                return fallback.extract_text(image_path)
             
         except Exception as e:
             logger.error(f"Fallback enhanced OCR also failed: {e}")
             return []
+    
+    def _merge_adjacent_text_regions(self, ocr_results: List[OCRResult]) -> List[OCRResult]:
+        """
+        Merge adjacent OCR text regions that are likely part of the same line.
+        This helps capture full text lines that may be split by OCR engines.
+        
+        Args:
+            ocr_results: List of OCR results to merge
+            
+        Returns:
+            List of merged OCR results
+        """
+        if len(ocr_results) <= 1:
+            return ocr_results
+        
+        try:
+            # Sort results by vertical position (y-coordinate) first, then horizontal (x-coordinate)
+            sorted_results = sorted(ocr_results, key=lambda r: (r.bounding_box[1], r.bounding_box[0]))
+            
+            merged_results = []
+            current_group = [sorted_results[0]]
+            
+            for i in range(1, len(sorted_results)):
+                current = sorted_results[i]
+                last_in_group = current_group[-1]
+                
+                # Check if current result should be merged with the group
+                if self._should_merge_text_regions(last_in_group, current):
+                    current_group.append(current)
+                else:
+                    # Finalize current group and start new one
+                    if len(current_group) > 1:
+                        merged_result = self._merge_text_group(current_group)
+                        merged_results.append(merged_result)
+                    else:
+                        merged_results.append(current_group[0])
+                    
+                    current_group = [current]
+            
+            # Handle the last group
+            if len(current_group) > 1:
+                merged_result = self._merge_text_group(current_group)
+                merged_results.append(merged_result)
+            else:
+                merged_results.append(current_group[0])
+            
+            logger.debug(f"Merged {len(ocr_results)} OCR regions into {len(merged_results)} regions")
+            return merged_results
+            
+        except Exception as e:
+            logger.error(f"Text region merging failed: {e}")
+            return ocr_results
+    
+    def _should_merge_text_regions(self, region1: OCRResult, region2: OCRResult) -> bool:
+        """
+        Determine if two OCR regions should be merged based on proximity and alignment.
+        
+        Args:
+            region1: First OCR region
+            region2: Second OCR region
+            
+        Returns:
+            True if regions should be merged
+        """
+        try:
+            x1, y1, w1, h1 = region1.bounding_box
+            x2, y2, w2, h2 = region2.bounding_box
+            
+            # Calculate vertical overlap and proximity
+            y1_center = y1 + h1 / 2
+            y2_center = y2 + h2 / 2
+            vertical_distance = abs(y1_center - y2_center)
+            
+            # Calculate horizontal gap
+            if x1 + w1 < x2:
+                horizontal_gap = x2 - (x1 + w1)
+            elif x2 + w2 < x1:
+                horizontal_gap = x1 - (x2 + w2)
+            else:
+                horizontal_gap = 0  # Overlapping horizontally
+            
+            # Merge criteria:
+            # 1. Regions are on approximately the same line (vertical distance < average height)
+            # 2. Horizontal gap is reasonable (< 3x average height)
+            avg_height = (h1 + h2) / 2
+            
+            same_line = vertical_distance < avg_height * 0.5
+            reasonable_gap = horizontal_gap < avg_height * 3
+            
+            should_merge = same_line and reasonable_gap
+            
+            if should_merge:
+                logger.debug(f"Merging regions: '{region1.text}' + '{region2.text}' "
+                           f"(v_dist: {vertical_distance:.1f}, h_gap: {horizontal_gap:.1f})")
+            
+            return should_merge
+            
+        except Exception as e:
+            logger.debug(f"Region merge check failed: {e}")
+            return False
+    
+    def _merge_text_group(self, group: List[OCRResult]) -> OCRResult:
+        """
+        Merge a group of OCR results into a single result.
+        
+        Args:
+            group: List of OCR results to merge
+            
+        Returns:
+            Single merged OCR result
+        """
+        try:
+            # Sort group by horizontal position
+            sorted_group = sorted(group, key=lambda r: r.bounding_box[0])
+            
+            # Combine text with spaces
+            combined_text = " ".join(result.text.strip() for result in sorted_group if result.text.strip())
+            
+            # Calculate combined bounding box
+            min_x = min(r.bounding_box[0] for r in sorted_group)
+            min_y = min(r.bounding_box[1] for r in sorted_group)
+            max_x = max(r.bounding_box[0] + r.bounding_box[2] for r in sorted_group)
+            max_y = max(r.bounding_box[1] + r.bounding_box[3] for r in sorted_group)
+            
+            combined_bbox = (min_x, min_y, max_x - min_x, max_y - min_y)
+            
+            # Use average confidence
+            avg_confidence = sum(r.confidence for r in sorted_group) / len(sorted_group)
+            
+            merged_result = create_ocr_result(combined_text, avg_confidence, combined_bbox)
+            
+            logger.debug(f"Merged {len(sorted_group)} regions into: '{combined_text}' at {combined_bbox}")
+            
+            return merged_result
+            
+        except Exception as e:
+            logger.error(f"Text group merging failed: {e}")
+            return group[0]  # Return first result as fallback
 
 class ImageTextReplacer:
     """Enhanced image text replacer with precise positioning and orientation support."""
@@ -647,8 +945,8 @@ class ImageProcessor:
         self.ocr_comparison_data = []
         
         logger.info(f"Enhanced image processor initialized with {len(patterns)} patterns, "
-                   f"{len(mappings)} mappings, mode: {mode}, preprocessing: {enable_preprocessing}, "
-                   f"debugging: {enable_debugging}")
+                   f"{len(mappings)} mappings, mode: {mode}, OCR engine: {ocr_engine}, "
+                   f"preprocessing: {enable_preprocessing}, debugging: {enable_debugging}")
     
     def process_images(self, document: Document, media_dir: Optional[Path] = None) -> List[OCRMatch]:
         """

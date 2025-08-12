@@ -53,6 +53,36 @@ class OCRResult:
         }
 
 @dataclass
+class HybridOCRResult:
+    """Result from hybrid OCR processing combining multiple engines."""
+    text: str
+    confidence: float
+    bounding_box: Tuple[int, int, int, int]  # (x, y, width, height)
+    source_engine: str  # 'easyocr', 'tesseract', or 'hybrid'
+    easyocr_result: Optional['OCRResult'] = None
+    tesseract_result: Optional['OCRResult'] = None
+    selection_reason: str = ""  # Why this result was chosen
+    conflict_resolved: bool = False  # Whether there was a conflict between engines
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            'text': self.text,
+            'confidence': self.confidence,
+            'bounding_box': {
+                'x': self.bounding_box[0],
+                'y': self.bounding_box[1],
+                'width': self.bounding_box[2],
+                'height': self.bounding_box[3]
+            },
+            'source_engine': self.source_engine,
+            'easyocr_result': self.easyocr_result.to_dict() if self.easyocr_result else None,
+            'tesseract_result': self.tesseract_result.to_dict() if self.tesseract_result else None,
+            'selection_reason': self.selection_reason,
+            'conflict_resolved': self.conflict_resolved
+        }
+
+@dataclass
 class OCRMatch:
     """OCR match with replacement information."""
     ocr_result: OCRResult
@@ -294,6 +324,37 @@ def create_ocr_result(text: str, confidence: float, bbox: Tuple[int, int, int, i
         text=text,
         confidence=confidence,
         bounding_box=bbox
+    )
+
+def create_hybrid_ocr_result(text: str, confidence: float, bbox: Tuple[int, int, int, int],
+                           source_engine: str, easyocr_result: Optional[OCRResult] = None,
+                           tesseract_result: Optional[OCRResult] = None, 
+                           selection_reason: str = "", conflict_resolved: bool = False) -> HybridOCRResult:
+    """
+    Factory function to create a HybridOCRResult instance.
+    
+    Args:
+        text: Final selected text
+        confidence: Final confidence score
+        bbox: Bounding box (x, y, width, height)
+        source_engine: Engine that provided the final result
+        easyocr_result: Original EasyOCR result (if any)
+        tesseract_result: Original Tesseract result (if any)
+        selection_reason: Reason for selection
+        conflict_resolved: Whether there was a conflict between engines
+        
+    Returns:
+        HybridOCRResult instance
+    """
+    return HybridOCRResult(
+        text=text,
+        confidence=confidence,
+        bounding_box=bbox,
+        source_engine=source_engine,
+        easyocr_result=easyocr_result,
+        tesseract_result=tesseract_result,
+        selection_reason=selection_reason,
+        conflict_resolved=conflict_resolved
     )
 
 def create_ocr_match(ocr_result: OCRResult, pattern: str, replacement: str, 

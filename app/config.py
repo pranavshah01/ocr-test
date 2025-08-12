@@ -19,7 +19,7 @@ class OCRConfig:
 
     ocr_mode: str = "replace"  # "replace", "append", or "append-image" allowed
     text_mode: str = "append"  # Only "append" or "replace" allowed
-    ocr_engine: str = "easyocr"
+    ocr_engine: str = "easyocr"  # "easyocr", "tesseract", or "hybrid"
     workers: int = max(1, min((__import__('psutil').cpu_count(logical=True) or 8) - 2, 8))
     gpu: bool = True
     verbose: bool = False
@@ -83,7 +83,7 @@ class OCRConfig:
 
         parser.add_argument("--ocr-mode", type=str, choices=["replace", "append", "append-image"], default="replace", help="OCR processing mode: 'replace' (exact position), 'append' (two-line text), 'append-image' (new image after original)")
         parser.add_argument("--text-mode", type=str, choices=["replace", "append"], default="append", help="Text processing mode: replace original text or append to it")
-        parser.add_argument("--ocr-engine", type=str, choices=["easyocr", "tesseract"], default="easyocr")
+        parser.add_argument("--ocr-engine", type=str, choices=["easyocr", "tesseract", "hybrid"], default="easyocr")
         parser.add_argument("--workers", type=int, default=None, help="Number of parallel workers")
         parser.add_argument("--gpu", action="store_true", help="Enable GPU for OCR if available")
         parser.add_argument("--no-gpu", action="store_true", help="Disable GPU for OCR")

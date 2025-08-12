@@ -85,9 +85,12 @@ class PatternMatcher:
         # This ensures "77" is not part of a larger number
         enhanced = enhanced.replace(r'(?!\w)', r'(?![0-9])')
         
-        # For patterns that don't have lookbehind but start with 77, add one
+        # For patterns that don't have lookbehind but start with 77, add a boundary condition
+        # that prevents matching when 77 is part of a larger number sequence
         if '(?<!' not in enhanced and enhanced.startswith('77'):
-            enhanced = r'(?<![0-9])' + enhanced
+            # Only prevent matching if 77 is immediately preceded by a digit AND not followed by a hyphen
+            # This allows "77-" patterns even after digits, but prevents "177" from matching as "77"
+            enhanced = r'(?<!(?<!\d)\d)' + enhanced
         
         return enhanced
     

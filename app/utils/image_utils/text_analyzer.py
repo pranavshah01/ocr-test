@@ -35,7 +35,7 @@ class TextAnalyzer:
         """Initialize text analyzer with default settings."""
         self.orientation_angles = [0, 90, 180, 270]  # Standard orientations
         self.font_size_ratios = {
-            'height_ratio': 0.7,  # Font size is typically 70% of bounding box height
+            'height_ratio': 1.0,  # Font size should match bounding box height for better visibility
             'width_ratio': 0.6    # Character width is typically 60% of font size
         }
         

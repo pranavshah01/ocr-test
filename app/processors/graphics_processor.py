@@ -92,9 +92,9 @@ class TextboxParser:
             for wt_element in textbox_element.iter():
                 if wt_element.tag.endswith('}t'):
                     text_content = wt_element.text or ""
-                    if text_content.strip():  # Only add non-empty text
-                        combined_text += text_content
-                        wt_elements.append(wt_element)
+                    # Always add the element, even if text is empty (preserves structure)
+                    combined_text += text_content
+                    wt_elements.append(wt_element)
             
             # Also check for hyperlink elements specifically
             for hyperlink in textbox_element.iter():
@@ -103,7 +103,7 @@ class TextboxParser:
                     for wt_element in hyperlink.iter():
                         if wt_element.tag.endswith('}t'):
                             text_content = wt_element.text or ""
-                            if text_content.strip() and wt_element not in wt_elements:
+                            if wt_element not in wt_elements:
                                 combined_text += text_content
                                 wt_elements.append(wt_element)
             
@@ -939,7 +939,7 @@ class GraphicsProcessor:
         self.mappings = mappings
         self.mode = mode
         
-        self.pattern_matcher = create_pattern_matcher(patterns, mappings)
+        self.pattern_matcher = create_pattern_matcher(patterns, mappings, enhanced_mode=False)
         self.text_replacer = create_text_replacer(mode)
         
         logger.info(f"Graphics processor initialized with {len(patterns)} patterns, {len(mappings)} mappings, mode: {mode}")
@@ -998,12 +998,28 @@ class GraphicsProcessor:
             # Step 3: Find pattern matches in combined text
             pattern_matches = self.pattern_matcher.find_matches(combined_text)
             
-            # Step 4: Process each match
-            for pattern_name, matched_text, start_pos, end_pos in pattern_matches:
+
+            
+            # Step 4: Process matches in reverse order (from end to beginning)
+            # This prevents position shifts from affecting subsequent matches
+            pattern_matches_reversed = sorted(pattern_matches, key=lambda x: x[2], reverse=True)
+            
+            # Track processed patterns within this textbox only (not globally)
+            textbox_processed_patterns = set()
+            
+            # Process each match
+            for pattern_name, matched_text, start_pos, end_pos in pattern_matches_reversed:
                 try:
                     replacement_text = self.pattern_matcher.get_replacement(matched_text)
                     if not replacement_text:
                         continue
+                    
+                    # Check for duplicates within this textbox only
+                    pattern_key = f"{matched_text}->{replacement_text}"
+                    if pattern_key in textbox_processed_patterns:
+                        logger.info(f"TEXTBOX DEDUPLICATION: Skipping duplicate pattern '{matched_text}' within {location}")
+                        continue
+                    textbox_processed_patterns.add(pattern_key)
                     
                     # Step 5: Get all font information from textbox and use smallest as baseline
                     textbox_font_info = TextboxFontManager.get_font_info_from_wt_elements(wt_elements)
@@ -1037,9 +1053,10 @@ class GraphicsProcessor:
                     # Step 6: Calculate optimal font size using the smallest font in textbox
                     # Set minimum to 50% of the baseline font size
                     min_font_size = max(6.0, baseline_font_size * 0.5)
-                    final_combined_text = combined_text.replace(matched_text, final_text)
+                    # Create a temporary version for font size calculation without modifying original
+                    temp_combined_text = combined_text[:start_pos] + final_text + combined_text[end_pos:]
                     optimal_font_size = TextboxCapacityCalculator.find_optimal_font_size(
-                        final_combined_text, dimensions, baseline_font_size, min_font_size
+                        temp_combined_text, dimensions, baseline_font_size, min_font_size
                     )
                     
                     logger.info(f"FONT SIZING: Baseline: {baseline_font_size}pt, Min: {min_font_size}pt, Optimal: {optimal_font_size}pt")
@@ -1051,6 +1068,8 @@ class GraphicsProcessor:
                     
                     # Step 8: Apply text replacement to w:t elements
                     # Note: final_text contains the appended text (original + replacement)
+                    logger.debug(f"REPLACING: '{matched_text}' -> '{final_text}' at position {start_pos}-{end_pos} in '{combined_text}'")
+                    
                     success = self._replace_text_in_wt_elements(
                         wt_elements, combined_text, matched_text, final_text, start_pos, end_pos
                     )

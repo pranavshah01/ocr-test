@@ -45,6 +45,12 @@ CLI_FLAGS = {
         'default': OCR_MODE,
         'help': 'OCR processing mode: replace text in-place or append both original and mapped text'
     },
+    '--ocr-engine': {
+        'type': str,
+        'choices': ['easyocr', 'tesseract', 'hybrid'],
+        'default': 'easyocr',
+        'help': 'OCR engine to use: easyocr, tesseract, or hybrid (combines both engines)'
+    },
     '--gpu': {
         'action': 'store_true',
         'help': 'Enable GPU acceleration for OCR processing'
@@ -104,6 +110,7 @@ class ProcessingConfig:
     """Configuration class for document processing pipeline."""
     text_mode: str = TEXT_MODE
     ocr_mode: str = OCR_MODE
+    ocr_engine: str = "easyocr"
     use_gpu: bool = USE_GPU
     max_workers: int = MAX_WORKERS
     confidence_min: float = CONFIDENCE_MIN
@@ -205,6 +212,7 @@ def load_config_from_args(args: argparse.Namespace) -> ProcessingConfig:
         return ProcessingConfig(
             text_mode=args.text_mode,
             ocr_mode=args.ocr_mode,
+            ocr_engine=args.ocr_engine,
             use_gpu=use_gpu,
             max_workers=args.workers,
             confidence_min=args.confidence_min,
