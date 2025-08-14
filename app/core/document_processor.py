@@ -147,7 +147,7 @@ class DocumentProcessor:
     
     def _load_document(self, docx_path: Path) -> Optional[Document]:
         """
-        Load DOCX document with error handling.
+        Load DOCX document with error handling and custom parser for large files.
         
         Args:
             docx_path: Path to DOCX file
@@ -155,16 +155,90 @@ class DocumentProcessor:
         Returns:
             Document instance or None if loading failed
         """
+        file_size = docx_path.stat().st_size
+        size_mb = file_size / (1024 * 1024)
+        
+        # Prepare system for large files
+        if size_mb > 100:
+            self._prepare_for_large_file()
+            logger.info(f"Loading large document: {size_mb:.1f}MB - {docx_path.name}")
+        
         try:
-            document = Document(docx_path)
-            logger.debug(f"Successfully loaded document: {docx_path}")
-            return document
+            # For files under 100MB, try standard loading first
+            if size_mb < 100:
+                try:
+                    document = Document(docx_path)
+                    logger.debug(f"Successfully loaded document: {docx_path}")
+                    return document
+                except Exception:
+                    logger.debug(f"Standard loading failed for {size_mb:.1f}MB file, using enhanced parser")
+            
+            # Use enhanced parser for larger files or fallback
+            return self._load_with_enhanced_parser(docx_path)
+            
         except PackageNotFoundError:
             logger.error(f"Invalid DOCX file: {docx_path}")
             return None
         except Exception as e:
-            logger.error(f"Failed to load document {docx_path}: {e}")
+            logger.error(f"Failed to load {size_mb:.1f}MB document {docx_path}: {e}")
             return None
+
+    def _load_with_enhanced_parser(self, docx_path: Path) -> Optional[Document]:
+        """Enhanced parser specifically tuned for 200-300MB files."""
+        try:
+            from lxml import etree
+            
+            # Parser optimized for large file size range
+            parser = etree.XMLParser(
+                huge_tree=True,
+                attribute_value_length_limit=200000000,  # 200M - covers max case
+                text_value_length_limit=200000000,       # Handle large text blocks
+                recover=True,
+                strip_cdata=False,
+                resolve_entities=False,
+                attribute_defaults=False,
+                dtd_validation=False,
+                load_dtd=False,
+                no_network=True,
+                collect_ids=False  # Performance boost
+            )
+            
+            from docx.opc.package import OpcPackage
+            package = OpcPackage.open(docx_path, parser=parser)
+            
+            if package.main_document_part is None:
+                logger.error(f"Main document part not found in: {docx_path}")
+                return None
+            
+            from docx.document import Document as DocxDocument
+            document = DocxDocument(package.main_document_part._element, package.main_document_part)
+            
+            logger.info(f"Successfully loaded large document with enhanced parser: {docx_path.name}")
+            return document
+            
+        except Exception as e:
+            logger.error(f"Enhanced parser failed: {e}")
+            return None
+
+    def _prepare_for_large_file(self):
+        """Lightweight preparation for files over 100MB."""
+        import gc
+        import os
+        
+        # Force garbage collection
+        gc.collect()
+        
+        # Set lxml environment variable
+        os.environ['LXML_HUGE_TREE'] = '1'
+        
+        # Log memory status
+        try:
+            import psutil
+            process = psutil.Process()
+            memory_mb = process.memory_info().rss / 1024 / 1024
+            logger.debug(f"Memory usage before large file: {memory_mb:.1f}MB")
+        except ImportError:
+            pass  # psutil not available, continue without logging
     
     def _process_pipeline(self, document: Document, processing_log: ProcessingLog):
         """

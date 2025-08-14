@@ -31,9 +31,11 @@ from ..utils.pattern_matcher import PatternMatcher, create_pattern_matcher
 from ..utils.image_utils.image_preprocessor import ImagePreprocessor, create_image_preprocessor
 from ..utils.image_utils.preprocessing_strategies import PreprocessingStrategyManager, create_preprocessing_strategy_manager
 from ..utils.image_utils.text_analyzer import TextAnalyzer, TextProperties, create_text_analyzer
-from ..utils.image_utils.precise_text_replacer import PreciseTextReplacer, create_precise_text_replacer
+from ..utils.image_utils.precise_replace import PreciseTextReplacer, create_precise_text_replacer
 from ..utils.image_utils.pattern_debugger import PatternDebugger, create_pattern_debugger
 from ..utils.image_utils.hybrid_ocr_manager import HybridOCRManager, create_hybrid_ocr_manager
+
+from ..utils.image_utils.precise_append import PreciseAppendReplacer, create_precise_append_replacer
 
 logger = logging.getLogger(__name__)
 
@@ -737,13 +739,19 @@ class ImageTextReplacer:
         Initialize enhanced image text replacer.
         
         Args:
-            mode: Processing mode ('replace' or 'append')
+            mode: Processing mode ('replace', 'append', or 'append-image')
             pattern_matcher: Pattern matcher instance for finding patterns in text
         """
         self.mode = mode
         self.pattern_matcher = pattern_matcher
         self.text_analyzer = create_text_analyzer()
-        self.precise_replacer = create_precise_text_replacer()
+        self.precise_replacer = create_precise_text_replacer(self.pattern_matcher)
+        
+        # Initialize append mode replacer if needed
+        if mode == "append" and pattern_matcher:
+            self.precise_append_replacer = create_precise_append_replacer(pattern_matcher)
+        else:
+            self.precise_append_replacer = None
     
     def replace_text_in_image(self, image_path: Path, ocr_matches: List[OCRMatch]) -> Optional[Path]:
         """
@@ -760,6 +768,23 @@ class ImageTextReplacer:
             return None
         
         try:
+            # Handle append mode separately to avoid impacting replace mode
+            if self.mode == "append" and self.precise_append_replacer:
+                logger.info(f"🔧 APPEND MODE: Using simplified append mode with {len(ocr_matches)} matches")
+                
+                # Extract OCR results from matches for the append replacer
+                ocr_results = [match.ocr_result for match in ocr_matches]
+                
+                # Log the matches for debugging
+                for i, match in enumerate(ocr_matches):
+                    logger.info(f"🔧 APPEND MODE: Match {i} - OCR: '{match.ocr_result.text}' -> Replacement: '{match.replacement_text}'")
+                
+                # Use the simplified append replacer that actually works
+                result = self.precise_append_replacer.replace_text_in_image(image_path, ocr_results, ocr_matches)
+                logger.info(f"🔧 APPEND MODE: Simple append replacer result: {result}")
+                return result
+            
+            # Original replace mode logic (unchanged)
             # Load image
             image = Image.open(image_path)
             
@@ -771,7 +796,9 @@ class ImageTextReplacer:
                     if match.processing_mode == "replace":
                         image = self._replace_text_region(image, match)
                     elif match.processing_mode == "append":
-                        image = self._append_text_region(image, match)
+                        # This should not be reached when mode is "append" since we handle it above
+                        logger.warning("Append mode match found in replace mode processing - skipping")
+                        continue
                 except Exception as e:
                     logger.error(f"Failed to process match '{match.ocr_result.text}': {e}")
             
@@ -914,12 +941,12 @@ class ImageProcessor:
                  use_gpu: bool = True, confidence_threshold: float = DEFAULT_OCR_CONFIDENCE,
                  enable_preprocessing: bool = True, enable_debugging: bool = False):
         """
-        Initialize enhanced image processor.
+        Initialize enhanced image processor with consolidated config support.
         
         Args:
             patterns: Dictionary of pattern names to regex patterns
             mappings: Dictionary of original text to replacement text
-            mode: Processing mode ('replace' or 'append')
+            mode: Processing mode ('replace', 'append', or 'append-image')
             ocr_engine: OCR engine to use
             use_gpu: Whether to use GPU acceleration
             confidence_threshold: Minimum OCR confidence threshold
@@ -1115,9 +1142,24 @@ class ImageProcessor:
                         logger.warning(f"Enhanced text replacement failed for {location}")
                         
                 elif self.mode == "append":
-                    # Append mode: not supported yet
-                    logger.warning(f"APPEND MODE NOT SUPPORTED: Image processing in append mode is not yet implemented for {location}")
-                    logger.info(f"Found {len(ocr_matches)} matches in {location} but cannot process in append mode")
+                    # Append mode: use smart positioning append text replacer
+                    modified_image_path = self.text_replacer.replace_text_in_image(temp_image_path, ocr_matches)
+                    
+                    if modified_image_path:
+                        # Replace the image in the document
+                        success = self._replace_image_in_document(original_rel, modified_image_path)
+                        
+                        if success:
+                            # Update image paths in matches
+                            for match in ocr_matches:
+                                match.image_path = modified_image_path
+                            
+                            matches.extend(ocr_matches)
+                            logger.info(f"✅ IMAGE APPEND MODE: {len(ocr_matches)} text replacements in {location}")
+                        else:
+                            logger.warning(f"Failed to replace image in document for {location}")
+                    else:
+                        logger.warning(f"Append mode text replacement failed for {location}")
             
             # Step 4: Run debugging if enabled
             if self.enable_debugging and ocr_results:
