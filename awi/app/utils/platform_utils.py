@@ -82,3 +82,57 @@ def get_system_info() -> Dict[str, Any]:
         'preferred_tool': preferred_tool,
         'platform_supported': validate_platform_support()
     }
+
+
+class PathManager:
+    """Manages file paths across different platforms."""
+    
+    @staticmethod
+    def ensure_directory(path: Path) -> Path:
+        """Ensure directory exists, create if necessary."""
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+    
+    @staticmethod
+    def get_temp_directory() -> Path:
+        """Get platform-appropriate temporary directory."""
+        import tempfile
+        temp_dir = Path(tempfile.gettempdir())
+        return PathManager.ensure_directory(temp_dir)
+    
+    @staticmethod
+    def get_safe_filename(filename: str) -> str:
+        """Get a safe filename by removing problematic characters."""
+        import re
+        # Remove or replace problematic characters
+        safe_name = re.sub(r'[<>:"/\\|?*]', '_', filename)
+        # Limit length
+        if len(safe_name) > 200:
+            name_part, ext = safe_name.rsplit('.', 1) if '.' in safe_name else (safe_name, '')
+            safe_name = name_part[:190] + ('.' + ext if ext else '')
+        return safe_name
+    
+    @staticmethod
+    def get_unique_filename(directory: Path, base_name: str, extension: str) -> Path:
+        """Get a unique filename in the specified directory."""
+        counter = 1
+        filename = f"{base_name}{extension}"
+        file_path = directory / filename
+        
+        while file_path.exists():
+            filename = f"{base_name}_{counter}{extension}"
+            file_path = directory / filename
+            counter += 1
+        
+        return file_path
+    
+    @staticmethod
+    def copy_with_metadata(source: Path, destination: Path) -> bool:
+        """Copy file with metadata preservation."""
+        try:
+            import shutil
+            shutil.copy2(source, destination)
+            return True
+        except Exception as e:
+            print(f"Failed to copy {source} to {destination}: {e}")
+            return False

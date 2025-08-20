@@ -201,7 +201,7 @@ class ReportGenerator:
             html_content += self._create_processing_summary_section(result)
             
             # Add patterns section
-            html_content += self._create_patterns_section()
+            # html_content += self._create_patterns_section()  # Removed patterns section
             
             # Add algorithm section
             html_content += self._create_algorithm_section(result)
@@ -399,7 +399,7 @@ class ReportGenerator:
             html_content += self._create_batch_summary_section(batch_result)
             
             # Add patterns section
-            html_content += self._create_patterns_section()
+            # html_content += self._create_patterns_section()  # Removed patterns section
             
             # Add algorithm section (from first result if available)
             if hasattr(batch_result, 'individual_results') and batch_result.individual_results:
@@ -693,7 +693,7 @@ class ReportGenerator:
             html += self._create_match_details_html(matches)
         
         # Add patterns section
-        html += self._create_patterns_section()
+        # html += self._create_patterns_section()  # Removed patterns section
         
         # Add algorithm section
         html += self._create_algorithm_section(result)
@@ -917,11 +917,33 @@ class ReportGenerator:
                             all_detections.extend(graphics_detections)
             
             # Fallback: try to get matches directly from metadata (awi version structure)
-            if not matches and metadata and isinstance(metadata, dict):
-                if 'matches' in metadata:
-                    matches = metadata['matches']
+            if metadata and isinstance(metadata, dict):
+                # Always try to get all_detections from the top level
                 if 'all_detections' in metadata:
-                    all_detections = metadata['all_detections']
+                    top_level_detections = metadata['all_detections']
+                    if isinstance(top_level_detections, list):
+                        if not all_detections:
+                            all_detections = []
+                        all_detections.extend(top_level_detections)
+                
+                # Check for all_matches field (new unified approach)
+                if 'all_matches' in metadata:
+                    all_matches = metadata['all_matches']
+                    if isinstance(all_matches, list):
+                        # Convert all_matches to the expected format
+                        for match in all_matches:
+                            if isinstance(match, dict):
+                                # Add processor type if not present
+                                if 'processor' not in match:
+                                    match['processor'] = match.get('content_type', 'Unknown')
+                                # Add to matches list
+                                if not matches:
+                                    matches = []
+                                matches.append(match)
+                                # Add to all_detections for consistency
+                                if not all_detections:
+                                    all_detections = []
+                                all_detections.append(match)
             
             # Ensure matches and all_detections are lists before processing
             if not isinstance(matches, list):
@@ -944,13 +966,20 @@ class ReportGenerator:
                     matched_texts.add(getattr(match, 'original_text', ''))
                     matched_locations.add(getattr(match, 'location', ''))
             
-            # Build rows exclusively from all_detections to ensure 1:1 XML↔detection
+            # Build rows from all_detections to ensure 1:1 XML↔detection
             all_items = []
             
             # Preferred composite key for dedupe across processors: (matched_text, location, processor, start_pos, end_pos)
             seen_keys = set()
             for detection in all_detections:
                 data = detection if isinstance(detection, dict) else {}
+                
+                # Skip entries with "Unknown" text or processor to avoid the unknown row
+                if (data.get('matched_text', '') == 'Unknown' or 
+                    data.get('processor', '') == 'Unknown' or
+                    data.get('original_text', '') == 'Unknown'):
+                    continue
+                
                 key = (
                     data.get('matched_text', ''),
                     data.get('location', ''),
@@ -986,13 +1015,6 @@ class ReportGenerator:
                 <h3>Detailed Match Information ({matched_count} matched, {non_matched_count} non-matched)</h3>
                 <div class="table-stats">
                     Total matches: {matched_count} | Non-matched detections: {non_matched_count} | Total items: {len(all_items)}
-                </div>
-                <div class="patterns-info">
-                    <h4>Patterns Used:</h4>
-                    <ul>
-                        <li><strong>pattern_77_enforced_structure:</strong> 77-[0-9]{{3}}-[A-Za-z0-9]{{6,7}}-[0-9]{{2,3}}</li>
-                        <li><strong>pattern_77_two_dash_structure:</strong> 77-[0-9]{{3}}-[A-Za-z0-9]+</li>
-                    </ul>
                 </div>
             </div>
             
@@ -1036,7 +1058,7 @@ class ReportGenerator:
                             <th>Mapped Text</th>
                             <th>Derived Font</th>
                             <th>Derived Font Size</th>
-                            <th>Font Size Reasoning</th>
+                            <th>Reasoning</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -1067,6 +1089,10 @@ class ReportGenerator:
                     actual_pattern = data.get('actual_pattern', pattern) if isinstance(data, dict) else getattr(data, 'actual_pattern', pattern)
                     # Handle both field names - graphics processor uses 'original_text' in matches, 'matched_text' in all_detections
                     original_text = (data.get('original_text') or data.get('matched_text', 'Unknown')) if isinstance(data, dict) else (getattr(data, 'original_text', None) or getattr(data, 'matched_text', 'Unknown'))
+                    
+                    # Use extracted pattern text if available, otherwise use original text
+                    display_text = (data.get('extracted_pattern_text') or original_text) if isinstance(data, dict) else (getattr(data, 'extracted_pattern_text', None) or original_text)
+                    
                     location = data.get('location', 'Unknown') if isinstance(data, dict) else getattr(data, 'location', 'Unknown')
                     replacement_text = data.get('replacement_text', 'N/A') if isinstance(data, dict) else getattr(data, 'replacement_text', 'N/A')
                     content_type = data.get('content_type', 'Unknown') if isinstance(data, dict) else getattr(data, 'content_type', 'Unknown')
@@ -1142,7 +1168,7 @@ class ReportGenerator:
                     actual_pattern = data.get('actual_pattern', pattern) if isinstance(data, dict) else getattr(data, 'actual_pattern', pattern)
                     original_text = data.get('matched_text', 'Unknown') if isinstance(data, dict) else getattr(data, 'matched_text', 'Unknown')
                     location = data.get('location', 'Unknown') if isinstance(data, dict) else getattr(data, 'location', 'Unknown')
-                    replacement_text = 'No mapping found'
+                    replacement_text = data.get('replacement_text', 'No mapping found') if isinstance(data, dict) else getattr(data, 'replacement_text', 'No mapping found')
                     content_type = data.get('content_type', 'Unknown') if isinstance(data, dict) else getattr(data, 'content_type', 'Unknown')
                     dimension = data.get('dimension', '') if isinstance(data, dict) else getattr(data, 'dimension', '')
                     processor = data.get('processor', 'Text') if isinstance(data, dict) else getattr(data, 'processor', 'Text')
@@ -1200,7 +1226,7 @@ class ReportGenerator:
                 html += f"""
                         <tr class="{row_class}">
                             <td>{i}</td>
-                            <td class="text-truncate" title="{original_text}">{original_text}</td>
+                            <td class="text-truncate" title="{display_text}">{display_text}</td>
                             <td>{match_status}</td>
                             <td>{content_type}</td>
                             <td>{dimension}</td>
@@ -1346,6 +1372,15 @@ class ReportGenerator:
                             <th>Status</th>
                             <th>Replacement</th>
                             <th>Position</th>
+                            <th>Type</th>
+                            <th>Dimensions</th>
+                            <th>Processor</th>
+                            <th>Font</th>
+                            <th>Font Size</th>
+                            <th>Color</th>
+                            <th>Wipe Boundaries</th>
+                            <th>Text Boundary</th>
+                            <th>Mode</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -1364,6 +1399,39 @@ class ReportGenerator:
                 replacement = detection.get('replacement_text', 'N/A') if isinstance(detection, dict) else getattr(detection, 'replacement_text', 'N/A')
                 position = detection.get('start_pos', 'Unknown') if isinstance(detection, dict) else getattr(detection, 'start_pos', 'Unknown')
                 
+                # Extract additional fields for unified display
+                content_type = detection.get('content_type', 'Unknown') if isinstance(detection, dict) else getattr(detection, 'content_type', 'Unknown')
+                dimension = detection.get('dimension', 'Unknown') if isinstance(detection, dict) else getattr(detection, 'dimension', 'Unknown')
+                processor = detection.get('processor', 'Unknown') if isinstance(detection, dict) else getattr(detection, 'processor', 'Unknown')
+                
+                # Extract font information
+                font_info = detection.get('font_info', {}) if isinstance(detection, dict) else getattr(detection, 'font_info', {})
+                font_family = font_info.get('font_family', 'Unknown') if isinstance(font_info, dict) else 'Unknown'
+                font_size = font_info.get('font_size', 'Unknown') if isinstance(font_info, dict) else 'Unknown'
+                font_color = font_info.get('font_color', 'Unknown') if isinstance(font_info, dict) else 'Unknown'
+                
+                # Extract image-specific fields
+                wipe_boundaries = detection.get('wipe_boundaries')
+                calculated_text_boundary = detection.get('calculated_text_boundary')
+                processing_mode = detection.get('processing_mode', 'N/A')
+                confidence = detection.get('confidence', 0.0)
+                bounding_box = detection.get('bounding_box', [0, 0, 0, 0])
+                
+                # Format wipe boundary information
+                wipe_boundaries_str = "N/A"
+                if wipe_boundaries:
+                    wipe_boundaries_str = f"Chars: {wipe_boundaries[0]}-{wipe_boundaries[1]}"
+                
+                calculated_boundary_str = "N/A"
+                if calculated_text_boundary:
+                    calc_bbox = calculated_text_boundary
+                    calculated_boundary_str = f"({calc_bbox[0]}, {calc_bbox[1]}, {calc_bbox[2]}, {calc_bbox[3]})"
+                
+                # Format bounding box for display
+                bbox_str = "N/A"
+                if bounding_box and len(bounding_box) >= 4:
+                    bbox_str = f"({bounding_box[0]}, {bounding_box[1]}, {bounding_box[2]}, {bounding_box[3]})"
+                
                 html += f"""
                         <tr>
                             <td>{i}</td>
@@ -1373,6 +1441,15 @@ class ReportGenerator:
                             <td><span class="{status_class}">{status}</span></td>
                             <td class="text-truncate" title="{replacement}">{replacement}</td>
                             <td>{position}</td>
+                            <td>{content_type}</td>
+                            <td>{dimension}</td>
+                            <td>{processor}</td>
+                            <td>{font_family}</td>
+                            <td>{font_size}</td>
+                            <td>{font_color}</td>
+                            <td>{wipe_boundaries_str}</td>
+                            <td>{calculated_boundary_str}</td>
+                            <td>{processing_mode}</td>
                         </tr>
                 """
             
@@ -1703,7 +1780,7 @@ class ReportGenerator:
         .match-table th:nth-child(13), .match-table td:nth-child(13) { width: 5%; min-width: 60px; }  /* Defied Font */
         .match-table th:nth-child(14), .match-table td:nth-child(14) { width: 5%; min-width: 60px; }  /* Derived Font Size */
         .match-table th:nth-child(15), .match-table td:nth-child(15) { width: 5%; min-width: 60px; }  /* Derived Style */
-        .match-table th:nth-child(16), .match-table td:nth-child(16) { width: 25%; min-width: 450px; }  /* Font Size Reasoning */
+        .match-table th:nth-child(16), .match-table td:nth-child(16) { width: 25%; min-width: 450px; }  /* Reasoning */
         
         /* Responsive table with horizontal scroll for smaller screens */
         .table-container {
@@ -1982,7 +2059,7 @@ class ReportGenerator:
             </div>
         </div>
         
-        {self._create_patterns_section()}
+        # {self._create_patterns_section()}  # Removed patterns section
         
         {self._create_algorithm_section(batch_result.individual_results[0] if hasattr(batch_result, 'individual_results') and batch_result.individual_results else None)}
         
@@ -2273,42 +2350,8 @@ class ReportGenerator:
         </div>
 """
         
-        # Image matches
-        if processing_log.image_matches:
-            html += """
-        <div class="section">
-            <h3>Image Matches</h3>
-            <table class="match-table">
-                <thead>
-                    <tr>
-                        <th>Pattern</th>
-                        <th>Original Text</th>
-                        <th>Replacement</th>
-                        <th>Confidence</th>
-                        <th>Bounding Box</th>
-                        <th>Mode</th>
-                    </tr>
-                </thead>
-                <tbody>
-"""
-            for match in processing_log.image_matches:
-                bbox = match.ocr_result.bounding_box
-                bbox_str = f"({bbox[0]}, {bbox[1]}, {bbox[2]}, {bbox[3]})"
-                html += f"""
-                    <tr>
-                        <td>{match.pattern}</td>
-                        <td>{match.ocr_result.text}</td>
-                        <td>{match.replacement_text}</td>
-                        <td>{match.ocr_result.confidence:.2f}</td>
-                        <td>{bbox_str}</td>
-                        <td>{match.processing_mode}</td>
-                    </tr>
-"""
-            html += """
-                </tbody>
-            </table>
-        </div>
-"""
+        # Image matches are now included in the unified all_detections table
+        # No separate section needed - all detections are centrally managed
         
         return html
     
@@ -3217,6 +3260,149 @@ class ReportGenerator:
         # Add detailed matches table
         detailed_table = self._create_detailed_matches_table_html(result)
         html += detailed_table
+        
+        # Wipe boundary details are now included in the unified all_detections table
+        # No separate section needed - all detections are centrally managed
+        
+        html += """
+        </div>
+"""
+        return html
+    
+    def _create_wipe_boundary_details_section(self, result: ProcessingResult) -> str:
+        """Create detailed wipe boundary information section."""
+        html = """
+        <div class="section">
+            <h3><i class="fas fa-eraser"></i> Wipe Boundary Details</h3>
+            <p>Detailed information about calculated wipe boundaries and text replacement areas.</p>
+"""
+        
+        # Check if we have any image matches with wipe information
+        image_matches_with_wipe = []
+        
+        # Try to get image matches from centralized metadata
+        if result.metadata and 'image_matches_data' in result.metadata:
+            image_matches_data = result.metadata['image_matches_data']
+            # Check if image_matches_data is a list (actual match data)
+            if isinstance(image_matches_data, list):
+                for match_data in image_matches_data:
+                    # Check if this match has wipe boundary information
+                    if (match_data.get('wipe_boundaries') or 
+                        match_data.get('calculated_text_boundary') or
+                        match_data.get('wipe_area_info')):
+                        image_matches_with_wipe.append(match_data)
+                logger.debug(f"Found {len(image_matches_with_wipe)} image matches with wipe data from centralized metadata")
+            else:
+                logger.debug(f"Image matches data is not a list: {type(image_matches_data)}")
+        
+        # Fallback: Try to get image matches from legacy metadata location
+        elif result.metadata and 'image_matches' in result.metadata:
+            image_matches_data = result.metadata['image_matches']
+            # Check if image_matches is a list (actual match data) or an integer (count)
+            if isinstance(image_matches_data, list):
+                for match_data in image_matches_data:
+                    # Check if this match has wipe boundary information
+                    if (match_data.get('wipe_boundaries') or 
+                        match_data.get('calculated_text_boundary') or
+                        match_data.get('wipe_area_info')):
+                        image_matches_with_wipe.append(match_data)
+            elif isinstance(image_matches_data, int):
+                # It's just a count, not actual match data
+                logger.debug(f"Image matches is a count ({image_matches_data}), not actual match data")
+        
+        # Also check if we have processing_logs (for backward compatibility)
+        if hasattr(result, 'processing_logs') and result.processing_logs:
+            for processing_log in result.processing_logs:
+                for match in processing_log.image_matches:
+                    if match.wipe_boundaries or match.calculated_text_boundary:
+                        image_matches_with_wipe.append(match)
+        
+        if not image_matches_with_wipe:
+            html += """
+            <div class="info-box">
+                <p><i class="fas fa-info-circle"></i> No wipe boundary information available for this document.</p>
+            </div>
+"""
+        else:
+            html += f"""
+            <div class="info-box">
+                <p><i class="fas fa-check-circle"></i> Found {len(image_matches_with_wipe)} matches with wipe boundary information.</p>
+            </div>
+            
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Match #</th>
+                            <th>Pattern</th>
+                            <th>Original Text</th>
+                            <th>Replacement</th>
+                            <th>Character Boundaries</th>
+                            <th>Pixel Boundaries</th>
+                            <th>Wipe Area Info</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+"""
+            
+            for i, match in enumerate(image_matches_with_wipe, 1):
+                # Handle both object and dictionary formats
+                if isinstance(match, dict):
+                    # Dictionary format
+                    pattern = match.get('pattern', 'N/A')
+                    original_text = match.get('ocr_result', {}).get('text', 'N/A') if isinstance(match.get('ocr_result'), dict) else 'N/A'
+                    replacement_text = match.get('replacement_text', 'N/A')
+                    wipe_boundaries = match.get('wipe_boundaries')
+                    calculated_boundary = match.get('calculated_text_boundary')
+                    wipe_area_info = match.get('wipe_area_info')
+                else:
+                    # Object format
+                    pattern = getattr(match, 'pattern', 'N/A')
+                    original_text = getattr(match.ocr_result, 'text', 'N/A') if hasattr(match, 'ocr_result') else 'N/A'
+                    replacement_text = getattr(match, 'replacement_text', 'N/A')
+                    wipe_boundaries = getattr(match, 'wipe_boundaries', None)
+                    calculated_boundary = getattr(match, 'calculated_text_boundary', None)
+                    wipe_area_info = getattr(match, 'wipe_area_info', None)
+                
+                # Format character boundaries
+                char_boundaries = "N/A"
+                if wipe_boundaries:
+                    char_boundaries = f"{wipe_boundaries[0]}-{wipe_boundaries[1]}"
+                
+                # Format pixel boundaries
+                pixel_boundaries = "N/A"
+                if calculated_boundary:
+                    bbox = calculated_boundary
+                    pixel_boundaries = f"({bbox[0]}, {bbox[1]}, {bbox[2]}, {bbox[3]})"
+                
+                # Format wipe area info
+                wipe_info = "N/A"
+                if wipe_area_info:
+                    if isinstance(wipe_area_info, dict):
+                        info = wipe_area_info
+                    else:
+                        info = wipe_area_info
+                    wipe_info = f"Pattern: {info.get('pattern_name', 'N/A')}<br>"
+                    wipe_info += f"Matched: {info.get('matched_pattern', 'N/A')}<br>"
+                    wipe_info += f"Timestamp: {info.get('processing_timestamp', 'N/A')}"
+                
+                html += f"""
+                        <tr>
+                            <td>{i}</td>
+                            <td>{pattern}</td>
+                            <td>{original_text}</td>
+                            <td>{replacement_text}</td>
+                            <td>{char_boundaries}</td>
+                            <td>{pixel_boundaries}</td>
+                            <td>{wipe_info}</td>
+                        </tr>
+"""
+            
+            html += """
+                    </tbody>
+                </table>
+            </div>
+"""
         
         html += """
         </div>

@@ -22,7 +22,7 @@ from docx import Document
 
 from app.utils.graphics_utils.graphics_docx_utils import (
     TextboxParser,
-    TextboxFontManager,
+    GraphicsFontManager,
 )
 
 
@@ -142,7 +142,7 @@ def main() -> None:
             height_in = height_pt / POINTS_PER_INCH if height_pt > 0 else 0.0
             area_sq_in = width_in * height_in if width_in > 0 and height_in > 0 else 0.0
 
-            font_info = TextboxFontManager.get_font_info_from_wt_elements(wt_elements)
+            font_info = GraphicsFontManager.get_font_info_from_wt_elements(wt_elements)
             primary_family = font_info.get("family", "Arial")
             detected_sizes = font_info.get("sizes", [])
 

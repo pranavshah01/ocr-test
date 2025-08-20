@@ -249,24 +249,32 @@ class GraphicsFontManager:
                 
                 if parent is not None:
                     r_pr = parent.find('.//w:rPr', namespaces=XML_NAMESPACES)
-                    if r_pr is not None:
-                        # Update or create sz element
-                        sz_element = r_pr.find('.//w:sz', namespaces=XML_NAMESPACES)
-                        if sz_element is not None:
-                            sz_element.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val', str(int(target_size * 2)))
-                        else:
-                            # Create new sz element
-                            sz_element = ET.SubElement(r_pr, '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}sz')
-                            sz_element.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val', str(int(target_size * 2)))
-                        
-                        # Also update szCs element if it exists
-                        sz_cs_element = r_pr.find('.//w:szCs', namespaces=XML_NAMESPACES)
-                        if sz_cs_element is not None:
-                            sz_cs_element.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val', str(int(target_size * 2)))
-                        else:
-                            # Create new szCs element
-                            sz_cs_element = ET.SubElement(r_pr, '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}szCs')
-                            sz_cs_element.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val', str(int(target_size * 2)))
+                    if r_pr is None:
+                        # BUG FIX: Create w:rPr element if it doesn't exist
+                        # This ensures font size normalization applies to ALL text runs, not just those with existing formatting
+                        from lxml import etree
+                        r_pr = etree.SubElement(parent, '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}rPr')
+                        logger.debug(f"Created missing w:rPr element for text run to enable font size normalization")
+                    
+                    # Update or create sz element
+                    sz_element = r_pr.find('.//w:sz', namespaces=XML_NAMESPACES)
+                    if sz_element is not None:
+                        sz_element.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val', str(int(target_size * 2)))
+                    else:
+                        # Create new sz element
+                        from lxml import etree
+                        sz_element = etree.SubElement(r_pr, '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}sz')
+                        sz_element.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val', str(int(target_size * 2)))
+                    
+                    # Also update szCs element if it exists
+                    sz_cs_element = r_pr.find('.//w:szCs', namespaces=XML_NAMESPACES)
+                    if sz_cs_element is not None:
+                        sz_cs_element.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val', str(int(target_size * 2)))
+                    else:
+                        # Create new szCs element
+                        from lxml import etree
+                        sz_cs_element = etree.SubElement(r_pr, '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}szCs')
+                        sz_cs_element.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val', str(int(target_size * 2)))
         
         except Exception as e:
             logger.error(f"Error normalizing font sizes: {e}")
@@ -290,21 +298,44 @@ class GraphicsFontManager:
                 
                 if parent is not None:
                     r_pr = parent.find('.//w:rPr', namespaces=XML_NAMESPACES)
-                    if r_pr is not None:
-                        # Update font family
-                        r_fonts = r_pr.find('.//w:rFonts', namespaces=XML_NAMESPACES)
-                        if r_fonts is not None:
-                            r_fonts.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}ascii', target_family)
-                            r_fonts.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}hAnsi', target_family)
-                        else:
-                            # Create new rFonts element using the proper namespace
-                            from lxml import etree
-                            r_fonts = etree.SubElement(r_pr, '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}rFonts')
-                            r_fonts.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}ascii', target_family)
-                            r_fonts.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}hAnsi', target_family)
-                        
-                        # Update font size
-                        GraphicsFontManager.normalize_font_sizes([wt_element], target_size)
+                    if r_pr is None:
+                        # BUG FIX: Create w:rPr element if it doesn't exist
+                        # This ensures font normalization applies to ALL text runs, not just those with existing formatting
+                        from lxml import etree
+                        r_pr = etree.SubElement(parent, '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}rPr')
+                        logger.debug(f"Created missing w:rPr element for text run to enable font family and size normalization")
+                    
+                    # Update font family
+                    r_fonts = r_pr.find('.//w:rFonts', namespaces=XML_NAMESPACES)
+                    if r_fonts is not None:
+                        r_fonts.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}ascii', target_family)
+                        r_fonts.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}hAnsi', target_family)
+                    else:
+                        # Create new rFonts element using the proper namespace
+                        from lxml import etree
+                        r_fonts = etree.SubElement(r_pr, '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}rFonts')
+                        r_fonts.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}ascii', target_family)
+                        r_fonts.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}hAnsi', target_family)
+                    
+                    # Update font size - do it directly here since we already have r_pr
+                    sz_element = r_pr.find('.//w:sz', namespaces=XML_NAMESPACES)
+                    if sz_element is not None:
+                        sz_element.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val', str(int(target_size * 2)))
+                    else:
+                        # Create new sz element using the proper namespace
+                        from lxml import etree
+                        sz_element = etree.SubElement(r_pr, '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}sz')
+                        sz_element.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val', str(int(target_size * 2)))
+                    
+                    # Also update szCs element if it exists
+                    sz_cs_element = r_pr.find('.//w:szCs', namespaces=XML_NAMESPACES)
+                    if sz_cs_element is not None:
+                        sz_cs_element.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val', str(int(target_size * 2)))
+                    else:
+                        # Create new szCs element using the proper namespace  
+                        from lxml import etree
+                        sz_cs_element = etree.SubElement(r_pr, '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}szCs')
+                        sz_cs_element.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val', str(int(target_size * 2)))
         
         except Exception as e:
             logger.error(f"Error normalizing font sizes and family: {e}")
@@ -605,68 +636,7 @@ class TextboxParser:
         return dimensions
 
 
-class TextboxFontManager:
-    """Manages font information extraction and normalization for textboxes."""
-    
-    @staticmethod
-    def get_font_info_from_wt_elements(wt_elements: List[ET.Element]) -> Dict[str, Any]:
-        """Delegate to GraphicsFontManager to avoid duplication."""
-        return GraphicsFontManager.get_font_info_from_wt_elements(wt_elements)
-    
-    @staticmethod
-    def normalize_font_sizes_and_family(wt_elements: List[ET.Element], target_size: float, target_family: str):
-        """
-        Normalize font sizes and family across all w:t elements.
-        
-        Args:
-            wt_elements: List of w:t XML elements
-            target_size: Target font size in points
-            target_family: Target font family
-        """
-        try:
-            for wt_element in wt_elements:
-                # Get parent rPr (run properties) element
-                parent = wt_element.getparent()
-                while parent is not None and not parent.tag.endswith('}r'):
-                    parent = parent.getparent()
-                
-                if parent is not None:
-                    r_pr = parent.find('.//w:rPr', namespaces=XML_NAMESPACES)
-                    if r_pr is not None:
-                        # Update font family
-                        r_fonts = r_pr.find('.//w:rFonts', namespaces=XML_NAMESPACES)
-                        if r_fonts is not None:
-                            r_fonts.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}ascii', target_family)
-                            r_fonts.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}hAnsi', target_family)
-                        else:
-                            # Create new rFonts element using the proper namespace
-                            from lxml import etree
-                            r_fonts = etree.SubElement(r_pr, '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}rFonts')
-                            r_fonts.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}ascii', target_family)
-                            r_fonts.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}hAnsi', target_family)
-                        
-                        # Update font size
-                        sz_element = r_pr.find('.//w:sz', namespaces=XML_NAMESPACES)
-                        if sz_element is not None:
-                            sz_element.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val', str(int(target_size * 2)))
-                        else:
-                            # Create new sz element using the proper namespace
-                            from lxml import etree
-                            sz_element = etree.SubElement(r_pr, '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}sz')
-                            sz_element.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val', str(int(target_size * 2)))
-                        
-                        # Also update szCs element if it exists
-                        sz_cs_element = r_pr.find('.//w:szCs', namespaces=XML_NAMESPACES)
-                        if sz_cs_element is not None:
-                            sz_cs_element.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val', str(int(target_size * 2)))
-                        else:
-                            # Create new szCs element using the proper namespace
-                            from lxml import etree
-                            sz_cs_element = etree.SubElement(r_pr, '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}szCs')
-                            sz_cs_element.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val', str(int(target_size * 2)))
-        
-        except Exception as e:
-            logger.error(f"Error normalizing font sizes and family: {e}")
+
 
 
 class TextboxCapacityCalculator:

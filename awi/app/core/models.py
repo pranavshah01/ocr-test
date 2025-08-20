@@ -7,11 +7,34 @@ pipeline for consistent data handling and reporting.
 
 import time
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime
 
 from .processor_interface import ProcessingResult
+
+@dataclass
+class Match:
+    """Represents a text match and replacement."""
+    pattern: str
+    original_text: str
+    replacement_text: str
+    position: int
+    font_info: Dict[str, Any] = field(default_factory=dict)
+    location: str = "unknown"
+    confidence: Optional[float] = None
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            'pattern': self.pattern,
+            'original_text': self.original_text,
+            'replacement_text': self.replacement_text,
+            'position': self.position,
+            'font_info': self.font_info,
+            'location': self.location,
+            'confidence': self.confidence
+        }
 
 @dataclass
 class ProcessingLog:
@@ -281,3 +304,158 @@ class ProcessingStatistics:
             'errors': self.errors,
             'warnings': self.warnings
         }
+
+# --- OCR data models (needed for image processor) ---
+
+@dataclass
+class OCRResult:
+    """OCR detection result with bounding box information."""
+    text: str
+    confidence: float
+    bounding_box: Tuple[int, int, int, int]  # (x, y, width, height)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            'text': self.text,
+            'confidence': self.confidence,
+            'bounding_box': {
+                'x': self.bounding_box[0],
+                'y': self.bounding_box[1],
+                'width': self.bounding_box[2],
+                'height': self.bounding_box[3]
+            }
+        }
+
+@dataclass
+class HybridOCRResult:
+    """Result from hybrid OCR processing combining multiple engines."""
+    text: str
+    confidence: float
+    bounding_box: Tuple[int, int, int, int]  # (x, y, width, height)
+    source_engine: str  # 'easyocr', 'tesseract', or 'hybrid'
+    easyocr_result: Optional['OCRResult'] = None
+    tesseract_result: Optional['OCRResult'] = None
+    selection_reason: str = ""  # Why this result was chosen
+    conflict_resolved: bool = False  # Whether there was a conflict between engines
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            'text': self.text,
+            'confidence': self.confidence,
+            'bounding_box': {
+                'x': self.bounding_box[0],
+                'y': self.bounding_box[1],
+                'width': self.bounding_box[2],
+                'height': self.bounding_box[3]
+            },
+            'source_engine': self.source_engine,
+            'easyocr_result': self.easyocr_result.to_dict() if self.easyocr_result else None,
+            'tesseract_result': self.tesseract_result.to_dict() if self.tesseract_result else None,
+            'selection_reason': self.selection_reason,
+            'conflict_resolved': self.conflict_resolved
+        }
+
+@dataclass
+class OCRMatch:
+    """OCR match with replacement information and wipe boundary details."""
+    ocr_result: OCRResult
+    pattern: str
+    replacement_text: str
+    image_path: Path
+    processing_mode: str  # 'replace' or 'append'
+    extracted_pattern_text: str = ""  # The actual pattern text that was extracted (e.g., "77-531-116BLK-245")
+    wipe_boundaries: Optional[Tuple[int, int]] = None  # Character start/end positions for wipe
+    calculated_text_boundary: Optional[Tuple[int, int, int, int]] = None  # Precise pixel coordinates for wipe area
+    wipe_area_info: Optional[Dict[str, Any]] = None  # Additional wipe metadata
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            'ocr_result': self.ocr_result.to_dict(),
+            'pattern': self.pattern,
+            'replacement_text': self.replacement_text,
+            'image_path': str(self.image_path),
+            'processing_mode': self.processing_mode,
+            'extracted_pattern_text': self.extracted_pattern_text,
+            'wipe_boundaries': self.wipe_boundaries,
+            'calculated_text_boundary': self.calculated_text_boundary,
+            'wipe_area_info': self.wipe_area_info
+        }
+
+# Factory functions for creating OCR objects
+
+def create_ocr_result(text: str, confidence: float, bbox: Tuple[int, int, int, int]) -> OCRResult:
+    """
+    Factory function to create an OCRResult instance.
+    
+    Args:
+        text: Detected text
+        confidence: OCR confidence score
+        bbox: Bounding box (x, y, width, height)
+        
+    Returns:
+        OCRResult instance
+    """
+    return OCRResult(
+        text=text,
+        confidence=confidence,
+        bounding_box=bbox
+    )
+
+def create_hybrid_ocr_result(text: str, confidence: float, bbox: Tuple[int, int, int, int],
+                           source_engine: str, easyocr_result: Optional[OCRResult] = None,
+                           tesseract_result: Optional[OCRResult] = None, 
+                           selection_reason: str = "", conflict_resolved: bool = False) -> HybridOCRResult:
+    """
+    Factory function to create a HybridOCRResult instance.
+    
+    Args:
+        text: Final selected text
+        confidence: Final confidence score
+        bbox: Bounding box (x, y, width, height)
+        source_engine: Engine that provided the final result
+        easyocr_result: Original EasyOCR result (if any)
+        tesseract_result: Original Tesseract result (if any)
+        selection_reason: Reason for selection
+        conflict_resolved: Whether there was a conflict between engines
+        
+    Returns:
+        HybridOCRResult instance
+    """
+    return HybridOCRResult(
+        text=text,
+        confidence=confidence,
+        bounding_box=bbox,
+        source_engine=source_engine,
+        easyocr_result=easyocr_result,
+        tesseract_result=tesseract_result,
+        selection_reason=selection_reason,
+        conflict_resolved=conflict_resolved
+    )
+
+def create_ocr_match(ocr_result: OCRResult, pattern: str, replacement: str, 
+                    image_path: Path, mode: str = "replace", extracted_pattern_text: str = "") -> OCRMatch:
+    """
+    Factory function to create an OCRMatch instance.
+    
+    Args:
+        ocr_result: OCR detection result
+        pattern: Regex pattern that matched
+        replacement: Replacement text
+        image_path: Path to image file
+        mode: Processing mode ('replace' or 'append')
+        extracted_pattern_text: The actual pattern text that was extracted (e.g., "77-531-116BLK-245")
+        
+    Returns:
+        OCRMatch instance
+    """
+    return OCRMatch(
+        ocr_result=ocr_result,
+        pattern=pattern,
+        replacement_text=replacement,
+        image_path=image_path,
+        processing_mode=mode,
+        extracted_pattern_text=extracted_pattern_text
+    )

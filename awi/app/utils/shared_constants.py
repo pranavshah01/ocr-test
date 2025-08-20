@@ -34,6 +34,10 @@ CONTENT_TYPES = {
 DEFAULT_SEPARATOR = ";"
 DEFAULT_MAPPING = "4022-NA"
 
+# OCR settings
+DEFAULT_OCR_CONFIDENCE = 0.7
+FALLBACK_FONTS = ["arial.ttf", "Arial.ttf", "DejaVuSans.ttf"]
+
 # File Processing Constants
 MAX_FILE_SIZE_MB = 300  # Maximum file size for processing (increased from 100MB)
 LARGE_FILE_THRESHOLD_MB = 100  # Threshold for large file optimizations

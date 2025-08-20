@@ -1074,6 +1074,7 @@ class TextProcessor(BaseProcessor):
             metadata = {
                 'matches': [match.to_dict() for match in matches],
                 'all_detections': all_detections,  # Add all detections to metadata
+                'detailed_matches': [match.to_dict() for match in matches],  # Add detailed matches for reporting
                 'file_size_mb': document_path.stat().st_size / (1024 * 1024) if document_path else 0
             }
 

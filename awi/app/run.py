@@ -24,6 +24,7 @@ from app.core.performance_monitor import PerformanceMonitor
 from app.core.error_handler import ErrorHandler
 from app.processors.text_processor import create_text_processor
 from app.processors.graphics_processor import create_graphics_processor
+from app.processors.image_processor import create_image_processor
 
 from app.utils.report_generator import ReportGenerator
 from app.utils.platform_utils import validate_platform_support, get_system_info
@@ -49,14 +50,47 @@ def setup_logging(config_obj) -> None:
     # Determine log level based on verbose flag
     log_level = logging.DEBUG if config_obj.verbose else logging.INFO
     
+    # Create custom formatter with colors
+    class ColoredFormatter(logging.Formatter):
+        """Custom formatter with colored output for different log levels."""
+        
+        # ANSI color codes
+        COLORS = {
+            'DEBUG': '\033[36m',    # Cyan
+            'INFO': '\033[32m',     # Green
+            'WARNING': '\033[33m',  # Yellow
+            'ERROR': '\033[31m',    # Red
+            'CRITICAL': '\033[35m', # Magenta
+            'RESET': '\033[0m'      # Reset
+        }
+        
+        def format(self, record):
+            # Add color to the levelname
+            if record.levelname in self.COLORS:
+                record.levelname = f"{self.COLORS[record.levelname]}{record.levelname}{self.COLORS['RESET']}"
+            
+            # Format the message
+            formatted = super().format(record)
+            
+            # Add color to the entire message for ERROR and WARNING
+            if record.levelname == 'ERROR':
+                formatted = f"{self.COLORS['ERROR']}{formatted}{self.COLORS['RESET']}"
+            elif record.levelname == 'WARNING':
+                formatted = f"{self.COLORS['WARNING']}{formatted}{self.COLORS['RESET']}"
+            
+            return formatted
+    
+    # Create handlers
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(ColoredFormatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    
     # Configure logging
     logging.basicConfig(
         level=log_level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler(sys.stdout)
-        ]
+        handlers=[file_handler, console_handler]
     )
     
     logger.info("=" * 80)
@@ -182,6 +216,27 @@ def create_processor_factory(config_obj) -> Dict[str, Any]:
     except Exception as e:
         logger.debug(f"Graphics processor not available: {e}")
     
+    # Create image processor
+    try:
+        image_processor = create_image_processor(
+            patterns=patterns,
+            mappings=mappings,
+            mode=config_obj.ocr_mode,
+            separator=config_obj.text_separator,
+            default_mapping=config_obj.default_mapping,
+            ocr_engine=config_obj.ocr_engine,
+            use_gpu=config_obj.gpu_available,
+            confidence_threshold=config_obj.confidence_min,
+        )
+        if image_processor:
+            image_processor.initialize()
+            processors['image'] = image_processor
+            logger.info("✅ Image processor created and initialized")
+        else:
+            logger.warning("⚠️ Image processor not available (placeholder)")
+    except Exception as e:
+        logger.debug(f"Image processor not available: {e}")
+
 
     
     logger.info(f"Created {len(processors)} processor(s)")
@@ -244,6 +299,8 @@ def main():
             document_processor.text_processor = processors['text']
         if 'graphics' in processors:
             document_processor.graphics_processor = processors['graphics']
+        if 'image' in processors:
+            document_processor.image_processor = processors['image']
         
         # Initialize parallel manager
         parallel_manager = ParallelManager(

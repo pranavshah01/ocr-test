@@ -216,6 +216,16 @@ class PatternMatcher:
                     start_pos = match.start()
                     end_pos = match.end()
                     
+                    # Extract only the pattern part from the matched text
+                    extracted_pattern = self._extract_pattern_part(matched_text, pattern_name)
+                    if extracted_pattern:
+                        matched_text = extracted_pattern
+                        # Adjust positions to reflect the extracted pattern
+                        pattern_start = matched_text.find(extracted_pattern)
+                        if pattern_start != -1:
+                            start_pos = match.start() + pattern_start
+                            end_pos = start_pos + len(extracted_pattern)
+                    
                     # Check if we have a mapping for this text
                     replacement = self.get_replacement(matched_text)
                     if replacement:
@@ -329,6 +339,28 @@ class PatternMatcher:
         
         logger.debug(f"No mapping found for: '{original_text}'")
         return None
+    
+    def _extract_pattern_part(self, matched_text: str, pattern_name: str) -> Optional[str]:
+        """
+        Extract only the pattern part from the matched text.
+        
+        Args:
+            matched_text: The full text that was matched by the regex
+            pattern_name: Name of the pattern that was matched
+            
+        Returns:
+            The extracted pattern part or None if extraction failed
+        """
+        # For 77- patterns, extract the part that starts with "77-"
+        if pattern_name.startswith('pattern_77'):
+            # Find the "77-" part in the matched text
+            import re
+            pattern_match = re.search(r'77-[0-9]{3}-[A-Za-z0-9]+(?:-[0-9]{2,3})?', matched_text)
+            if pattern_match:
+                return pattern_match.group()
+        
+        # For other patterns, return the original matched text
+        return matched_text
     
     def get_debug_info(self) -> Dict[str, Any]:
         """Get debugging information about the pattern matcher."""

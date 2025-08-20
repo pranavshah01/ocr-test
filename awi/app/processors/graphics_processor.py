@@ -14,7 +14,7 @@ from docx import Document
 from ..core.processor_interface import BaseProcessor, ProcessingResult
 from ..utils.pattern_matcher import PatternMatcher, create_pattern_matcher
 from ..utils.graphics_utils.graphics_docx_utils import (
-    TextboxParser, TextboxFontManager, TextboxCapacityCalculator, DEFAULT_FONT_SIZE
+    TextboxParser, GraphicsFontManager, TextboxCapacityCalculator, DEFAULT_FONT_SIZE
 )
 
 logger = logging.getLogger(__name__)
@@ -248,7 +248,7 @@ class GraphicsProcessor(BaseProcessor):
             logger.info(f"DIMENSIONS: Textbox dimensions: {dimensions['width']:.1f}x{dimensions['height']:.1f} points ({width_cm:.2f}x{height_cm:.2f} cm) (has_dimensions: {dimensions['has_dimensions']}) at {location}")
             
             # Step 3: Get comprehensive font information from all w:r elements
-            textbox_font_info = TextboxFontManager.get_font_info_from_wt_elements(wt_elements)
+            textbox_font_info = GraphicsFontManager.get_font_info_from_wt_elements(wt_elements)
             all_font_sizes = textbox_font_info.get('sizes', [DEFAULT_FONT_SIZE])
             
             # Store min-max font information for reporting
@@ -498,7 +498,7 @@ class GraphicsProcessor(BaseProcessor):
                     # Step 9: Apply optimal font size AND preserve font family
                     if not fonts_normalized:
                         logger.info(f"RECONSTRUCTION: Applying font normalization - size: {optimal_font_size}pt, family: {baseline_font_family}")
-                        TextboxFontManager.normalize_font_sizes_and_family(
+                        GraphicsFontManager.normalize_font_sizes_and_family(
                             wt_elements, optimal_font_size, baseline_font_family
                         )
                         logger.info(f"RECONSTRUCTION: Font normalization completed")
@@ -1222,6 +1222,28 @@ class GraphicsProcessor(BaseProcessor):
                     logger.debug(f"Setting wt_element.text = '{new_text}'")
                     wt_element.text = new_text
                     logger.debug(f"Text replacement applied to element {i}")
+                    
+                    # Apply specific font properties to the replacement text
+                    if replacement_text in new_text:
+                        logger.debug(f"Applying font properties to replacement text: '{replacement_text}'")
+                        
+                        # First, detect and fix any font inheritance issues
+                        inheritance_fixed = self._detect_and_fix_font_inheritance_issues(
+                            wt_elements, replacement_text
+                        )
+                        
+                        if inheritance_fixed:
+                            logger.info(f"Font inheritance issues detected and fixed for replacement text")
+                        else:
+                            # Fallback: apply font properties directly
+                            logger.debug(f"No inheritance issues detected, applying font properties directly")
+                            font_applied = self._apply_font_properties_to_replacement_text(
+                                wt_elements, replacement_text, target_font_size=14, target_font_family="Arial"
+                            )
+                            if font_applied:
+                                logger.info(f"Font properties successfully applied to replacement text")
+                            else:
+                                logger.warning(f"Failed to apply font properties to replacement text")
                 else:
                     # Subsequent elements: remove the matched portion
                     match_start_in_element = max(0, start_pos - element_start)
@@ -1236,6 +1258,188 @@ class GraphicsProcessor(BaseProcessor):
             
         except Exception as e:
             logger.error(f"Error replacing text in w:t elements: {e}")
+            return False
+    
+    def _apply_font_properties_to_replacement_text(self, wt_elements: List[ET.Element], 
+                                                 replacement_text: str, target_font_size: int = 14,
+                                                 target_font_family: str = "Arial") -> bool:
+        """
+        Apply specific font properties to runs containing replacement text.
+        
+        This method specifically handles cases where text replacement doesn't properly
+        apply font properties, ensuring the replaced text displays with the correct font size.
+        
+        Args:
+            wt_elements: List of w:t XML elements
+            replacement_text: The text that was replaced
+            target_font_size: Target font size (default 14)
+            target_font_family: Target font family (default Arial)
+            
+        Returns:
+            True if font properties were successfully applied
+        """
+        try:
+            logger.debug(f"Applying font properties to replacement text: '{replacement_text}' with size {target_font_size}pt, family {target_font_family}")
+            
+            # Find the w:t element that contains the replacement text
+            target_element = None
+            for wt_element in wt_elements:
+                if wt_element.text and replacement_text in wt_element.text:
+                    target_element = wt_element
+                    break
+            
+            if not target_element:
+                logger.warning(f"Could not find w:t element containing replacement text: '{replacement_text}'")
+                return False
+            
+            # Get the parent w:r element
+            parent_run = target_element.getparent()
+            if parent_run is None or parent_run.tag != '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}r':
+                logger.warning(f"Could not find parent w:r element for replacement text")
+                return False
+            
+            # Check if the run already has rPr (run properties)
+            existing_rpr = parent_run.find('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}rPr')
+            
+            if existing_rpr is not None:
+                # Update existing rPr
+                logger.debug(f"Updating existing rPr for replacement text")
+                
+                # Update or add font size
+                sz_element = existing_rpr.find('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}sz')
+                if sz_element is not None:
+                    sz_element.set('val', str(target_font_size * 2))  # Word uses half-points
+                else:
+                    sz_element = ET.SubElement(existing_rpr, '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}sz')
+                    sz_element.set('val', str(target_font_size * 2))
+                
+                # Update or add complex script font size
+                szCs_element = existing_rpr.find('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}szCs')
+                if szCs_element is not None:
+                    szCs_element.set('val', str(target_font_size * 2))
+                else:
+                    szCs_element = ET.SubElement(existing_rpr, '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}szCs')
+                    szCs_element.set('val', str(target_font_size * 2))
+                
+                # Update or add font family
+                rFonts_element = existing_rpr.find('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}rFonts')
+                if rFonts_element is not None:
+                    rFonts_element.set('ascii', target_font_family)
+                    rFonts_element.set('hAnsi', target_font_family)
+                else:
+                    rFonts_element = ET.SubElement(existing_rpr, '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}rFonts')
+                    rFonts_element.set('ascii', target_font_family)
+                    rFonts_element.set('hAnsi', target_font_family)
+                
+            else:
+                # Create new rPr element
+                logger.debug(f"Creating new rPr for replacement text")
+                rpr_element = ET.SubElement(parent_run, '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}rPr')
+                
+                # Add font size
+                sz_element = ET.SubElement(rpr_element, '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}sz')
+                sz_element.set('val', str(target_font_size * 2))
+                
+                # Add complex script font size
+                szCs_element = ET.SubElement(rpr_element, '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}szCs')
+                szCs_element.set('val', str(target_font_size * 2))
+                
+                # Add font family
+                rFonts_element = ET.SubElement(rpr_element, '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}rFonts')
+                rFonts_element.set('ascii', target_font_family)
+                rFonts_element.set('hAnsi', target_font_family)
+            
+            logger.info(f"Successfully applied font properties to replacement text: size {target_font_size}pt, family {target_font_family}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error applying font properties to replacement text: {e}")
+            return False
+    
+    def _detect_and_fix_font_inheritance_issues(self, wt_elements: List[ET.Element], 
+                                             replacement_text: str) -> bool:
+        """
+        Detect and fix cases where text replacement results in font inheritance issues.
+        
+        This method specifically looks for cases where:
+        1. Text is replaced but the run has no rPr element
+        2. The replaced text inherits paragraph-level font properties instead of run-level
+        3. The font size is not what was intended for the replacement
+        
+        Args:
+            wt_elements: List of w:t XML elements
+            replacement_text: The text that was replaced
+            
+        Returns:
+            True if issues were detected and fixed
+        """
+        try:
+            logger.debug(f"Detecting font inheritance issues for replacement text: '{replacement_text}'")
+            
+            # Find the w:t element that contains the replacement text
+            target_element = None
+            for wt_element in wt_elements:
+                if wt_element.text and replacement_text in wt_element.text:
+                    target_element = wt_element
+                    break
+            
+            if not target_element:
+                logger.debug(f"Could not find w:t element containing replacement text: '{replacement_text}'")
+                return False
+            
+            # Get the parent w:r element
+            parent_run = target_element.getparent()
+            if parent_run is None or parent_run.tag != '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}r':
+                logger.debug(f"Could not find parent w:r element for replacement text")
+                return False
+            
+            # Check if the run has rPr (run properties)
+            existing_rpr = parent_run.find('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}rPr')
+            
+            if existing_rpr is None:
+                # This is the problematic case - no rPr means inheritance from paragraph
+                logger.info(f"Detected font inheritance issue: run has no rPr, will inherit paragraph font size")
+                
+                # Get the paragraph to see what font size it's setting
+                paragraph = parent_run.getparent()
+                if paragraph is not None:
+                    ppr = paragraph.find('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}pPr')
+                    if ppr is not None:
+                        ppr_rpr = ppr.find('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}rPr')
+                        if ppr_rpr is not None:
+                            sz_element = ppr_rpr.find('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}sz')
+                            if sz_element is not None:
+                                paragraph_font_size = int(sz_element.get('val', '0')) // 2  # Convert from half-points
+                                logger.info(f"Paragraph font size is {paragraph_font_size}pt, but we want 14pt for replacement text")
+                
+                # Apply the fix by creating rPr with the desired font size
+                logger.info(f"Applying font inheritance fix: creating rPr with font size 14pt")
+                return self._apply_font_properties_to_replacement_text(
+                    wt_elements, replacement_text, target_font_size=14, target_font_family="Arial"
+                )
+            
+            else:
+                # Check if the existing rPr has the correct font size
+                sz_element = existing_rpr.find('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}sz')
+                if sz_element is not None:
+                    current_font_size = int(sz_element.get('val', '0')) // 2  # Convert from half-points
+                    if current_font_size != 14:
+                        logger.info(f"Detected incorrect font size: {current_font_size}pt, should be 14pt for replacement text")
+                        return self._apply_font_properties_to_replacement_text(
+                            wt_elements, replacement_text, target_font_size=14, target_font_family="Arial"
+                        )
+                    else:
+                        logger.debug(f"Font size is already correct: {current_font_size}pt")
+                        return True
+                else:
+                    # No font size specified in rPr, apply default
+                    logger.info(f"No font size specified in rPr, applying default 14pt")
+                    return self._apply_font_properties_to_replacement_text(
+                        wt_elements, replacement_text, target_font_size=14, target_font_family="Arial"
+                    )
+            
+        except Exception as e:
+            logger.error(f"Error detecting and fixing font inheritance issues: {e}")
             return False
     
     def process(self, document_or_path, **kwargs) -> ProcessingResult:
@@ -1305,6 +1509,7 @@ class GraphicsProcessor(BaseProcessor):
             metadata = {
                 'matches': matches,
                 'all_detections': all_detections,
+                'detailed_matches': matches,  # Add detailed matches for reporting
                 'file_size_mb': document_path.stat().st_size / (1024 * 1024) if document_path else 0
             }
             

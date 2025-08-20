@@ -58,6 +58,7 @@ class DocumentProcessor:
         # Initialize processor instances (will be set when processors are available)
         self.text_processor: Optional[BaseProcessor] = None
         self.graphics_processor: Optional[BaseProcessor] = None
+        self.image_processor: Optional[BaseProcessor] = None
         
         # Processing statistics
         self.processing_stats = {
@@ -674,7 +675,8 @@ class DocumentProcessor:
             'graphics_matches': 0,
             'image_matches': 0,
             'layout_impact': None,
-            'processor_results': {}
+            'processor_results': {},
+            'all_matches': []  # Collect all detailed matches for reporting
         }
         
         # Process text content
@@ -695,6 +697,10 @@ class DocumentProcessor:
                     # Extract layout impact data if available
                     if text_result.layout_impact:
                         pipeline_results['layout_impact'] = text_result.layout_impact
+                    
+                    # Add text matches to all_matches if available
+                    if text_result.metadata and 'detailed_matches' in text_result.metadata:
+                        pipeline_results['all_matches'].extend(text_result.metadata['detailed_matches'])
                     
                     logger.info(f"Text processing completed: {text_result.matches_found} matches")
                 else:
@@ -722,6 +728,11 @@ class DocumentProcessor:
                     pipeline_results['total_matches'] += graphics_result.matches_found
                     # Store the metadata as a dictionary instead of the ProcessingResult object
                     pipeline_results['processor_results']['graphics'] = graphics_result.metadata
+                    
+                    # Add graphics matches to all_matches if available
+                    if graphics_result.metadata and 'detailed_matches' in graphics_result.metadata:
+                        pipeline_results['all_matches'].extend(graphics_result.metadata['detailed_matches'])
+                    
                     logger.info(f"Graphics processing completed: {graphics_result.matches_found} matches")
                 else:
                     error_msg = f"Graphics processing failed: {graphics_result.error_message}"
@@ -735,6 +746,119 @@ class DocumentProcessor:
         else:
             logger.debug("Graphics processor not available, skipping graphics processing")
         
+        # Process image content
+        if self.image_processor and self.image_processor.is_initialized():
+            try:
+                logger.info("Processing images in document...")
+                image_result = self.image_processor.process(document)
+                if image_result.success:
+                    # Centralize image match data for reuse
+                    pipeline_results['image_matches'] = image_result.matches_found
+                    pipeline_results['total_matches'] += image_result.matches_found
+                    pipeline_results['processor_results']['image'] = image_result.metadata
+                    
+                    # Extract and centralize image matches for report generation
+                    if image_result.metadata and 'image_matches' in image_result.metadata:
+                        pipeline_results['image_matches_data'] = image_result.metadata['image_matches']
+                        logger.debug(f"Centralized {len(image_result.metadata['image_matches'])} image matches for reporting")
+                        
+                        # Convert image matches to unified detection format for all_detections table
+                        for i, match_data in enumerate(image_result.metadata['image_matches']):
+                            # Handle both dict and object formats
+                            if isinstance(match_data, dict):
+                                ocr_result = match_data.get('ocr_result', {})
+                                pattern_name = match_data.get('pattern', 'Unknown')
+                                matched_text = ocr_result.get('text', 'Unknown') if isinstance(ocr_result, dict) else 'Unknown'
+                                replacement_text = match_data.get('replacement_text', 'N/A')
+                                confidence = ocr_result.get('confidence', 0.0) if isinstance(ocr_result, dict) else 0.0
+                                bbox_obj = ocr_result.get('bounding_box', {}) if isinstance(ocr_result, dict) else {}
+                                # Convert bounding box object to list format
+                                if isinstance(bbox_obj, dict):
+                                    bbox = [bbox_obj.get('x', 0), bbox_obj.get('y', 0), bbox_obj.get('width', 0), bbox_obj.get('height', 0)]
+                                else:
+                                    bbox = [0, 0, 0, 0]
+                                wipe_boundaries = match_data.get('wipe_boundaries')
+                                calculated_text_boundary = match_data.get('calculated_text_boundary')
+                                processing_mode = match_data.get('processing_mode', 'wipe')
+                                # Use extracted pattern text if available, otherwise use original text
+                                extracted_pattern_text = match_data.get('extracted_pattern_text', matched_text)
+                            else:
+                                # Handle object format
+                                ocr_result = getattr(match_data, 'ocr_result', None)
+                                pattern_name = getattr(match_data, 'pattern', 'Unknown')
+                                matched_text = getattr(ocr_result, 'text', 'Unknown') if ocr_result else 'Unknown'
+                                replacement_text = getattr(match_data, 'replacement_text', 'N/A')
+                                confidence = getattr(ocr_result, 'confidence', 0.0) if ocr_result else 0.0
+                                bbox_obj = getattr(ocr_result, 'bounding_box', {}) if ocr_result else {}
+                                # Convert bounding box object to list format
+                                if hasattr(bbox_obj, 'x') and hasattr(bbox_obj, 'y') and hasattr(bbox_obj, 'width') and hasattr(bbox_obj, 'height'):
+                                    bbox = [bbox_obj.x, bbox_obj.y, bbox_obj.width, bbox_obj.height]
+                                else:
+                                    bbox = [0, 0, 0, 0]
+                                wipe_boundaries = getattr(match_data, 'wipe_boundaries', None)
+                                calculated_text_boundary = getattr(match_data, 'calculated_text_boundary', None)
+                                processing_mode = getattr(match_data, 'processing_mode', 'wipe')
+                                # Use extracted pattern text if available, otherwise use original text
+                                extracted_pattern_text = getattr(match_data, 'extracted_pattern_text', matched_text)
+                            
+                            # Use the extracted pattern text for display and matching
+                            display_text = extracted_pattern_text if extracted_pattern_text else matched_text
+                            
+                            # Determine if this is a match based on whether replacement_text is not the default
+                            is_matched = replacement_text != self.config.default_mapping
+                            matched_pattern = pattern_name if is_matched else 'Unknown'
+                            
+                            # Create unified detection format
+                            unified_detection = {
+                                'pattern_name': matched_pattern or 'Unknown',
+                                'actual_pattern': matched_pattern or 'Unknown',
+                                'matched_text': display_text,  # Use extracted pattern text for display
+                                'extracted_pattern_text': extracted_pattern_text,  # Store the extracted pattern text
+                                'original_text': matched_text,  # Store the original OCR text
+                                'start_pos': f"Image_{i+1}",
+                                'end_pos': f"Image_{i+1}",
+                                'replacement_text': replacement_text,
+                                'location': 'Image',
+                                'content_type': 'Image',  # These are image detections
+                                'dimension': f"{bbox[2]}x{bbox[3]} pixels" if len(bbox) >= 4 else "Unknown",
+                                'processor': 'Image',  # These are image detections
+                                'is_matched': is_matched,  # Add match status
+                                'font_info': {
+                                    'font_family': 'OCR Detected',
+                                    'font_size': f"{confidence:.2f}",
+                                    'font_color': '000000'
+                                },
+                                # Add image-specific fields for wipe boundaries
+                                'wipe_boundaries': wipe_boundaries,
+                                'calculated_text_boundary': calculated_text_boundary,
+                                'processing_mode': processing_mode,
+                                'confidence': confidence,
+                                'bounding_box': bbox
+                            }
+                            
+                            # Initialize all_detections if it doesn't exist
+                            if 'all_detections' not in pipeline_results:
+                                pipeline_results['all_detections'] = []
+                            
+                            # Add unified detection to all_detections
+                            pipeline_results['all_detections'].append(unified_detection)
+                            logger.debug(f"Added image detection {i+1} to all_detections: {matched_text}")
+                    
+                    # Add image matches to all_matches if available
+                    if image_result.metadata and 'detailed_matches' in image_result.metadata:
+                        pipeline_results['all_matches'].extend(image_result.metadata['detailed_matches'])
+                    
+                    logger.info(f"Image processing completed: {image_result.matches_found} matches")
+                else:
+                    error_msg = f"Image processing failed: {image_result.error_message}"
+                    processing_log.add_error(error_msg)
+                    logger.error(error_msg)
+            except Exception as e:
+                error_msg = f"Image processing failed with exception: {e}"
+                processing_log.add_error(error_msg)
+                logger.error(error_msg)
+        else:
+            logger.debug("Image processor not available, skipping image processing")
 
         
         logger.info(f"Pipeline processing completed: {pipeline_results['total_matches']} total matches")
@@ -805,7 +929,8 @@ class DocumentProcessor:
             self.processing_stats['failed_processing'] += 1
     
     def set_processors(self, text_processor: Optional[BaseProcessor] = None,
-                      graphics_processor: Optional[BaseProcessor] = None):
+                      graphics_processor: Optional[BaseProcessor] = None,
+                      image_processor: Optional[BaseProcessor] = None):
         """
         Set processor instances for the document processor.
         
@@ -819,6 +944,7 @@ class DocumentProcessor:
         """
         self.text_processor = text_processor
         self.graphics_processor = graphics_processor
+        self.image_processor = image_processor
         
         logger.info("Processors updated in document processor")
     
@@ -860,10 +986,13 @@ class DocumentProcessor:
             self.text_processor.cleanup()
         if self.graphics_processor:
             self.graphics_processor.cleanup()
+        if self.image_processor:
+            self.image_processor.cleanup()
         
         # Clear references
         self.text_processor = None
         self.graphics_processor = None
+        self.image_processor = None
         
         logger.info("Document processor cleanup completed")
 
