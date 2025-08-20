@@ -1356,7 +1356,7 @@ class ReportGenerator:
             # Create enhanced table with container
             html = f"""
             <div class="table-header">
-                <h3>🔍 All Detections</h3>
+                <h3>All Detections</h3>
                 <div class="table-stats">
                     Total detections: {len(all_detections)} | Processed: {len(processed_texts)} | Skipped: {len(all_detections) - len(processed_texts)}
                 </div>

@@ -28,22 +28,22 @@ class PreciseAppendReplacer:
     def __init__(self, pattern_matcher: PatternMatcher):
         """Initialize hybrid append replacer."""
         self.pattern_matcher = pattern_matcher
-        logger.info("🔧 PreciseAppendReplacer initialized with hybrid OpenCV+mapping approach")
+        logger.info(" PreciseAppendReplacer initialized with hybrid OpenCV+mapping approach")
     
     def replace_text_in_image(self, image_path: Path, ocr_results: List[OCRResult], ocr_matches: List[OCRMatch]) -> Optional[Path]:
         """Replace text in image using hybrid OpenCV + mapping approach."""
         try:
-            logger.info(f"🔧 HYBRID APPEND: Processing {image_path} with {len(ocr_matches)} matches")
+            logger.info(f" HYBRID APPEND: Processing {image_path} with {len(ocr_matches)} matches")
             
             # Convert to OpenCV format
             cv_image = cv2.imread(str(image_path))
             if cv_image is None:
-                logger.error(f"🔧 HYBRID APPEND: Could not load image {image_path}")
+                logger.error(f" HYBRID APPEND: Could not load image {image_path}")
                 return None
             
             # Process each match using hybrid approach
             for i, match in enumerate(ocr_matches):
-                logger.info(f"🔧 HYBRID APPEND: Processing match {i}: '{match.ocr_result.text}' -> '{match.replacement_text}'")
+                logger.info(f" HYBRID APPEND: Processing match {i}: '{match.ocr_result.text}' -> '{match.replacement_text}'")
                 
                 # Apply hybrid append replacement
                 cv_image = self._apply_hybrid_append(cv_image, match, ocr_results)
@@ -52,11 +52,11 @@ class PreciseAppendReplacer:
             output_path = self._generate_output_path(image_path)
             cv2.imwrite(str(output_path), cv_image)
             
-            logger.info(f"🔧 HYBRID APPEND: Saved result to {output_path}")
+            logger.info(f" HYBRID APPEND: Saved result to {output_path}")
             return output_path
             
         except Exception as e:
-            logger.error(f"🔧 HYBRID APPEND: Error processing {image_path}: {e}")
+            logger.error(f" HYBRID APPEND: Error processing {image_path}: {e}")
             return None
     
     def _apply_hybrid_append(self, cv_image: np.ndarray, match: OCRMatch, all_ocr_results: List[OCRResult]) -> np.ndarray:
@@ -78,24 +78,24 @@ class PreciseAppendReplacer:
             
             x, y, width, height = bbox
             
-            logger.info(f"🔧 HYBRID APPEND: Bbox: {bbox}, Full OCR: '{original_full_text}', Replacement: '{replacement_text}'")
+            logger.info(f" HYBRID APPEND: Bbox: {bbox}, Full OCR: '{original_full_text}', Replacement: '{replacement_text}'")
             
             # Use our pattern matcher to find the exact pattern within the OCR text
             pattern_matches = self.pattern_matcher.find_matches_universal(original_full_text)
             if not pattern_matches:
-                logger.warning(f"🔧 HYBRID APPEND: No pattern found in '{original_full_text}'")
+                logger.warning(f" HYBRID APPEND: No pattern found in '{original_full_text}'")
                 return cv_image
             
             # Use the first match found
             first_match = pattern_matches[0]
             matched_pattern = first_match.matched_text
-            logger.info(f"🔧 HYBRID APPEND: Found pattern: '{matched_pattern}' (pattern: {first_match.pattern_name})")
+            logger.info(f" HYBRID APPEND: Found pattern: '{matched_pattern}' (pattern: {first_match.pattern_name})")
             
             # Draw the appended text either side-by-side or top/down without erasing originals
             return self._draw_appended_text(cv_image, bbox, original_full_text, matched_pattern, replacement_text, all_ocr_results)
             
         except Exception as e:
-            logger.error(f"🔧 HYBRID APPEND: Error in hybrid append: {e}")
+            logger.error(f" HYBRID APPEND: Error in hybrid append: {e}")
             return cv_image
     
     def _apply_opencv_replacement(self, cv_image: np.ndarray, bbox: Tuple[int, int, int, int],
@@ -105,7 +105,7 @@ class PreciseAppendReplacer:
         """
         try:
             x, y, width, height = bbox
-            logger.info(f"🔧 OPENCV REPLACE: Replacing '{original_text}' with '{new_text}' at bbox {bbox}")
+            logger.info(f" OPENCV REPLACE: Replacing '{original_text}' with '{new_text}' at bbox {bbox}")
 
             # Wipe original text area
             cv2.rectangle(cv_image, (x, y), (x + width, y + height), (255, 255, 255), -1)
@@ -135,10 +135,10 @@ class PreciseAppendReplacer:
 
             cv2.putText(cv_image, new_text, (text_x, text_y), font, font_scale, (0, 0, 0), thickness, cv2.LINE_AA)
 
-            logger.info(f"🔧 OPENCV REPLACE: Successfully placed text at ({text_x}, {text_y}), font_scale={font_scale}")
+            logger.info(f" OPENCV REPLACE: Successfully placed text at ({text_x}, {text_y}), font_scale={font_scale}")
             return cv_image
         except Exception as e:
-            logger.error(f"🔧 OPENCV REPLACE: Error in OpenCV replacement: {e}")
+            logger.error(f" OPENCV REPLACE: Error in OpenCV replacement: {e}")
             return cv_image
 
     def _compute_fitting_scale(self, text: str, max_width: int, max_height: int,
@@ -184,7 +184,7 @@ class PreciseAppendReplacer:
         # Draw text with enhanced anti-aliasing
         cv2.putText(image, text, (x0, y_baseline), font, font_scale, (0, 0, 0), thickness, cv2.LINE_AA)
         
-        logger.debug(f"🔧 DRAW TEXT: '{text}' at ({x0}, {y_baseline}) with bg ({tlx}, {tly}) to ({brx}, {bry})")
+        logger.debug(f" DRAW TEXT: '{text}' at ({x0}, {y_baseline}) with bg ({tlx}, {tly}) to ({brx}, {bry})")
 
     def _draw_text_plain(self, image: np.ndarray, text: str, origin: Tuple[int, int],
                          font_scale: float, thickness: int = 1,
@@ -219,7 +219,7 @@ class PreciseAppendReplacer:
                 full_len = max(len(original_full_text), 1)
                 start_idx = original_full_text.find(matched_pattern)
                 if start_idx < 0:
-                    logger.warning("🔧 HYBRID APPEND: matched pattern not found in full text; fallback to below layout")
+                    logger.warning(" HYBRID APPEND: matched pattern not found in full text; fallback to below layout")
                     start_idx = 0
                 end_idx = start_idx + len(matched_pattern)
                 proportion_end = min(max(end_idx / full_len, 0.0), 1.0)
@@ -268,7 +268,7 @@ class PreciseAppendReplacer:
                 return cv_image
 
             # ENHANCED: Use precise wipe boundaries to avoid wiping suffix
-            logger.info(f"🔧 PRECISE APPEND: Processing '{original_full_text}' -> pattern '{matched_pattern}' + replacement '{replacement_text}'")
+            logger.info(f" PRECISE APPEND: Processing '{original_full_text}' -> pattern '{matched_pattern}' + replacement '{replacement_text}'")
 
             # Debug the text analysis
             self._debug_text_analysis(original_full_text, matched_pattern)
@@ -286,7 +286,7 @@ class PreciseAppendReplacer:
             )
             
             if precise_wipe_rect is None:
-                logger.warning("🔧 PRECISE APPEND: Could not calculate precise wipe rect, using fallback")
+                logger.warning(" PRECISE APPEND: Could not calculate precise wipe rect, using fallback")
                 # Fallback to original method
                 clear_rect = self._compute_clear_rect(
                     (x, y, width, height), pattern_rect, next_token_left_x, all_ocr_results,
@@ -296,8 +296,8 @@ class PreciseAppendReplacer:
 
             # ULTRA-CONSERVATIVE WIPE: Only clear the exact pattern area
             wx, wy, ww, wh = precise_wipe_rect
-            logger.info(f"🔧 PRECISE APPEND: Wiping ONLY pattern area: ({wx}, {wy}, {ww}, {wh})")
-            logger.info(f"🔧 PRECISE APPEND: Original bbox: ({x}, {y}, {width}, {height})")
+            logger.info(f" PRECISE APPEND: Wiping ONLY pattern area: ({wx}, {wy}, {ww}, {wh})")
+            logger.info(f" PRECISE APPEND: Original bbox: ({x}, {y}, {width}, {height})")
             
             # CONSERVATIVE: Single-pass clearing to avoid over-wiping
             cv2.rectangle(cv_image, (wx, wy), (wx + ww, wy + wh), (255, 255, 255), -1)
@@ -311,28 +311,28 @@ class PreciseAppendReplacer:
             token_4022 = self._extract_4022_token(replacement_text) or replacement_text
 
             # VERTICAL STACKING: Place tokens in the wiped area
-            logger.info(f"🔧 PRECISE APPEND: Placing tokens '{token_77}' and '{token_4022}' vertically in wiped area")
+            logger.info(f" PRECISE APPEND: Placing tokens '{token_77}' and '{token_4022}' vertically in wiped area")
             
             expanded_precise_rect = self._expand_rect_into_whitespace(cv_image, precise_wipe_rect, all_ocr_results, anchor_bbox=bbox)
             placed = self._place_two_tokens_in_rect(cv_image, expanded_precise_rect, token_77, token_4022, prefer_vertical=False, anchor_limit_rect=bbox)
             if not placed:
-                logger.warning(f"🔧 PRECISE APPEND: Two-token placement failed, trying single text fallback")
+                logger.warning(f" PRECISE APPEND: Two-token placement failed, trying single text fallback")
                 joined = f"{token_77} {token_4022}".strip()
                 self._place_single_text_in_rect(cv_image, expanded_precise_rect, joined)
             else:
-                logger.info(f"🔧 PRECISE APPEND: Successfully placed two tokens vertically")
+                logger.info(f" PRECISE APPEND: Successfully placed two tokens vertically")
 
             # PRESERVE SUFFIX: Always redraw suffix to ensure it's visible
             if suffix_text.strip():
-                logger.info(f"🔧 PRECISE APPEND: Redrawing suffix '{suffix_text}' to ensure preservation")
+                logger.info(f" PRECISE APPEND: Redrawing suffix '{suffix_text}' to ensure preservation")
                 self._redraw_suffix_if_needed(cv_image, (x, y, width, height), suffix_text, wipe_end_pos, original_full_text)
             else:
-                logger.info(f"🔧 PRECISE APPEND: No suffix to preserve")
+                logger.info(f" PRECISE APPEND: No suffix to preserve")
             
             return cv_image
 
         except Exception as e:
-            logger.error(f"🔧 HYBRID APPEND: Error drawing appended text: {e}")
+            logger.error(f" HYBRID APPEND: Error drawing appended text: {e}")
             return cv_image
     
     def _find_precise_wipe_boundaries(self, full_text: str, matched_pattern: str) -> Tuple[int, int]:
@@ -344,7 +344,7 @@ class PreciseAppendReplacer:
             # Find the matched pattern position
             pattern_start = full_text.find(matched_pattern)
             if pattern_start == -1:
-                logger.warning(f"🔧 WIPE BOUNDARIES: Pattern '{matched_pattern}' not found in '{full_text}'")
+                logger.warning(f" WIPE BOUNDARIES: Pattern '{matched_pattern}' not found in '{full_text}'")
                 return 0, len(full_text)
             
             pattern_end = pattern_start + len(matched_pattern)
@@ -358,12 +358,12 @@ class PreciseAppendReplacer:
             pattern_text = full_text[wipe_start:wipe_end]
             suffix_text = full_text[wipe_end:]
             
-            logger.info(f"🔧 WIPE BOUNDARIES: Full text: '{full_text}'")
-            logger.info(f"🔧 WIPE BOUNDARIES: Pattern: '{matched_pattern}' at {pattern_start}-{pattern_end}")
-            logger.info(f"🔧 WIPE BOUNDARIES: PRESERVE prefix: '{prefix_text}'")
-            logger.info(f"🔧 WIPE BOUNDARIES: WIPE pattern: '{pattern_text}'")
-            logger.info(f"🔧 WIPE BOUNDARIES: PRESERVE suffix: '{suffix_text}'")
-            logger.info(f"🔧 WIPE BOUNDARIES: Wipe boundaries: {wipe_start} to {wipe_end}")
+            logger.info(f" WIPE BOUNDARIES: Full text: '{full_text}'")
+            logger.info(f" WIPE BOUNDARIES: Pattern: '{matched_pattern}' at {pattern_start}-{pattern_end}")
+            logger.info(f" WIPE BOUNDARIES: PRESERVE prefix: '{prefix_text}'")
+            logger.info(f" WIPE BOUNDARIES: WIPE pattern: '{pattern_text}'")
+            logger.info(f" WIPE BOUNDARIES: PRESERVE suffix: '{suffix_text}'")
+            logger.info(f" WIPE BOUNDARIES: Wipe boundaries: {wipe_start} to {wipe_end}")
             
             return wipe_start, wipe_end
             
@@ -408,9 +408,9 @@ class PreciseAppendReplacer:
             wipe_height = min(wipe_height, img_h - wipe_y)
             wipe_width = min(wipe_width, img_w - wipe_start_x)
             
-            logger.info(f"🔧 WIPE RECT: Calculated precise wipe area: ({wipe_start_x}, {wipe_y}, {wipe_width}, {wipe_height})")
-            logger.info(f"🔧 WIPE RECT: Character positions {wipe_start}-{wipe_end} -> pixels {wipe_start_x}-{wipe_end_x}")
-            logger.info(f"🔧 WIPE RECT: Original bbox: ({x}, {y}, {width}, {height})")
+            logger.info(f" WIPE RECT: Calculated precise wipe area: ({wipe_start_x}, {wipe_y}, {wipe_width}, {wipe_height})")
+            logger.info(f" WIPE RECT: Character positions {wipe_start}-{wipe_end} -> pixels {wipe_start_x}-{wipe_end_x}")
+            logger.info(f" WIPE RECT: Original bbox: ({x}, {y}, {width}, {height})")
             
             return (wipe_start_x, wipe_y, wipe_width, wipe_height)
             
@@ -426,7 +426,7 @@ class PreciseAppendReplacer:
         """
         try:
             if not suffix_text.strip():
-                logger.info("🔧 SUFFIX REDRAW: No suffix text to redraw")
+                logger.info(" SUFFIX REDRAW: No suffix text to redraw")
                 return
                 
             x, y, width, height = bbox
@@ -448,12 +448,12 @@ class PreciseAppendReplacer:
             suffix_x = max(0, min(suffix_x, img_w - 50))  # Leave some margin
             suffix_y = max(15, min(suffix_y, img_h - 5))
             
-            logger.info(f"🔧 SUFFIX REDRAW: Drawing '{suffix_text}' at ({suffix_x}, {suffix_y}) with scale {font_scale}")
+            logger.info(f" SUFFIX REDRAW: Drawing '{suffix_text}' at ({suffix_x}, {suffix_y}) with scale {font_scale}")
             
             # Draw suffix with enhanced background clearing
             self._draw_text_with_bg(cv_image, suffix_text, (suffix_x, suffix_y), font_scale, thickness, font, padding=3)
             
-            logger.info(f"🔧 SUFFIX REDRAW: Successfully drew suffix '{suffix_text}'")
+            logger.info(f" SUFFIX REDRAW: Successfully drew suffix '{suffix_text}'")
             
         except Exception as e:
             logger.error(f"Failed to redraw suffix: {e}")
@@ -461,20 +461,20 @@ class PreciseAppendReplacer:
     def _debug_text_analysis(self, full_text: str, matched_pattern: str) -> None:
         """Debug helper to analyze text parsing."""
         try:
-            logger.info(f"🔧 DEBUG: Full text analysis:")
-            logger.info(f"🔧 DEBUG: Full text: '{full_text}' (length: {len(full_text)})")
-            logger.info(f"🔧 DEBUG: Matched pattern: '{matched_pattern}' (length: {len(matched_pattern)})")
+            logger.info(f" DEBUG: Full text analysis:")
+            logger.info(f" DEBUG: Full text: '{full_text}' (length: {len(full_text)})")
+            logger.info(f" DEBUG: Matched pattern: '{matched_pattern}' (length: {len(matched_pattern)})")
             
             pattern_pos = full_text.find(matched_pattern)
             if pattern_pos != -1:
                 before = full_text[:pattern_pos]
                 after = full_text[pattern_pos + len(matched_pattern):]
-                logger.info(f"🔧 DEBUG: Before pattern: '{before}'")
-                logger.info(f"🔧 DEBUG: Pattern: '{matched_pattern}'")
-                logger.info(f"🔧 DEBUG: After pattern: '{after}'")
-                logger.info(f"🔧 DEBUG: Pattern position: {pattern_pos} to {pattern_pos + len(matched_pattern)}")
+                logger.info(f" DEBUG: Before pattern: '{before}'")
+                logger.info(f" DEBUG: Pattern: '{matched_pattern}'")
+                logger.info(f" DEBUG: After pattern: '{after}'")
+                logger.info(f" DEBUG: Pattern position: {pattern_pos} to {pattern_pos + len(matched_pattern)}")
             else:
-                logger.warning(f"🔧 DEBUG: Pattern '{matched_pattern}' not found in '{full_text}'")
+                logger.warning(f" DEBUG: Pattern '{matched_pattern}' not found in '{full_text}'")
                 
         except Exception as e:
             logger.error(f"Debug analysis failed: {e}")
@@ -671,7 +671,7 @@ class PreciseAppendReplacer:
         x, y, w, h = anchor_bbox
         img_h, img_w = img_shape
         
-        logger.info(f"🔧 CLEAR RECT: Computing clear area for pattern '{matched_pattern}' in bbox {anchor_bbox}")
+        logger.info(f" CLEAR RECT: Computing clear area for pattern '{matched_pattern}' in bbox {anchor_bbox}")
         
         if pattern_rect is None:
             # Estimate exact horizontal span using character proportions inside bbox
@@ -693,7 +693,7 @@ class PreciseAppendReplacer:
             cw = min(clear_width, x + w - cx + 10)  # Allow slight overflow to right
             ch = min(clear_height, img_h - cy)  # Use available height
             
-            logger.info(f"🔧 CLEAR RECT: Proportional estimate - left: {est_left}, right: {est_right}")
+            logger.info(f" CLEAR RECT: Proportional estimate - left: {est_left}, right: {est_right}")
         else:
             px, py, pw, ph = pattern_rect
             
@@ -714,7 +714,7 @@ class PreciseAppendReplacer:
             
             cx, cy, cw, ch = left, top, max(10, right - left), max(10, bottom - top)
             
-            logger.info(f"🔧 CLEAR RECT: Pattern-based - px: {px}, py: {py}, pw: {pw}, ph: {ph}")
+            logger.info(f" CLEAR RECT: Pattern-based - px: {px}, py: {py}, pw: {pw}, ph: {ph}")
 
         # ENHANCED: More conservative overlap avoidance - only avoid critical overlaps
         # Allow some overlap with distant text to ensure complete clearing
@@ -750,7 +750,7 @@ class PreciseAppendReplacer:
         cw = max(10, min(cw, img_w - cx))
         ch = max(10, min(ch, img_h - cy))
         
-        logger.info(f"🔧 CLEAR RECT: Final clear area: ({cx}, {cy}, {cw}, {ch})")
+        logger.info(f" CLEAR RECT: Final clear area: ({cx}, {cy}, {cw}, {ch})")
         return cx, cy, cw, ch
 
     def _rects_intersect(self, a: Tuple[int, int, int, int], b: Tuple[int, int, int, int]) -> bool:
@@ -882,7 +882,7 @@ class PreciseAppendReplacer:
         font = cv2.FONT_HERSHEY_SIMPLEX
         thickness = 1
         
-        logger.info(f"🔧 SINGLE TEXT: Placing '{text}' in rect ({x}, {y}, {w}, {h})")
+        logger.info(f" SINGLE TEXT: Placing '{text}' in rect ({x}, {y}, {w}, {h})")
         
         # ENHANCED: Better font scaling with higher minimum size
         scale, size = self._compute_fitting_scale(text, w - 6, h - 6, base_scale=1.2, min_scale=0.4, thickness=thickness, font=font)
@@ -895,7 +895,7 @@ class PreciseAppendReplacer:
         tx = max(x + 2, min(tx, x + w - size[0] - 2))
         ty = max(y + size[1] + 2, min(ty, y + h - 2))
         
-        logger.info(f"🔧 SINGLE TEXT: Positioned at ({tx}, {ty}) with scale {scale:.2f}")
+        logger.info(f" SINGLE TEXT: Positioned at ({tx}, {ty}) with scale {scale:.2f}")
         
         # Draw with enhanced background clearing
         self._draw_text_with_bg(image, text, (tx, ty), scale, thickness, font, padding=4)
@@ -909,7 +909,7 @@ class PreciseAppendReplacer:
         font = cv2.FONT_HERSHEY_SIMPLEX
         thickness = 1
 
-        logger.info(f"🔧 PLACE TOKENS: Placing '{t1}' and '{t2}' in rect ({x}, {y}, {w}, {h})")
+        logger.info(f" PLACE TOKENS: Placing '{t1}' and '{t2}' in rect ({x}, {y}, {w}, {h})")
 
         padding = 2
         gap_min = max(2, int(h * 0.04))
@@ -999,7 +999,7 @@ class PreciseAppendReplacer:
             ty1 = max(y + v_sz1[1] + 1, min(ty1, y + h - padding))
             ty2 = max(y + v_sz2[1] + 1, min(ty2, y + h - padding))
 
-            logger.info(f"🔧 VERTICAL STACK (common font): scale={v_scale:.2f}, L1 at ({tx1},{ty1}), L2 at ({tx2},{ty2})")
+            logger.info(f" VERTICAL STACK (common font): scale={v_scale:.2f}, L1 at ({tx1},{ty1}), L2 at ({tx2},{ty2})")
             # Ensure the entire rect is white once; avoid per-line bg overlap
             cv2.rectangle(image, (x, y), (x + w, y + h), (255, 255, 255), -1)
             self._draw_text_plain(image, t1, (tx1, ty1), v_scale, thickness, font)
@@ -1031,7 +1031,7 @@ class PreciseAppendReplacer:
             tx = x + (w - h_sz[0]) // 2
             tx = max(x + padding, min(tx, x + w - h_sz[0] - padding))
             ty = max(y + h_sz[1] + padding, min(ty, y + h - padding))
-            logger.info(f"🔧 HORIZONTAL (max font): scale={h_scale:.2f}, at ({tx},{ty})")
+            logger.info(f" HORIZONTAL (max font): scale={h_scale:.2f}, at ({tx},{ty})")
             self._draw_text_with_bg(image, joined, (tx, ty), h_scale, thickness, font, padding=3)
             reasoning = {
                 'algorithm': 'Rect-fit (binary search)',
@@ -1046,7 +1046,7 @@ class PreciseAppendReplacer:
                 pass
             return True
 
-        logger.warning(f"🔧 PLACE TOKENS: Could not fit both tokens in rect ({x}, {y}, {w}, {h})")
+        logger.warning(f" PLACE TOKENS: Could not fit both tokens in rect ({x}, {y}, {w}, {h})")
         return False
 
     def _generate_output_path(self, input_path: Path) -> Path:

@@ -770,18 +770,18 @@ class ImageTextReplacer:
         try:
             # Handle append mode separately to avoid impacting replace mode
             if self.mode == "append" and self.precise_append_replacer:
-                logger.info(f"🔧 APPEND MODE: Using simplified append mode with {len(ocr_matches)} matches")
+                logger.info(f"APPEND MODE: Using simplified append mode with {len(ocr_matches)} matches")
                 
                 # Extract OCR results from matches for the append replacer
                 ocr_results = [match.ocr_result for match in ocr_matches]
                 
                 # Log the matches for debugging
                 for i, match in enumerate(ocr_matches):
-                    logger.info(f"🔧 APPEND MODE: Match {i} - OCR: '{match.ocr_result.text}' -> Replacement: '{match.replacement_text}'")
+                    logger.info(f"APPEND MODE: Match {i} - OCR: '{match.ocr_result.text}' -> Replacement: '{match.replacement_text}'")
                 
                 # Use the simplified append replacer that actually works
                 result = self.precise_append_replacer.replace_text_in_image(image_path, ocr_results, ocr_matches)
-                logger.info(f"🔧 APPEND MODE: Simple append replacer result: {result}")
+                logger.info(f"APPEND MODE: Simple append replacer result: {result}")
                 return result
             
             # Original replace mode logic (unchanged)
@@ -1197,7 +1197,7 @@ class ImageProcessor:
                             match.image_path = image_to_insert
                         
                         final_matches.extend(matches)
-                        logger.info(f"✅ RECONSTRUCTED: {len(matches)} matches in {image_info['location']}")
+                        logger.info(f"RECONSTRUCTED: {len(matches)} matches in {image_info['location']}")
                     else:
                         logger.warning(f"Failed to reconstruct image in document for {image_info['location']}")
                 else:

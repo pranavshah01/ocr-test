@@ -109,7 +109,7 @@ def discover_documents(config_obj) -> List[Path]:
     Returns:
         List of document paths to process
     """
-    logger.info("🔍 DISCOVERING DOCUMENTS")
+    logger.info("DISCOVERING DOCUMENTS")
     
     source_dir = Path(config_obj.source_dir)
     if not source_dir.exists():
@@ -148,7 +148,7 @@ def create_processor_factory(config_obj) -> Dict[str, Any]:
     Returns:
         Dictionary containing processor instances
     """
-    logger.info("🔄 CREATING PROCESSORS")
+    logger.info("CREATING PROCESSORS")
     
     processors = {}
     
@@ -177,11 +177,11 @@ def create_processor_factory(config_obj) -> Dict[str, Any]:
         if text_processor:
             text_processor.initialize()
             processors['text'] = text_processor
-            logger.info("✅ Text processor created and initialized")
+            logger.info("Text processor created and initialized")
         else:
-            logger.warning("⚠️ Text processor creation failed")
+            logger.warning("Text processor creation failed")
     except Exception as e:
-        logger.error(f"❌ Text processor creation failed: {e}")
+        logger.error(f"Text processor creation failed: {e}")
     
     # Create graphics processor
     try:
@@ -210,9 +210,9 @@ def create_processor_factory(config_obj) -> Dict[str, Any]:
         if graphics_processor:
             graphics_processor.initialize()
             processors['graphics'] = graphics_processor
-            logger.info("✅ Graphics processor created and initialized")
+            logger.info("Graphics processor created and initialized")
         else:
-            logger.warning("⚠️ Graphics processor not available (placeholder)")
+            logger.warning("Graphics processor not available (placeholder)")
     except Exception as e:
         logger.debug(f"Graphics processor not available: {e}")
     
@@ -231,9 +231,9 @@ def create_processor_factory(config_obj) -> Dict[str, Any]:
         if image_processor:
             image_processor.initialize()
             processors['image'] = image_processor
-            logger.info("✅ Image processor created and initialized")
+            logger.info("Image processor created and initialized")
         else:
-            logger.warning("⚠️ Image processor not available (placeholder)")
+            logger.warning("Image processor not available (placeholder)")
     except Exception as e:
         logger.debug(f"Image processor not available: {e}")
 
@@ -311,7 +311,7 @@ def main():
         # Start performance monitoring
         performance_monitor.start_monitoring()
         
-        logger.info("🚀 STARTING PROCESSING")
+        logger.info("STARTING PROCESSING")
         
         # Track start time for batch processing
         start_time = time.time()
@@ -334,12 +334,12 @@ def main():
                 results.append(result)
                 
                 if result.success:
-                    logger.info(f"✅ Successfully processed: {file_path.name}")
+                    logger.info(f"Successfully processed: {file_path.name}")
                 else:
-                    logger.warning(f"⚠️ Failed to process: {file_path.name} - {result.error_message}")
+                    logger.warning(f"Failed to process: {file_path.name} - {result.error_message}")
                 
             except Exception as e:
-                logger.error(f"❌ Unexpected error processing {file_path.name}: {e}")
+                logger.error(f"Unexpected error processing {file_path.name}: {e}")
                 
                 # Create a failed result
                 from app.core.processor_interface import ProcessingResult
@@ -376,7 +376,7 @@ def main():
             logger.warning(f"Error updating performance metrics: {e}")
         
         # Generate reports
-        logger.info("📊 GENERATING REPORTS")
+        logger.info("GENERATING REPORTS")
         report_generator = ReportGenerator(output_dir=config_obj.reports_dir, config=config_obj)
         
         try:
@@ -484,7 +484,7 @@ def main():
         except Exception as e:
             logger.warning(f"Cleanup failed: {e}")
         
-        logger.info("🎉 PIPELINE COMPLETED SUCCESSFULLY")
+        logger.info("PIPELINE COMPLETED SUCCESSFULLY")
         
     except KeyboardInterrupt:
         logger.info("Pipeline interrupted by user")

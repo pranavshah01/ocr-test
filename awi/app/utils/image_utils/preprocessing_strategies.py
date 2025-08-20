@@ -493,7 +493,7 @@ class PreprocessingStrategyManager:
             analysis_path = debug_dir / f"{base_name}_analysis.json"
             
             import json
-            with open(analysis_path, 'w') as f:
+            with open(analysis_path, 'w', encoding='utf-8') as f:
                 json.dump(analysis, f, indent=2)
             
             # Save variants

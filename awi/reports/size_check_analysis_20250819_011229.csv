@@ -1,0 +1,193 @@
+textbox_index,location,width_pt,height_pt,width_in,height_in,area_sq_in,font_family,detected_sizes,text_length,sample_text,font_size_pt,lines_fit,max_chars_per_line,total_chars_fit,chars_per_sq_in,fits_text_length
+0,textbox_0,112.0,34.5,1.56,0.48,0.74,Verdana,8.0,41,Testsnesromanfontsize1sse10sasdaasdasdasd,8.0,3,22,66,88.64,Y
+0,textbox_0,112.0,34.5,1.56,0.48,0.74,Verdana,8.0,41,Testsnesromanfontsize1sse10sasdaasdasdasd,6.0,4,30,120,161.16,Y
+0,textbox_0,112.0,34.5,1.56,0.48,0.74,Verdana,8.0,41,Testsnesromanfontsize1sse10sasdaasdasdasd,7.0,3,25,75,100.72,Y
+0,textbox_0,112.0,34.5,1.56,0.48,0.74,Verdana,8.0,41,Testsnesromanfontsize1sse10sasdaasdasdasd,9.0,2,20,40,53.72,N
+0,textbox_0,112.0,34.5,1.56,0.48,0.74,Verdana,8.0,41,Testsnesromanfontsize1sse10sasdaasdasdasd,10.0,2,18,36,48.35,N
+0,textbox_0,112.0,34.5,1.56,0.48,0.74,Verdana,8.0,41,Testsnesromanfontsize1sse10sasdaasdasdasd,11.0,2,16,32,42.97,N
+0,textbox_0,112.0,34.5,1.56,0.48,0.74,Verdana,8.0,41,Testsnesromanfontsize1sse10sasdaasdasdasd,12.0,2,15,30,40.29,N
+0,textbox_0,112.0,34.5,1.56,0.48,0.74,Verdana,8.0,41,Testsnesromanfontsize1sse10sasdaasdasdasd,14.0,1,12,12,16.12,N
+1,textbox_1,112.0,34.5,1.56,0.48,0.74,Verdana,8.0,41,Testsnesromanfontsize1sse10sasdaasdasdasd,8.0,3,22,66,88.64,Y
+1,textbox_1,112.0,34.5,1.56,0.48,0.74,Verdana,8.0,41,Testsnesromanfontsize1sse10sasdaasdasdasd,6.0,4,30,120,161.16,Y
+1,textbox_1,112.0,34.5,1.56,0.48,0.74,Verdana,8.0,41,Testsnesromanfontsize1sse10sasdaasdasdasd,7.0,3,25,75,100.72,Y
+1,textbox_1,112.0,34.5,1.56,0.48,0.74,Verdana,8.0,41,Testsnesromanfontsize1sse10sasdaasdasdasd,9.0,2,20,40,53.72,N
+1,textbox_1,112.0,34.5,1.56,0.48,0.74,Verdana,8.0,41,Testsnesromanfontsize1sse10sasdaasdasdasd,10.0,2,18,36,48.35,N
+1,textbox_1,112.0,34.5,1.56,0.48,0.74,Verdana,8.0,41,Testsnesromanfontsize1sse10sasdaasdasdasd,11.0,2,16,32,42.97,N
+1,textbox_1,112.0,34.5,1.56,0.48,0.74,Verdana,8.0,41,Testsnesromanfontsize1sse10sasdaasdasdasd,12.0,2,15,30,40.29,N
+1,textbox_1,112.0,34.5,1.56,0.48,0.74,Verdana,8.0,41,Testsnesromanfontsize1sse10sasdaasdasdasd,14.0,1,12,12,16.12,N
+2,textbox_2,112.0,34.5,1.56,0.48,0.74,Verdana,10.0,32,Testsnesromanfontsize1sse10sasda,10.0,2,18,36,48.35,Y
+2,textbox_2,112.0,34.5,1.56,0.48,0.74,Verdana,10.0,32,Testsnesromanfontsize1sse10sasda,6.0,4,30,120,161.16,Y
+2,textbox_2,112.0,34.5,1.56,0.48,0.74,Verdana,10.0,32,Testsnesromanfontsize1sse10sasda,7.0,3,25,75,100.72,Y
+2,textbox_2,112.0,34.5,1.56,0.48,0.74,Verdana,10.0,32,Testsnesromanfontsize1sse10sasda,8.0,3,22,66,88.64,Y
+2,textbox_2,112.0,34.5,1.56,0.48,0.74,Verdana,10.0,32,Testsnesromanfontsize1sse10sasda,9.0,2,20,40,53.72,Y
+2,textbox_2,112.0,34.5,1.56,0.48,0.74,Verdana,10.0,32,Testsnesromanfontsize1sse10sasda,11.0,2,16,32,42.97,Y
+2,textbox_2,112.0,34.5,1.56,0.48,0.74,Verdana,10.0,32,Testsnesromanfontsize1sse10sasda,12.0,2,15,30,40.29,N
+2,textbox_2,112.0,34.5,1.56,0.48,0.74,Verdana,10.0,32,Testsnesromanfontsize1sse10sasda,14.0,1,12,12,16.12,N
+3,textbox_3,112.0,34.5,1.56,0.48,0.74,Verdana,10.0,32,Testsnesromanfontsize1sse10sasda,10.0,2,18,36,48.35,Y
+3,textbox_3,112.0,34.5,1.56,0.48,0.74,Verdana,10.0,32,Testsnesromanfontsize1sse10sasda,6.0,4,30,120,161.16,Y
+3,textbox_3,112.0,34.5,1.56,0.48,0.74,Verdana,10.0,32,Testsnesromanfontsize1sse10sasda,7.0,3,25,75,100.72,Y
+3,textbox_3,112.0,34.5,1.56,0.48,0.74,Verdana,10.0,32,Testsnesromanfontsize1sse10sasda,8.0,3,22,66,88.64,Y
+3,textbox_3,112.0,34.5,1.56,0.48,0.74,Verdana,10.0,32,Testsnesromanfontsize1sse10sasda,9.0,2,20,40,53.72,Y
+3,textbox_3,112.0,34.5,1.56,0.48,0.74,Verdana,10.0,32,Testsnesromanfontsize1sse10sasda,11.0,2,16,32,42.97,Y
+3,textbox_3,112.0,34.5,1.56,0.48,0.74,Verdana,10.0,32,Testsnesromanfontsize1sse10sasda,12.0,2,15,30,40.29,N
+3,textbox_3,112.0,34.5,1.56,0.48,0.74,Verdana,10.0,32,Testsnesromanfontsize1sse10sasda,14.0,1,12,12,16.12,N
+4,textbox_4,112.0,34.5,1.56,0.48,0.74,Times New Roman,10.0,40,Testsnewromanfontsize10size10size10sasda,10.0,2,20,40,53.72,Y
+4,textbox_4,112.0,34.5,1.56,0.48,0.74,Times New Roman,10.0,40,Testsnewromanfontsize10size10size10sasda,6.0,4,33,132,177.27,Y
+4,textbox_4,112.0,34.5,1.56,0.48,0.74,Times New Roman,10.0,40,Testsnewromanfontsize10size10size10sasda,7.0,3,29,87,116.84,Y
+4,textbox_4,112.0,34.5,1.56,0.48,0.74,Times New Roman,10.0,40,Testsnewromanfontsize10size10size10sasda,8.0,3,25,75,100.72,Y
+4,textbox_4,112.0,34.5,1.56,0.48,0.74,Times New Roman,10.0,40,Testsnewromanfontsize10size10size10sasda,9.0,2,22,44,59.09,Y
+4,textbox_4,112.0,34.5,1.56,0.48,0.74,Times New Roman,10.0,40,Testsnewromanfontsize10size10size10sasda,11.0,2,18,36,48.35,N
+4,textbox_4,112.0,34.5,1.56,0.48,0.74,Times New Roman,10.0,40,Testsnewromanfontsize10size10size10sasda,12.0,2,16,32,42.97,N
+4,textbox_4,112.0,34.5,1.56,0.48,0.74,Times New Roman,10.0,40,Testsnewromanfontsize10size10size10sasda,14.0,1,14,14,18.80,N
+5,textbox_5,112.0,34.5,1.56,0.48,0.74,Times New Roman,10.0,40,Testsnewromanfontsize10size10size10sasda,10.0,2,20,40,53.72,Y
+5,textbox_5,112.0,34.5,1.56,0.48,0.74,Times New Roman,10.0,40,Testsnewromanfontsize10size10size10sasda,6.0,4,33,132,177.27,Y
+5,textbox_5,112.0,34.5,1.56,0.48,0.74,Times New Roman,10.0,40,Testsnewromanfontsize10size10size10sasda,7.0,3,29,87,116.84,Y
+5,textbox_5,112.0,34.5,1.56,0.48,0.74,Times New Roman,10.0,40,Testsnewromanfontsize10size10size10sasda,8.0,3,25,75,100.72,Y
+5,textbox_5,112.0,34.5,1.56,0.48,0.74,Times New Roman,10.0,40,Testsnewromanfontsize10size10size10sasda,9.0,2,22,44,59.09,Y
+5,textbox_5,112.0,34.5,1.56,0.48,0.74,Times New Roman,10.0,40,Testsnewromanfontsize10size10size10sasda,11.0,2,18,36,48.35,N
+5,textbox_5,112.0,34.5,1.56,0.48,0.74,Times New Roman,10.0,40,Testsnewromanfontsize10size10size10sasda,12.0,2,16,32,42.97,N
+5,textbox_5,112.0,34.5,1.56,0.48,0.74,Times New Roman,10.0,40,Testsnewromanfontsize10size10size10sasda,14.0,1,14,14,18.80,N
+6,textbox_6,130.5,52.8,1.81,0.73,1.33,Arial,6.0,209,"Test, aEarth-3asdaskjghjkhjghgjhghhjdddd77-110-120906-007s 4",6.0,6,36,216,162.36,Y
+6,textbox_6,130.5,52.8,1.81,0.73,1.33,Arial,6.0,209,"Test, aEarth-3asdaskjghjkhjghgjhghhjdddd77-110-120906-007s 4",7.0,5,31,155,116.51,N
+6,textbox_6,130.5,52.8,1.81,0.73,1.33,Arial,6.0,209,"Test, aEarth-3asdaskjghjkhjghgjhghhjdddd77-110-120906-007s 4",8.0,5,27,135,101.48,N
+6,textbox_6,130.5,52.8,1.81,0.73,1.33,Arial,6.0,209,"Test, aEarth-3asdaskjghjkhjghgjhghhjdddd77-110-120906-007s 4",9.0,4,24,96,72.16,N
+6,textbox_6,130.5,52.8,1.81,0.73,1.33,Arial,6.0,209,"Test, aEarth-3asdaskjghjkhjghgjhghhjdddd77-110-120906-007s 4",10.0,4,21,84,63.14,N
+6,textbox_6,130.5,52.8,1.81,0.73,1.33,Arial,6.0,209,"Test, aEarth-3asdaskjghjkhjghgjhghhjdddd77-110-120906-007s 4",11.0,3,19,57,42.85,N
+6,textbox_6,130.5,52.8,1.81,0.73,1.33,Arial,6.0,209,"Test, aEarth-3asdaskjghjkhjghgjhghhjdddd77-110-120906-007s 4",12.0,3,18,54,40.59,N
+6,textbox_6,130.5,52.8,1.81,0.73,1.33,Arial,6.0,209,"Test, aEarth-3asdaskjghjkhjghgjhghhjdddd77-110-120906-007s 4",14.0,2,15,30,22.55,N
+7,textbox_7,130.5,52.8,1.81,0.73,1.33,Arial,6.0,209,"Test, aEarth-3asdaskjghjkhjghgjhghhjdddd77-110-120906-007s 4",6.0,6,36,216,162.36,Y
+7,textbox_7,130.5,52.8,1.81,0.73,1.33,Arial,6.0,209,"Test, aEarth-3asdaskjghjkhjghgjhghhjdddd77-110-120906-007s 4",7.0,5,31,155,116.51,N
+7,textbox_7,130.5,52.8,1.81,0.73,1.33,Arial,6.0,209,"Test, aEarth-3asdaskjghjkhjghgjhghhjdddd77-110-120906-007s 4",8.0,5,27,135,101.48,N
+7,textbox_7,130.5,52.8,1.81,0.73,1.33,Arial,6.0,209,"Test, aEarth-3asdaskjghjkhjghgjhghhjdddd77-110-120906-007s 4",9.0,4,24,96,72.16,N
+7,textbox_7,130.5,52.8,1.81,0.73,1.33,Arial,6.0,209,"Test, aEarth-3asdaskjghjkhjghgjhghhjdddd77-110-120906-007s 4",10.0,4,21,84,63.14,N
+7,textbox_7,130.5,52.8,1.81,0.73,1.33,Arial,6.0,209,"Test, aEarth-3asdaskjghjkhjghgjhghhjdddd77-110-120906-007s 4",11.0,3,19,57,42.85,N
+7,textbox_7,130.5,52.8,1.81,0.73,1.33,Arial,6.0,209,"Test, aEarth-3asdaskjghjkhjghgjhghhjdddd77-110-120906-007s 4",12.0,3,18,54,40.59,N
+7,textbox_7,130.5,52.8,1.81,0.73,1.33,Arial,6.0,209,"Test, aEarth-3asdaskjghjkhjghgjhghhjdddd77-110-120906-007s 4",14.0,2,15,30,22.55,N
+8,textbox_8,130.5,52.8,1.81,0.73,1.33,Arial,12.0,57,"Test, asEarth-3asdas77-110-120906-007s 4022-122-1124345ss",12.0,3,18,54,40.59,N
+8,textbox_8,130.5,52.8,1.81,0.73,1.33,Arial,12.0,57,"Test, asEarth-3asdas77-110-120906-007s 4022-122-1124345ss",6.0,6,36,216,162.36,Y
+8,textbox_8,130.5,52.8,1.81,0.73,1.33,Arial,12.0,57,"Test, asEarth-3asdas77-110-120906-007s 4022-122-1124345ss",7.0,5,31,155,116.51,Y
+8,textbox_8,130.5,52.8,1.81,0.73,1.33,Arial,12.0,57,"Test, asEarth-3asdas77-110-120906-007s 4022-122-1124345ss",8.0,5,27,135,101.48,Y
+8,textbox_8,130.5,52.8,1.81,0.73,1.33,Arial,12.0,57,"Test, asEarth-3asdas77-110-120906-007s 4022-122-1124345ss",9.0,4,24,96,72.16,Y
+8,textbox_8,130.5,52.8,1.81,0.73,1.33,Arial,12.0,57,"Test, asEarth-3asdas77-110-120906-007s 4022-122-1124345ss",10.0,4,21,84,63.14,Y
+8,textbox_8,130.5,52.8,1.81,0.73,1.33,Arial,12.0,57,"Test, asEarth-3asdas77-110-120906-007s 4022-122-1124345ss",11.0,3,19,57,42.85,Y
+8,textbox_8,130.5,52.8,1.81,0.73,1.33,Arial,12.0,57,"Test, asEarth-3asdas77-110-120906-007s 4022-122-1124345ss",14.0,2,15,30,22.55,N
+9,textbox_9,130.5,52.8,1.81,0.73,1.33,Arial,12.0,57,"Test, asEarth-3asdas77-110-120906-007s 4022-122-1124345ss",12.0,3,18,54,40.59,N
+9,textbox_9,130.5,52.8,1.81,0.73,1.33,Arial,12.0,57,"Test, asEarth-3asdas77-110-120906-007s 4022-122-1124345ss",6.0,6,36,216,162.36,Y
+9,textbox_9,130.5,52.8,1.81,0.73,1.33,Arial,12.0,57,"Test, asEarth-3asdas77-110-120906-007s 4022-122-1124345ss",7.0,5,31,155,116.51,Y
+9,textbox_9,130.5,52.8,1.81,0.73,1.33,Arial,12.0,57,"Test, asEarth-3asdas77-110-120906-007s 4022-122-1124345ss",8.0,5,27,135,101.48,Y
+9,textbox_9,130.5,52.8,1.81,0.73,1.33,Arial,12.0,57,"Test, asEarth-3asdas77-110-120906-007s 4022-122-1124345ss",9.0,4,24,96,72.16,Y
+9,textbox_9,130.5,52.8,1.81,0.73,1.33,Arial,12.0,57,"Test, asEarth-3asdas77-110-120906-007s 4022-122-1124345ss",10.0,4,21,84,63.14,Y
+9,textbox_9,130.5,52.8,1.81,0.73,1.33,Arial,12.0,57,"Test, asEarth-3asdas77-110-120906-007s 4022-122-1124345ss",11.0,3,19,57,42.85,Y
+9,textbox_9,130.5,52.8,1.81,0.73,1.33,Arial,12.0,57,"Test, asEarth-3asdas77-110-120906-007s 4022-122-1124345ss",14.0,2,15,30,22.55,N
+10,textbox_10,112.0,38.5,1.56,0.53,0.83,Arial,10.0,34,Testl1212121212asdsdsdsdssdsasd000,10.0,2,18,36,43.29,Y
+10,textbox_10,112.0,38.5,1.56,0.53,0.83,Arial,10.0,34,Testl1212121212asdsdsdsdssdsasd000,6.0,4,31,124,149.12,Y
+10,textbox_10,112.0,38.5,1.56,0.53,0.83,Arial,10.0,34,Testl1212121212asdsdsdsdssdsasd000,7.0,4,26,104,125.07,Y
+10,textbox_10,112.0,38.5,1.56,0.53,0.83,Arial,10.0,34,Testl1212121212asdsdsdsdssdsasd000,8.0,3,23,69,82.98,Y
+10,textbox_10,112.0,38.5,1.56,0.53,0.83,Arial,10.0,34,Testl1212121212asdsdsdsdssdsasd000,9.0,3,20,60,72.16,Y
+10,textbox_10,112.0,38.5,1.56,0.53,0.83,Arial,10.0,34,Testl1212121212asdsdsdsdssdsasd000,11.0,2,16,32,38.48,N
+10,textbox_10,112.0,38.5,1.56,0.53,0.83,Arial,10.0,34,Testl1212121212asdsdsdsdssdsasd000,12.0,2,15,30,36.08,N
+10,textbox_10,112.0,38.5,1.56,0.53,0.83,Arial,10.0,34,Testl1212121212asdsdsdsdssdsasd000,14.0,2,13,26,31.27,N
+11,textbox_11,112.0,38.5,1.56,0.53,0.83,Arial,10.0,34,Testl1212121212asdsdsdsdssdsasd000,10.0,2,18,36,43.29,Y
+11,textbox_11,112.0,38.5,1.56,0.53,0.83,Arial,10.0,34,Testl1212121212asdsdsdsdssdsasd000,6.0,4,31,124,149.12,Y
+11,textbox_11,112.0,38.5,1.56,0.53,0.83,Arial,10.0,34,Testl1212121212asdsdsdsdssdsasd000,7.0,4,26,104,125.07,Y
+11,textbox_11,112.0,38.5,1.56,0.53,0.83,Arial,10.0,34,Testl1212121212asdsdsdsdssdsasd000,8.0,3,23,69,82.98,Y
+11,textbox_11,112.0,38.5,1.56,0.53,0.83,Arial,10.0,34,Testl1212121212asdsdsdsdssdsasd000,9.0,3,20,60,72.16,Y
+11,textbox_11,112.0,38.5,1.56,0.53,0.83,Arial,10.0,34,Testl1212121212asdsdsdsdssdsasd000,11.0,2,16,32,38.48,N
+11,textbox_11,112.0,38.5,1.56,0.53,0.83,Arial,10.0,34,Testl1212121212asdsdsdsdssdsasd000,12.0,2,15,30,36.08,N
+11,textbox_11,112.0,38.5,1.56,0.53,0.83,Arial,10.0,34,Testl1212121212asdsdsdsdssdsasd000,14.0,2,13,26,31.27,N
+12,textbox_12,112.0,38.5,1.56,0.53,0.83,Arial,11.0,32,Testl1212121212asdsasdsdsdsdsasd,11.0,2,16,32,38.48,Y
+12,textbox_12,112.0,38.5,1.56,0.53,0.83,Arial,11.0,32,Testl1212121212asdsasdsdsdsdsasd,6.0,4,31,124,149.12,Y
+12,textbox_12,112.0,38.5,1.56,0.53,0.83,Arial,11.0,32,Testl1212121212asdsasdsdsdsdsasd,7.0,4,26,104,125.07,Y
+12,textbox_12,112.0,38.5,1.56,0.53,0.83,Arial,11.0,32,Testl1212121212asdsasdsdsdsdsasd,8.0,3,23,69,82.98,Y
+12,textbox_12,112.0,38.5,1.56,0.53,0.83,Arial,11.0,32,Testl1212121212asdsasdsdsdsdsasd,9.0,3,20,60,72.16,Y
+12,textbox_12,112.0,38.5,1.56,0.53,0.83,Arial,11.0,32,Testl1212121212asdsasdsdsdsdsasd,10.0,2,18,36,43.29,Y
+12,textbox_12,112.0,38.5,1.56,0.53,0.83,Arial,11.0,32,Testl1212121212asdsasdsdsdsdsasd,12.0,2,15,30,36.08,N
+12,textbox_12,112.0,38.5,1.56,0.53,0.83,Arial,11.0,32,Testl1212121212asdsasdsdsdsdsasd,14.0,2,13,26,31.27,N
+13,textbox_13,112.0,38.5,1.56,0.53,0.83,Arial,11.0,32,Testl1212121212asdsasdsdsdsdsasd,11.0,2,16,32,38.48,Y
+13,textbox_13,112.0,38.5,1.56,0.53,0.83,Arial,11.0,32,Testl1212121212asdsasdsdsdsdsasd,6.0,4,31,124,149.12,Y
+13,textbox_13,112.0,38.5,1.56,0.53,0.83,Arial,11.0,32,Testl1212121212asdsasdsdsdsdsasd,7.0,4,26,104,125.07,Y
+13,textbox_13,112.0,38.5,1.56,0.53,0.83,Arial,11.0,32,Testl1212121212asdsasdsdsdsdsasd,8.0,3,23,69,82.98,Y
+13,textbox_13,112.0,38.5,1.56,0.53,0.83,Arial,11.0,32,Testl1212121212asdsasdsdsdsdsasd,9.0,3,20,60,72.16,Y
+13,textbox_13,112.0,38.5,1.56,0.53,0.83,Arial,11.0,32,Testl1212121212asdsasdsdsdsdsasd,10.0,2,18,36,43.29,Y
+13,textbox_13,112.0,38.5,1.56,0.53,0.83,Arial,11.0,32,Testl1212121212asdsasdsdsdsdsasd,12.0,2,15,30,36.08,N
+13,textbox_13,112.0,38.5,1.56,0.53,0.83,Arial,11.0,32,Testl1212121212asdsasdsdsdsdsasd,14.0,2,13,26,31.27,N
+14,textbox_14,112.0,38.5,1.56,0.53,0.83,Arial,12.0,28,Test1212121212asdsdsdsdsdsds,12.0,2,15,30,36.08,Y
+14,textbox_14,112.0,38.5,1.56,0.53,0.83,Arial,12.0,28,Test1212121212asdsdsdsdsdsds,6.0,4,31,124,149.12,Y
+14,textbox_14,112.0,38.5,1.56,0.53,0.83,Arial,12.0,28,Test1212121212asdsdsdsdsdsds,7.0,4,26,104,125.07,Y
+14,textbox_14,112.0,38.5,1.56,0.53,0.83,Arial,12.0,28,Test1212121212asdsdsdsdsdsds,8.0,3,23,69,82.98,Y
+14,textbox_14,112.0,38.5,1.56,0.53,0.83,Arial,12.0,28,Test1212121212asdsdsdsdsdsds,9.0,3,20,60,72.16,Y
+14,textbox_14,112.0,38.5,1.56,0.53,0.83,Arial,12.0,28,Test1212121212asdsdsdsdsdsds,10.0,2,18,36,43.29,Y
+14,textbox_14,112.0,38.5,1.56,0.53,0.83,Arial,12.0,28,Test1212121212asdsdsdsdsdsds,11.0,2,16,32,38.48,Y
+14,textbox_14,112.0,38.5,1.56,0.53,0.83,Arial,12.0,28,Test1212121212asdsdsdsdsdsds,14.0,2,13,26,31.27,N
+15,textbox_15,112.0,38.5,1.56,0.53,0.83,Arial,12.0,28,Test1212121212asdsdsdsdsdsds,12.0,2,15,30,36.08,Y
+15,textbox_15,112.0,38.5,1.56,0.53,0.83,Arial,12.0,28,Test1212121212asdsdsdsdsdsds,6.0,4,31,124,149.12,Y
+15,textbox_15,112.0,38.5,1.56,0.53,0.83,Arial,12.0,28,Test1212121212asdsdsdsdsdsds,7.0,4,26,104,125.07,Y
+15,textbox_15,112.0,38.5,1.56,0.53,0.83,Arial,12.0,28,Test1212121212asdsdsdsdsdsds,8.0,3,23,69,82.98,Y
+15,textbox_15,112.0,38.5,1.56,0.53,0.83,Arial,12.0,28,Test1212121212asdsdsdsdsdsds,9.0,3,20,60,72.16,Y
+15,textbox_15,112.0,38.5,1.56,0.53,0.83,Arial,12.0,28,Test1212121212asdsdsdsdsdsds,10.0,2,18,36,43.29,Y
+15,textbox_15,112.0,38.5,1.56,0.53,0.83,Arial,12.0,28,Test1212121212asdsdsdsdsdsds,11.0,2,16,32,38.48,Y
+15,textbox_15,112.0,38.5,1.56,0.53,0.83,Arial,12.0,28,Test1212121212asdsdsdsdsdsds,14.0,2,13,26,31.27,N
+16,textbox_16,112.0,41.7,1.56,0.58,0.90,Times New Roman,12.0,32,Testsnewromanfoasdasdasdasdasdas,12.0,2,16,32,35.50,Y
+16,textbox_16,112.0,41.7,1.56,0.58,0.90,Times New Roman,12.0,32,Testsnewromanfoasdasdasdasdasdas,6.0,5,33,165,183.04,Y
+16,textbox_16,112.0,41.7,1.56,0.58,0.90,Times New Roman,12.0,32,Testsnewromanfoasdasdasdasdasdas,7.0,4,29,116,128.68,Y
+16,textbox_16,112.0,41.7,1.56,0.58,0.90,Times New Roman,12.0,32,Testsnewromanfoasdasdasdasdasdas,8.0,4,25,100,110.93,Y
+16,textbox_16,112.0,41.7,1.56,0.58,0.90,Times New Roman,12.0,32,Testsnewromanfoasdasdasdasdasdas,9.0,3,22,66,73.22,Y
+16,textbox_16,112.0,41.7,1.56,0.58,0.90,Times New Roman,12.0,32,Testsnewromanfoasdasdasdasdasdas,10.0,3,20,60,66.56,Y
+16,textbox_16,112.0,41.7,1.56,0.58,0.90,Times New Roman,12.0,32,Testsnewromanfoasdasdasdasdasdas,11.0,2,18,36,39.94,Y
+16,textbox_16,112.0,41.7,1.56,0.58,0.90,Times New Roman,12.0,32,Testsnewromanfoasdasdasdasdasdas,14.0,2,14,28,31.06,N
+17,textbox_17,112.0,41.7,1.56,0.58,0.90,Times New Roman,12.0,32,Testsnewromanfoasdasdasdasdasdas,12.0,2,16,32,35.50,Y
+17,textbox_17,112.0,41.7,1.56,0.58,0.90,Times New Roman,12.0,32,Testsnewromanfoasdasdasdasdasdas,6.0,5,33,165,183.04,Y
+17,textbox_17,112.0,41.7,1.56,0.58,0.90,Times New Roman,12.0,32,Testsnewromanfoasdasdasdasdasdas,7.0,4,29,116,128.68,Y
+17,textbox_17,112.0,41.7,1.56,0.58,0.90,Times New Roman,12.0,32,Testsnewromanfoasdasdasdasdasdas,8.0,4,25,100,110.93,Y
+17,textbox_17,112.0,41.7,1.56,0.58,0.90,Times New Roman,12.0,32,Testsnewromanfoasdasdasdasdasdas,9.0,3,22,66,73.22,Y
+17,textbox_17,112.0,41.7,1.56,0.58,0.90,Times New Roman,12.0,32,Testsnewromanfoasdasdasdasdasdas,10.0,3,20,60,66.56,Y
+17,textbox_17,112.0,41.7,1.56,0.58,0.90,Times New Roman,12.0,32,Testsnewromanfoasdasdasdasdasdas,11.0,2,18,36,39.94,Y
+17,textbox_17,112.0,41.7,1.56,0.58,0.90,Times New Roman,12.0,32,Testsnewromanfoasdasdasdasdasdas,14.0,2,14,28,31.06,N
+18,textbox_18,112.0,34.5,1.56,0.48,0.74,Arial,12.0,14,Test1212121212,12.0,2,15,30,40.29,Y
+18,textbox_18,112.0,34.5,1.56,0.48,0.74,Arial,12.0,14,Test1212121212,6.0,4,31,124,166.53,Y
+18,textbox_18,112.0,34.5,1.56,0.48,0.74,Arial,12.0,14,Test1212121212,7.0,3,26,78,104.75,Y
+18,textbox_18,112.0,34.5,1.56,0.48,0.74,Arial,12.0,14,Test1212121212,8.0,3,23,69,92.66,Y
+18,textbox_18,112.0,34.5,1.56,0.48,0.74,Arial,12.0,14,Test1212121212,9.0,2,20,40,53.72,Y
+18,textbox_18,112.0,34.5,1.56,0.48,0.74,Arial,12.0,14,Test1212121212,10.0,2,18,36,48.35,Y
+18,textbox_18,112.0,34.5,1.56,0.48,0.74,Arial,12.0,14,Test1212121212,11.0,2,16,32,42.97,Y
+18,textbox_18,112.0,34.5,1.56,0.48,0.74,Arial,12.0,14,Test1212121212,14.0,1,13,13,17.46,N
+19,textbox_19,112.0,34.5,1.56,0.48,0.74,Arial,12.0,14,Test1212121212,12.0,2,15,30,40.29,Y
+19,textbox_19,112.0,34.5,1.56,0.48,0.74,Arial,12.0,14,Test1212121212,6.0,4,31,124,166.53,Y
+19,textbox_19,112.0,34.5,1.56,0.48,0.74,Arial,12.0,14,Test1212121212,7.0,3,26,78,104.75,Y
+19,textbox_19,112.0,34.5,1.56,0.48,0.74,Arial,12.0,14,Test1212121212,8.0,3,23,69,92.66,Y
+19,textbox_19,112.0,34.5,1.56,0.48,0.74,Arial,12.0,14,Test1212121212,9.0,2,20,40,53.72,Y
+19,textbox_19,112.0,34.5,1.56,0.48,0.74,Arial,12.0,14,Test1212121212,10.0,2,18,36,48.35,Y
+19,textbox_19,112.0,34.5,1.56,0.48,0.74,Arial,12.0,14,Test1212121212,11.0,2,16,32,42.97,Y
+19,textbox_19,112.0,34.5,1.56,0.48,0.74,Arial,12.0,14,Test1212121212,14.0,1,13,13,17.46,N
+20,textbox_20,112.0,34.5,1.56,0.48,0.74,Times New Roman,12.0,15,Testsnewromanfo,12.0,2,16,32,42.97,Y
+20,textbox_20,112.0,34.5,1.56,0.48,0.74,Times New Roman,12.0,15,Testsnewromanfo,6.0,4,33,132,177.27,Y
+20,textbox_20,112.0,34.5,1.56,0.48,0.74,Times New Roman,12.0,15,Testsnewromanfo,7.0,3,29,87,116.84,Y
+20,textbox_20,112.0,34.5,1.56,0.48,0.74,Times New Roman,12.0,15,Testsnewromanfo,8.0,3,25,75,100.72,Y
+20,textbox_20,112.0,34.5,1.56,0.48,0.74,Times New Roman,12.0,15,Testsnewromanfo,9.0,2,22,44,59.09,Y
+20,textbox_20,112.0,34.5,1.56,0.48,0.74,Times New Roman,12.0,15,Testsnewromanfo,10.0,2,20,40,53.72,Y
+20,textbox_20,112.0,34.5,1.56,0.48,0.74,Times New Roman,12.0,15,Testsnewromanfo,11.0,2,18,36,48.35,Y
+20,textbox_20,112.0,34.5,1.56,0.48,0.74,Times New Roman,12.0,15,Testsnewromanfo,14.0,1,14,14,18.80,N
+21,textbox_21,112.0,34.5,1.56,0.48,0.74,Times New Roman,12.0,15,Testsnewromanfo,12.0,2,16,32,42.97,Y
+21,textbox_21,112.0,34.5,1.56,0.48,0.74,Times New Roman,12.0,15,Testsnewromanfo,6.0,4,33,132,177.27,Y
+21,textbox_21,112.0,34.5,1.56,0.48,0.74,Times New Roman,12.0,15,Testsnewromanfo,7.0,3,29,87,116.84,Y
+21,textbox_21,112.0,34.5,1.56,0.48,0.74,Times New Roman,12.0,15,Testsnewromanfo,8.0,3,25,75,100.72,Y
+21,textbox_21,112.0,34.5,1.56,0.48,0.74,Times New Roman,12.0,15,Testsnewromanfo,9.0,2,22,44,59.09,Y
+21,textbox_21,112.0,34.5,1.56,0.48,0.74,Times New Roman,12.0,15,Testsnewromanfo,10.0,2,20,40,53.72,Y
+21,textbox_21,112.0,34.5,1.56,0.48,0.74,Times New Roman,12.0,15,Testsnewromanfo,11.0,2,18,36,48.35,Y
+21,textbox_21,112.0,34.5,1.56,0.48,0.74,Times New Roman,12.0,15,Testsnewromanfo,14.0,1,14,14,18.80,N
+22,textbox_22,112.0,34.5,1.56,0.48,0.74,Times New Roman,9.0,45,Testsnewromanfontsize10size10size10sasdasdasd,9.0,2,22,44,59.09,N
+22,textbox_22,112.0,34.5,1.56,0.48,0.74,Times New Roman,9.0,45,Testsnewromanfontsize10size10size10sasdasdasd,6.0,4,33,132,177.27,Y
+22,textbox_22,112.0,34.5,1.56,0.48,0.74,Times New Roman,9.0,45,Testsnewromanfontsize10size10size10sasdasdasd,7.0,3,29,87,116.84,Y
+22,textbox_22,112.0,34.5,1.56,0.48,0.74,Times New Roman,9.0,45,Testsnewromanfontsize10size10size10sasdasdasd,8.0,3,25,75,100.72,Y
+22,textbox_22,112.0,34.5,1.56,0.48,0.74,Times New Roman,9.0,45,Testsnewromanfontsize10size10size10sasdasdasd,10.0,2,20,40,53.72,N
+22,textbox_22,112.0,34.5,1.56,0.48,0.74,Times New Roman,9.0,45,Testsnewromanfontsize10size10size10sasdasdasd,11.0,2,18,36,48.35,N
+22,textbox_22,112.0,34.5,1.56,0.48,0.74,Times New Roman,9.0,45,Testsnewromanfontsize10size10size10sasdasdasd,12.0,2,16,32,42.97,N
+22,textbox_22,112.0,34.5,1.56,0.48,0.74,Times New Roman,9.0,45,Testsnewromanfontsize10size10size10sasdasdasd,14.0,1,14,14,18.80,N
+23,textbox_23,112.0,34.5,1.56,0.48,0.74,Times New Roman,9.0,45,Testsnewromanfontsize10size10size10sasdasdasd,9.0,2,22,44,59.09,N
+23,textbox_23,112.0,34.5,1.56,0.48,0.74,Times New Roman,9.0,45,Testsnewromanfontsize10size10size10sasdasdasd,6.0,4,33,132,177.27,Y
+23,textbox_23,112.0,34.5,1.56,0.48,0.74,Times New Roman,9.0,45,Testsnewromanfontsize10size10size10sasdasdasd,7.0,3,29,87,116.84,Y
+23,textbox_23,112.0,34.5,1.56,0.48,0.74,Times New Roman,9.0,45,Testsnewromanfontsize10size10size10sasdasdasd,8.0,3,25,75,100.72,Y
+23,textbox_23,112.0,34.5,1.56,0.48,0.74,Times New Roman,9.0,45,Testsnewromanfontsize10size10size10sasdasdasd,10.0,2,20,40,53.72,N
+23,textbox_23,112.0,34.5,1.56,0.48,0.74,Times New Roman,9.0,45,Testsnewromanfontsize10size10size10sasdasdasd,11.0,2,18,36,48.35,N
+23,textbox_23,112.0,34.5,1.56,0.48,0.74,Times New Roman,9.0,45,Testsnewromanfontsize10size10size10sasdasdasd,12.0,2,16,32,42.97,N
+23,textbox_23,112.0,34.5,1.56,0.48,0.74,Times New Roman,9.0,45,Testsnewromanfontsize10size10size10sasdasdasd,14.0,1,14,14,18.80,N
