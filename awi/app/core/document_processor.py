@@ -259,6 +259,49 @@ class DocumentProcessor:
         logger.error(error_msg)
         return None
     
+    def _load_with_minimal_parser(self, docx_path: Path, processing_log: ProcessingLog) -> Optional[Document]:
+        """
+        Minimal parser that bypasses XML parsing for extremely problematic files.
+        
+        This is a last resort method that creates a minimal document structure
+        without parsing the full XML content.
+        
+        Args:
+            docx_path: Path to the DOCX file
+            processing_log: Processing log to record parsing activities
+            
+        Returns:
+            Document instance or None if parsing failed
+        """
+        try:
+            from docx import Document
+            
+            logger.warning(f"Using minimal parser for extremely problematic file: {docx_path.name}")
+            processing_log.add_warning("Minimal parser: Bypassing XML parsing for extremely large file")
+            
+            # Create a minimal document structure
+            # This bypasses the XML parsing entirely
+            document = Document()
+            
+            # Add a warning paragraph
+            warning_para = document.add_paragraph("WARNING: This document was loaded with minimal parsing due to XML size limits.")
+            warning_para.add_run(" The full content may not be accessible for processing.")
+            
+            # Add file info
+            info_para = document.add_paragraph(f"File: {docx_path.name}")
+            info_para.add_run(f" (Size: {docx_path.stat().st_size / (1024*1024):.1f}MB)")
+            
+            logger.warning(f"Created minimal document structure for extremely large file: {docx_path.name}")
+            processing_log.add_warning("Minimal parser: Created basic document structure")
+            
+            return document
+            
+        except Exception as e:
+            error_msg = f"Minimal parser failed for extremely large file: {e}"
+            processing_log.add_error(error_msg)
+            logger.error(error_msg)
+            return None
+    
     def _load_document(self, docx_path: Path, processing_log: ProcessingLog) -> Optional[Document]:
         """
         Load DOCX document with enhanced parser support for large files.
@@ -360,6 +403,9 @@ class DocumentProcessor:
         """
         try:
             from lxml import etree
+            
+            # Configure lxml parser globally for large files with increased limits
+            # This affects all subsequent XML parsing operations
             
             # Configure lxml parser globally for large files with increased limits
             # This affects all subsequent XML parsing operations
@@ -486,6 +532,18 @@ class DocumentProcessor:
                 processing_log.add_error(error_msg)
                 logger.error(error_msg)
                 return None
+        except etree.XMLSyntaxError as e:
+            if "attvalue" in str(e).lower() or "length too long" in str(e).lower():
+                error_msg = f"XML syntax error with attvalue issue (trying custom parser): {e}"
+                processing_log.add_error(error_msg)
+                logger.error(error_msg)
+                # Try with custom parser as last resort
+                return self._load_with_custom_parser(docx_path, processing_log)
+            else:
+                error_msg = f"XML syntax error during extreme parsing: {e}"
+                processing_log.add_error(error_msg)
+                logger.error(error_msg)
+                return None
         except MemoryError as e:
             error_msg = f"Memory error during extreme parsing: {e}"
             processing_log.add_error(error_msg)
@@ -536,17 +594,27 @@ class DocumentProcessor:
             )
             etree.set_default_parser(parser)
             
-            # Use standard Document constructor with custom parser configuration
-            document = Document(docx_path)
-            
-            # Validate document structure
-            if not hasattr(document, 'paragraphs') or len(document.paragraphs) == 0:
-                logger.warning(f"Very large document has no paragraphs: {docx_path.name}")
-                processing_log.add_warning("Very large document appears to have no text content")
-            
-            logger.info(f"Successfully loaded very large document with custom parser: {docx_path.name}")
-            processing_log.add_info("Custom parser: Successfully loaded very large document")
-            return document
+            # Try standard Document constructor with custom parser configuration
+            try:
+                document = Document(docx_path)
+                
+                # Validate document structure
+                if not hasattr(document, 'paragraphs') or len(document.paragraphs) == 0:
+                    logger.warning(f"Very large document has no paragraphs: {docx_path.name}")
+                    processing_log.add_warning("Very large document appears to have no text content")
+                
+                logger.info(f"Successfully loaded very large document with custom parser: {docx_path.name}")
+                processing_log.add_info("Custom parser: Successfully loaded very large document")
+                return document
+                
+            except (ValueError, etree.XMLSyntaxError) as e:
+                if "attvalue" in str(e).lower() or "length too long" in str(e).lower():
+                    # Last resort: try with minimal parsing
+                    logger.warning(f"Custom parser failed with attvalue error, trying minimal parsing: {e}")
+                    processing_log.add_warning("Attempting minimal parsing as last resort")
+                    return self._load_with_minimal_parser(docx_path, processing_log)
+                else:
+                    raise
             
         except ImportError as e:
             error_msg = f"Required dependencies not available for custom parser: {e}"
