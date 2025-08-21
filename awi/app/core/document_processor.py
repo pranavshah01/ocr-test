@@ -360,10 +360,10 @@ class DocumentProcessor:
         """
         try:
             from lxml import etree
-            from app.utils.shared_constants import LXML_ATTRIBUTE_VALUE_LIMIT, LXML_TEXT_VALUE_LIMIT
             
-            # Parser optimized for large file size range
-            parser = etree.XMLParser(
+            # Configure lxml parser globally for large files
+            # This affects all subsequent XML parsing operations
+            etree.set_default_parser(etree.XMLParser(
                 huge_tree=True,
                 recover=True,
                 strip_cdata=False,
@@ -375,19 +375,10 @@ class DocumentProcessor:
                 collect_ids=False,  # Performance boost
                 remove_blank_text=False,  # Preserve whitespace
                 remove_comments=False     # Preserve comments
-            )
+            ))
             
-            from docx.opc.package import OpcPackage
-            package = OpcPackage.open(docx_path, parser=parser)
-            
-            if package.main_document_part is None:
-                error_msg = f"Main document part not found in: {docx_path}"
-                processing_log.add_error(error_msg)
-                logger.error(error_msg)
-                return None
-            
-            from docx.document import Document as DocxDocument
-            document = DocxDocument(package.main_document_part._element, package.main_document_part)
+            # Use standard Document constructor with global parser configuration
+            document = Document(docx_path)
             
             logger.info(f"Successfully loaded large document with enhanced parser: {docx_path.name}")
             return document
@@ -446,7 +437,7 @@ class DocumentProcessor:
             processing_log.add_info("Extreme parser: Starting with maximum limits")
             
             # Extreme parser with maximum limits for problematic files
-            parser = etree.XMLParser(
+            etree.set_default_parser(etree.XMLParser(
                 huge_tree=True,
                 recover=True,
                 strip_cdata=False,
@@ -460,22 +451,10 @@ class DocumentProcessor:
                 remove_comments=False,
                 remove_pis=False,  # Preserve processing instructions
                 compact=False      # Don't compact whitespace
-            )
+            ))
             
-            from docx.opc.package import OpcPackage
-            
-            # Open package with extreme parser
-            package = OpcPackage.open(docx_path, parser=parser)
-            
-            if package.main_document_part is None:
-                error_msg = f"Main document part not found in problematic file: {docx_path}"
-                processing_log.add_error(error_msg)
-                logger.error(error_msg)
-                return None
-            
-            # Create document with extreme element handling
-            from docx.document import Document as DocxDocument
-            document = DocxDocument(package.main_document_part._element, package.main_document_part)
+            # Use standard Document constructor with extreme parser configuration
+            document = Document(docx_path)
             
             logger.info(f"Successfully loaded problematic large document with extreme parser: {docx_path.name}")
             processing_log.add_info("Extreme parser: Successfully loaded problematic document")
@@ -524,13 +503,12 @@ class DocumentProcessor:
         try:
             import zipfile
             from lxml import etree
-            from app.utils.shared_constants import LXML_ATTRIBUTE_VALUE_LIMIT, LXML_TEXT_VALUE_LIMIT
             
             logger.info(f"Using custom parser for very large file: {docx_path.name}")
             processing_log.add_info("Custom parser: Starting chunked processing")
             
             # Custom parser with extreme limits for very large files
-            parser = etree.XMLParser(
+            etree.set_default_parser(etree.XMLParser(
                 huge_tree=True,
                 recover=True,
                 strip_cdata=False,
@@ -542,23 +520,10 @@ class DocumentProcessor:
                 collect_ids=False,
                 remove_blank_text=False,  # Preserve whitespace
                 remove_comments=False     # Preserve comments
-            )
+            ))
             
-            # Use streaming approach for very large files
-            from docx.opc.package import OpcPackage
-            
-            # Open package with custom parser
-            package = OpcPackage.open(docx_path, parser=parser)
-            
-            if package.main_document_part is None:
-                error_msg = f"Main document part not found in very large file: {docx_path}"
-                processing_log.add_error(error_msg)
-                logger.error(error_msg)
-                return None
-            
-            # Create document with custom element handling
-            from docx.document import Document as DocxDocument
-            document = DocxDocument(package.main_document_part._element, package.main_document_part)
+            # Use standard Document constructor with custom parser configuration
+            document = Document(docx_path)
             
             # Validate document structure
             if not hasattr(document, 'paragraphs') or len(document.paragraphs) == 0:

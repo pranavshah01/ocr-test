@@ -835,11 +835,18 @@ class ImageTextReplacer:
             # Find the match that corresponds to our replacement
             target_match = None
             for pm in pattern_matches:
-                if pm.matched_text in self.pattern_matcher.mappings:
-                    replacement = self.pattern_matcher.get_replacement(pm.matched_text)
-                    if replacement == match.replacement_text:
-                        target_match = pm
-                        break
+                # Get replacement text (could be from mappings or default mapping)
+                replacement = self.pattern_matcher.get_replacement(pm.matched_text)
+                if not replacement:
+                    # If no mapping found, use default mapping based on mode
+                    if self.mode in ["append", "append-image"]:
+                        replacement = self.default_mapping
+                    else:
+                        continue  # Skip in replace mode
+                
+                if replacement == match.replacement_text:
+                    target_match = pm
+                    break
             
             if not target_match:
                 logger.warning(f"Could not find target match for replacement: '{match.replacement_text}'")
@@ -1114,15 +1121,32 @@ class ImageProcessor:
                         
                         for universal_match in universal_matches:
                             replacement_text = self.pattern_matcher.get_replacement(universal_match.matched_text)
-                            if replacement_text:
-                                ocr_match = create_ocr_match(
-                                    ocr_result, universal_match.pattern_name, replacement_text, 
-                                    image_info['temp_path'], self.mode, universal_match.matched_text
-                                )
-                                matches.append(ocr_match)
-                                
-                                logger.debug(f"Pattern match found: '{universal_match.matched_text}' -> "
-                                           f"'{replacement_text}' (pattern: {universal_match.pattern_name})")
+                            
+                            # Mode-specific behavior:
+                            # - In "replace" mode: only process if we have a valid mapping (no default)
+                            # - In "append" or "append-image" mode: use default mapping if no valid mapping found
+                            if not replacement_text:
+                                if self.mode == "replace":
+                                    # In replace mode, skip if no mapping found
+                                    logger.debug(f"REPLACE MODE: Skipping '{universal_match.matched_text}' - no mapping found")
+                                    continue
+                                elif self.mode in ["append", "append-image"]:
+                                    # In append mode, use default mapping
+                                    replacement_text = self.default_mapping
+                                    logger.info(f"APPEND MODE: Using default mapping '{self.default_mapping}' for '{universal_match.matched_text}'")
+                                else:
+                                    # Unknown mode, skip
+                                    logger.warning(f"Unknown mode '{self.mode}', skipping '{universal_match.matched_text}'")
+                                    continue
+                            
+                            ocr_match = create_ocr_match(
+                                ocr_result, universal_match.pattern_name, replacement_text, 
+                                image_info['temp_path'], self.mode, universal_match.matched_text
+                            )
+                            matches.append(ocr_match)
+                            
+                            logger.debug(f"Pattern match found: '{universal_match.matched_text}' -> "
+                                       f"'{replacement_text}' (pattern: {universal_match.pattern_name})")
                     
                     except Exception as e:
                         logger.error(f"Error in pattern matching for text '{ocr_result.text}': {e}")
@@ -1268,11 +1292,18 @@ class ImageProcessor:
             # Find the specific match
             target_match = None
             for pm in pattern_matches:
-                if pm.matched_text in self.pattern_matcher.mappings:
-                    replacement = self.pattern_matcher.get_replacement(pm.matched_text)
-                    if replacement == match.replacement_text:
-                        target_match = pm
-                        break
+                # Get replacement text (could be from mappings or default mapping)
+                replacement = self.pattern_matcher.get_replacement(pm.matched_text)
+                if not replacement:
+                    # If no mapping found, use default mapping based on mode
+                    if self.mode in ["append", "append-image"]:
+                        replacement = self.default_mapping
+                    else:
+                        continue  # Skip in replace mode
+                
+                if replacement == match.replacement_text:
+                    target_match = pm
+                    break
             
             if not target_match:
                 logger.warning(f"Could not find target match for replacement: '{match.replacement_text}'")
