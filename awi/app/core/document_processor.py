@@ -339,7 +339,22 @@ class DocumentProcessor:
             logger.error(error_msg)
             return None
         
-        # Check if file size exceeds recommended processing size
+        # For files >50MB, use streaming parser directly
+        if size_mb > 50:
+            logger.info(f"Large file detected ({size_mb:.1f}MB), using streaming parser")
+            processing_log.add_info(f"Large file: {size_mb:.1f}MB - using streaming parser")
+            
+            try:
+                document = self._load_with_streaming_parser(docx_path, processing_log)
+                if document:
+                    logger.info(f"Successfully loaded document with streaming parser: {docx_path.name}")
+                    processing_log.add_info("Used streaming parser for large file")
+                    return document
+            except Exception as e:
+                logger.debug(f"Streaming parser failed for {size_mb:.1f}MB file: {e}")
+                processing_log.add_warning(f"Streaming parser failed: {e}")
+        
+        # Check if file size exceeds recommended processing size (for summary documents)
         if size_mb > MAX_PROCESSING_SIZE_MB:
             logger.warning(f"File size {size_mb:.1f}MB exceeds recommended processing size of {MAX_PROCESSING_SIZE_MB}MB")
             processing_log.add_warning(f"File size {size_mb:.1f}MB exceeds recommended processing size")
@@ -456,23 +471,12 @@ class DocumentProcessor:
             
             # Configure lxml parser globally for large files with increased limits
             # This affects all subsequent XML parsing operations
-            
-            # Configure lxml parser globally for large files with increased limits
-            # This affects all subsequent XML parsing operations
+            # Using the approach from python-docx PR #1272
             parser = etree.XMLParser(
                 huge_tree=True,
                 recover=True,
-                strip_cdata=False,
-                resolve_entities=False,
-                attribute_defaults=False,
-                dtd_validation=False,
-                load_dtd=False,
-                no_network=True,
-                collect_ids=False,  # Performance boost
-                remove_blank_text=False,  # Preserve whitespace
-                remove_comments=False,    # Preserve comments
-                remove_pis=False,         # Preserve processing instructions
-                compact=False             # Don't compact whitespace
+                remove_blank_text=True,
+                resolve_entities=False
             )
             etree.set_default_parser(parser)
             
@@ -701,9 +705,11 @@ class DocumentProcessor:
     
     def _load_with_streaming_parser(self, docx_path: Path, processing_log: ProcessingLog) -> Optional[Document]:
         """
-        Streaming parser that processes DOCX content in chunks to avoid memory issues.
+        Streaming parser using etree.iterparse for large files (>50MB).
         
-        This approach extracts text content directly from the DOCX without full XML parsing.
+        This approach uses lxml's iterparse to process XML content incrementally
+        without loading the entire document into memory, similar to the approach
+        in python-docx PR #1272.
         
         Args:
             docx_path: Path to the DOCX file
@@ -717,8 +723,8 @@ class DocumentProcessor:
             import zipfile
             from lxml import etree
             
-            logger.info(f"Using streaming parser for extremely large file: {docx_path.name}")
-            processing_log.add_info("Streaming parser: Processing DOCX content in chunks")
+            logger.info(f"Using streaming parser (iterparse) for large file: {docx_path.name}")
+            processing_log.add_info("Streaming parser: Using etree.iterparse for incremental processing")
             
             # Create a new document
             document = Document()
@@ -727,41 +733,37 @@ class DocumentProcessor:
             header = document.add_heading("Streaming Processed Document", 0)
             document.add_paragraph(f"Original file: {docx_path.name}")
             document.add_paragraph(f"Size: {docx_path.stat().st_size / (1024*1024):.1f}MB")
-            document.add_paragraph("This document was processed using streaming parser due to XML size limits.")
+            document.add_paragraph("This document was processed using streaming parser (etree.iterparse) for large files.")
             
-            # Extract text content directly from DOCX using zipfile
+            # Extract and process XML content using iterparse
             try:
                 with zipfile.ZipFile(docx_path, 'r') as zip_file:
                     # Get the main document XML
                     if 'word/document.xml' in zip_file.namelist():
                         xml_content = zip_file.read('word/document.xml')
                         
-                        # Parse XML with streaming approach
+                        # Configure parser with huge_tree=True (from the GitHub PR)
                         parser = etree.XMLParser(
                             huge_tree=True,
                             recover=True,
-                            strip_cdata=False,
-                            resolve_entities=False,
-                            attribute_defaults=False,
-                            dtd_validation=False,
-                            load_dtd=False,
-                            no_network=True,
-                            collect_ids=False,
-                            remove_blank_text=False,
-                            remove_comments=False,
-                            remove_pis=False,
-                            compact=False
+                            remove_blank_text=True,
+                            resolve_entities=False
                         )
                         
-                        # Parse XML content
-                        root = etree.fromstring(xml_content, parser)
+                        # Use iterparse for streaming processing
+                        from io import BytesIO
+                        context = etree.iterparse(
+                            BytesIO(xml_content), 
+                            events=('end',), 
+                            tag='{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p'
+                        )
                         
-                        # Extract text from paragraphs
+                        # Process paragraphs incrementally
                         text_count = 0
-                        for para_elem in root.xpath('.//w:p', namespaces={'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}):
+                        for event, elem in context:
                             try:
                                 # Extract text from paragraph
-                                text_elements = para_elem.xpath('.//w:t', namespaces={'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'})
+                                text_elements = elem.xpath('.//w:t', namespaces={'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'})
                                 if text_elements:
                                     text = ''.join([elem.text or '' for elem in text_elements])
                                     if text.strip():
@@ -769,15 +771,22 @@ class DocumentProcessor:
                                         text_count += 1
                                         
                                         # Limit the number of paragraphs to avoid memory issues
-                                        if text_count >= 1000:
+                                        if text_count >= 2000:
                                             document.add_paragraph("... (content truncated due to size limits)")
                                             break
+                                
+                                # Clear the element to free memory
+                                elem.clear()
+                                # Also eliminate now-empty references from the root node to elem
+                                while elem.getprevious() is not None:
+                                    del elem.getparent()[0]
+                                    
                             except Exception as e:
                                 logger.debug(f"Error extracting text from paragraph: {e}")
                                 continue
                         
                         logger.info(f"Streaming parser extracted {text_count} paragraphs from {docx_path.name}")
-                        processing_log.add_info(f"Streaming parser: Extracted {text_count} paragraphs")
+                        processing_log.add_info(f"Streaming parser: Extracted {text_count} paragraphs using iterparse")
                         
             except zipfile.BadZipFile:
                 error_msg = f"Invalid DOCX file (not a valid ZIP): {docx_path.name}"
