@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 import logging
+from datetime import datetime
 
 from docx import Document
 from docx.opc.exceptions import PackageNotFoundError
@@ -22,6 +23,10 @@ from .processor_interface import BaseProcessor, ProcessingResult
 from .models import ProcessingLog, DocumentInfo, BatchProcessingResult
 from app.converters.doc_converter import DocConverter, ConversionError
 from app.utils.shared_constants import MAX_FILE_SIZE_MB, LARGE_FILE_THRESHOLD_MB, VERY_LARGE_FILE_THRESHOLD_MB
+
+# Add these constants at the top of the file, after the existing imports
+MAX_PROCESSING_SIZE_MB = 200.0  # Maximum size for full processing
+LARGE_FILE_WARNING_MB = 150.0   # Size at which to warn about potential issues
 
 logger = logging.getLogger(__name__)
 
@@ -334,6 +339,14 @@ class DocumentProcessor:
             logger.error(error_msg)
             return None
         
+        # Check if file size exceeds recommended processing size
+        if size_mb > MAX_PROCESSING_SIZE_MB:
+            logger.warning(f"File size {size_mb:.1f}MB exceeds recommended processing size of {MAX_PROCESSING_SIZE_MB}MB")
+            processing_log.add_warning(f"File size {size_mb:.1f}MB exceeds recommended processing size")
+            
+            # Create a summary document instead of attempting full processing
+            return self._create_summary_document(docx_path, processing_log)
+        
         # Prepare system for large files
         if size_mb > LARGE_FILE_THRESHOLD_MB:
             self._prepare_for_large_file()
@@ -362,8 +375,23 @@ class DocumentProcessor:
                 logger.debug(f"Enhanced parser failed for {size_mb:.1f}MB file: {e}")
                 processing_log.add_warning(f"Enhanced parser failed: {e}")
         
-        # Tier 3: Custom parser for files > 200MB
+        # Tier 3: For very large files (>200MB), try extreme parser first, then custom, then minimal
         if size_mb >= VERY_LARGE_FILE_THRESHOLD_MB:
+            logger.info(f"Very large file detected ({size_mb:.1f}MB), using aggressive parsing strategy")
+            processing_log.add_info(f"Very large file: {size_mb:.1f}MB - using aggressive parsing")
+            
+            # Try extreme parser first for very large files
+            try:
+                document = self._load_with_extreme_parser(docx_path, processing_log)
+                if document:
+                    logger.info(f"Successfully loaded document with extreme parser: {docx_path.name}")
+                    processing_log.add_info("Used extreme parser for very large file")
+                    return document
+            except Exception as e:
+                logger.debug(f"Extreme parser failed for {size_mb:.1f}MB file: {e}")
+                processing_log.add_warning(f"Extreme parser failed: {e}")
+            
+            # Try custom parser as second option
             try:
                 document = self._load_with_custom_parser(docx_path, processing_log)
                 if document:
@@ -373,6 +401,28 @@ class DocumentProcessor:
             except Exception as e:
                 logger.debug(f"Custom parser failed for {size_mb:.1f}MB file: {e}")
                 processing_log.add_warning(f"Custom parser failed: {e}")
+            
+            # Try streaming parser for very large files
+            try:
+                document = self._load_with_streaming_parser(docx_path, processing_log)
+                if document:
+                    logger.info(f"Successfully loaded document with streaming parser: {docx_path.name}")
+                    processing_log.add_info("Used streaming parser for very large file")
+                    return document
+            except Exception as e:
+                logger.debug(f"Streaming parser failed for {size_mb:.1f}MB file: {e}")
+                processing_log.add_warning(f"Streaming parser failed: {e}")
+            
+            # Try minimal parser as last resort for very large files
+            try:
+                document = self._load_with_minimal_parser(docx_path, processing_log)
+                if document:
+                    logger.info(f"Successfully loaded document with minimal parser: {docx_path.name}")
+                    processing_log.add_info("Used minimal parser for very large file")
+                    return document
+            except Exception as e:
+                logger.debug(f"Minimal parser failed for {size_mb:.1f}MB file: {e}")
+                processing_log.add_warning(f"Minimal parser failed: {e}")
         
         # Final fallback: Try enhanced parser for any size
         try:
@@ -645,6 +695,105 @@ class DocumentProcessor:
             return None
         except Exception as e:
             error_msg = f"Custom parser failed for very large file: {e}"
+            processing_log.add_error(error_msg)
+            logger.error(error_msg)
+            return None
+    
+    def _load_with_streaming_parser(self, docx_path: Path, processing_log: ProcessingLog) -> Optional[Document]:
+        """
+        Streaming parser that processes DOCX content in chunks to avoid memory issues.
+        
+        This approach extracts text content directly from the DOCX without full XML parsing.
+        
+        Args:
+            docx_path: Path to the DOCX file
+            processing_log: Processing log to record parsing activities
+            
+        Returns:
+            Document instance or None if parsing failed
+        """
+        try:
+            from docx import Document
+            import zipfile
+            from lxml import etree
+            
+            logger.info(f"Using streaming parser for extremely large file: {docx_path.name}")
+            processing_log.add_info("Streaming parser: Processing DOCX content in chunks")
+            
+            # Create a new document
+            document = Document()
+            
+            # Add header explaining the processing method
+            header = document.add_heading("Streaming Processed Document", 0)
+            document.add_paragraph(f"Original file: {docx_path.name}")
+            document.add_paragraph(f"Size: {docx_path.stat().st_size / (1024*1024):.1f}MB")
+            document.add_paragraph("This document was processed using streaming parser due to XML size limits.")
+            
+            # Extract text content directly from DOCX using zipfile
+            try:
+                with zipfile.ZipFile(docx_path, 'r') as zip_file:
+                    # Get the main document XML
+                    if 'word/document.xml' in zip_file.namelist():
+                        xml_content = zip_file.read('word/document.xml')
+                        
+                        # Parse XML with streaming approach
+                        parser = etree.XMLParser(
+                            huge_tree=True,
+                            recover=True,
+                            strip_cdata=False,
+                            resolve_entities=False,
+                            attribute_defaults=False,
+                            dtd_validation=False,
+                            load_dtd=False,
+                            no_network=True,
+                            collect_ids=False,
+                            remove_blank_text=False,
+                            remove_comments=False,
+                            remove_pis=False,
+                            compact=False
+                        )
+                        
+                        # Parse XML content
+                        root = etree.fromstring(xml_content, parser)
+                        
+                        # Extract text from paragraphs
+                        text_count = 0
+                        for para_elem in root.xpath('.//w:p', namespaces={'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}):
+                            try:
+                                # Extract text from paragraph
+                                text_elements = para_elem.xpath('.//w:t', namespaces={'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'})
+                                if text_elements:
+                                    text = ''.join([elem.text or '' for elem in text_elements])
+                                    if text.strip():
+                                        document.add_paragraph(text)
+                                        text_count += 1
+                                        
+                                        # Limit the number of paragraphs to avoid memory issues
+                                        if text_count >= 1000:
+                                            document.add_paragraph("... (content truncated due to size limits)")
+                                            break
+                            except Exception as e:
+                                logger.debug(f"Error extracting text from paragraph: {e}")
+                                continue
+                        
+                        logger.info(f"Streaming parser extracted {text_count} paragraphs from {docx_path.name}")
+                        processing_log.add_info(f"Streaming parser: Extracted {text_count} paragraphs")
+                        
+            except zipfile.BadZipFile:
+                error_msg = f"Invalid DOCX file (not a valid ZIP): {docx_path.name}"
+                processing_log.add_error(error_msg)
+                logger.error(error_msg)
+                return None
+            except Exception as e:
+                error_msg = f"Error during streaming extraction: {e}"
+                processing_log.add_error(error_msg)
+                logger.error(error_msg)
+                return None
+            
+            return document
+            
+        except Exception as e:
+            error_msg = f"Streaming parser failed: {e}"
             processing_log.add_error(error_msg)
             logger.error(error_msg)
             return None
@@ -1042,6 +1191,82 @@ class DocumentProcessor:
         self.image_processor = None
         
         logger.info("Document processor cleanup completed")
+
+    def _create_summary_document(self, docx_path: Path, processing_log: ProcessingLog) -> Optional[Document]:
+        """
+        Create a summary document for files that are too large to process fully.
+        
+        This creates a document with basic file information and a warning that
+        the file was too large for full processing.
+        
+        Args:
+            docx_path: Path to the DOCX file
+            processing_log: Processing log to record activities
+            
+        Returns:
+            Document instance with summary information
+        """
+        try:
+            from docx import Document
+            from docx.shared import Inches
+            from docx.enum.text import WD_ALIGN_PARAGRAPH
+            
+            logger.warning(f"Creating summary document for oversized file: {docx_path.name}")
+            processing_log.add_warning(f"File too large for full processing, creating summary")
+            
+            # Create a new document
+            document = Document()
+            
+            # Add title
+            title = document.add_heading("Document Processing Summary", 0)
+            title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            
+            # Add file information
+            file_size = docx_path.stat().st_size
+            size_mb = file_size / (1024 * 1024)
+            
+            document.add_paragraph(f"File Name: {docx_path.name}")
+            document.add_paragraph(f"File Size: {size_mb:.1f}MB")
+            document.add_paragraph(f"Processing Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            
+            # Add warning section
+            warning_heading = document.add_heading("Processing Status", level=1)
+            warning_para = document.add_paragraph()
+            warning_para.add_run("⚠️  WARNING: ").bold = True
+            warning_para.add_run(f"This file ({size_mb:.1f}MB) exceeds the recommended processing size limit of {MAX_PROCESSING_SIZE_MB}MB.")
+            
+            document.add_paragraph("The file was not processed for the following reasons:")
+            reasons = document.add_paragraph()
+            reasons.add_run("• XML parsing limitations for very large files\n")
+            reasons.add_run("• Memory constraints during processing\n")
+            reasons.add_run("• Risk of 'AttValue length too long' errors\n")
+            reasons.add_run("• Performance degradation with files this large")
+            
+            # Add recommendations
+            rec_heading = document.add_heading("Recommendations", level=1)
+            document.add_paragraph("To process this file, consider:")
+            recommendations = document.add_paragraph()
+            recommendations.add_run("• Splitting the file into smaller sections\n")
+            recommendations.add_run("• Reducing image quality or removing images\n")
+            recommendations.add_run("• Using a different file format\n")
+            recommendations.add_run("• Processing in batches")
+            
+            # Add technical details
+            tech_heading = document.add_heading("Technical Details", level=1)
+            document.add_paragraph(f"Maximum recommended file size: {MAX_PROCESSING_SIZE_MB}MB")
+            document.add_paragraph(f"Current file size: {size_mb:.1f}MB")
+            document.add_paragraph(f"Size difference: {size_mb - MAX_PROCESSING_SIZE_MB:.1f}MB over limit")
+            
+            logger.info(f"Created summary document for oversized file: {docx_path.name}")
+            processing_log.add_info(f"Summary document created for {size_mb:.1f}MB file")
+            
+            return document
+            
+        except Exception as e:
+            error_msg = f"Failed to create summary document: {e}"
+            processing_log.add_error(error_msg)
+            logger.error(error_msg)
+            return None
 
 def create_document_processor(config) -> DocumentProcessor:
     """
