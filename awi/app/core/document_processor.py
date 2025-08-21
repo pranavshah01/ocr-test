@@ -361,9 +361,9 @@ class DocumentProcessor:
         try:
             from lxml import etree
             
-            # Configure lxml parser globally for large files
+            # Configure lxml parser globally for large files with increased limits
             # This affects all subsequent XML parsing operations
-            etree.set_default_parser(etree.XMLParser(
+            parser = etree.XMLParser(
                 huge_tree=True,
                 recover=True,
                 strip_cdata=False,
@@ -374,8 +374,11 @@ class DocumentProcessor:
                 no_network=True,
                 collect_ids=False,  # Performance boost
                 remove_blank_text=False,  # Preserve whitespace
-                remove_comments=False     # Preserve comments
-            ))
+                remove_comments=False,    # Preserve comments
+                remove_pis=False,         # Preserve processing instructions
+                compact=False             # Don't compact whitespace
+            )
+            etree.set_default_parser(parser)
             
             # Use standard Document constructor with global parser configuration
             document = Document(docx_path)
@@ -394,7 +397,7 @@ class DocumentProcessor:
             logger.error(error_msg)
             return None
         except ValueError as e:
-            if "attvalue" in str(e).lower():
+            if "attvalue" in str(e).lower() or "length too long" in str(e).lower():
                 error_msg = f"Attribute value error during enhanced parsing (likely due to large file): {e}"
                 processing_log.add_error(error_msg)
                 logger.error(error_msg)
@@ -437,7 +440,7 @@ class DocumentProcessor:
             processing_log.add_info("Extreme parser: Starting with maximum limits")
             
             # Extreme parser with maximum limits for problematic files
-            etree.set_default_parser(etree.XMLParser(
+            parser = etree.XMLParser(
                 huge_tree=True,
                 recover=True,
                 strip_cdata=False,
@@ -451,7 +454,8 @@ class DocumentProcessor:
                 remove_comments=False,
                 remove_pis=False,  # Preserve processing instructions
                 compact=False      # Don't compact whitespace
-            ))
+            )
+            etree.set_default_parser(parser)
             
             # Use standard Document constructor with extreme parser configuration
             document = Document(docx_path)
@@ -471,10 +475,17 @@ class DocumentProcessor:
             logger.error(error_msg)
             return None
         except ValueError as e:
-            error_msg = f"Value error during extreme parsing (file may be corrupted): {e}"
-            processing_log.add_error(error_msg)
-            logger.error(error_msg)
-            return None
+            if "attvalue" in str(e).lower() or "length too long" in str(e).lower():
+                error_msg = f"Attribute value error during extreme parsing (trying custom parser): {e}"
+                processing_log.add_error(error_msg)
+                logger.error(error_msg)
+                # Try with custom parser as last resort
+                return self._load_with_custom_parser(docx_path, processing_log)
+            else:
+                error_msg = f"Value error during extreme parsing (file may be corrupted): {e}"
+                processing_log.add_error(error_msg)
+                logger.error(error_msg)
+                return None
         except MemoryError as e:
             error_msg = f"Memory error during extreme parsing: {e}"
             processing_log.add_error(error_msg)
@@ -508,7 +519,7 @@ class DocumentProcessor:
             processing_log.add_info("Custom parser: Starting chunked processing")
             
             # Custom parser with extreme limits for very large files
-            etree.set_default_parser(etree.XMLParser(
+            parser = etree.XMLParser(
                 huge_tree=True,
                 recover=True,
                 strip_cdata=False,
@@ -519,8 +530,11 @@ class DocumentProcessor:
                 no_network=True,
                 collect_ids=False,
                 remove_blank_text=False,  # Preserve whitespace
-                remove_comments=False     # Preserve comments
-            ))
+                remove_comments=False,    # Preserve comments
+                remove_pis=False,         # Preserve processing instructions
+                compact=False             # Don't compact whitespace
+            )
+            etree.set_default_parser(parser)
             
             # Use standard Document constructor with custom parser configuration
             document = Document(docx_path)
