@@ -792,11 +792,6 @@ class DocumentProcessor:
                 # Load the document with copied structure
                 document = Document(temp_path)
                 
-                # Clear existing paragraphs to replace with extracted content
-                for paragraph in document.paragraphs[:]:
-                    p = paragraph._element
-                    p.getparent().remove(p)
-                
                 # Extract text from the original document
                 with zipfile.ZipFile(docx_path, 'r') as source_zip:
                     # Read the XML as raw text
@@ -809,35 +804,14 @@ class DocumentProcessor:
                     # Find all text matches
                     text_matches = re.findall(text_pattern, xml_content, re.DOTALL)
                     
-                    # Group text into paragraphs (simplified approach)
-                    current_paragraph = ""
-                    paragraph_count = 0
-                    max_paragraphs = 10000
+                    # Instead of clearing paragraphs, preserve the original structure
+                    # and just ensure the document is loaded properly for processing
+                    logger.info(f"Raw text document creation completed: {len(text_matches)} text elements found")
+                    processing_log.add_info(f"Raw text document creation: {len(text_matches)} text elements found")
                     
-                    for text_match in text_matches:
-                        # Clean up the text
-                        clean_text = text_match.strip()
-                        if clean_text:
-                            current_paragraph += clean_text + " "
-                            
-                            # If we hit a paragraph break or reach limit, add paragraph
-                            if len(current_paragraph.strip()) > 200 or paragraph_count >= max_paragraphs:
-                                if current_paragraph.strip():
-                                    document.add_paragraph(current_paragraph.strip())
-                                    paragraph_count += 1
-                                    current_paragraph = ""
-                                
-                                if paragraph_count >= max_paragraphs:
-                                    document.add_paragraph("... (content truncated due to size limits)")
-                                    break
-                    
-                    # Add any remaining text
-                    if current_paragraph.strip() and paragraph_count < max_paragraphs:
-                        document.add_paragraph(current_paragraph.strip())
-                        paragraph_count += 1
+                    # The document now has the original structure preserved
+                    # The processors will work with the original XML structure
                 
-                logger.info(f"Raw text document creation completed: {paragraph_count} paragraphs")
-                processing_log.add_info(f"Raw text document creation: {paragraph_count} paragraphs processed")
                 return document
                 
             finally:
