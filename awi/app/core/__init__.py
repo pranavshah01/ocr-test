@@ -8,7 +8,7 @@ processor orchestrator.
 """
 
 # Core infrastructure components
-from .parallel_manager import ParallelManager, ProcessingTask, ProcessingResult as ParallelResult
+from .parallel_manager import ParallelManager, ProcessingTask, ProcessingResult as ParallelResult, FileDiscovery
 from .processor_factory import ProcessorFactory, ProcessorConfig, ProcessorInfo
 from .gpu_manager import GPUManager, GPUConfig, GPUInfo
 from .memory_manager import MemoryManager, MemoryStats
@@ -26,7 +26,7 @@ from .document_processor import DocumentProcessor, create_document_processor
 
 __all__ = [
     # Core infrastructure
-    'ParallelManager', 'ProcessingTask', 'ParallelResult',
+    'ParallelManager', 'ProcessingTask', 'ParallelResult', 'FileDiscovery',
     'ProcessorFactory', 'ProcessorConfig', 'ProcessorInfo',
     'GPUManager', 'GPUConfig', 'GPUInfo',
     'MemoryManager', 'MemoryStats',

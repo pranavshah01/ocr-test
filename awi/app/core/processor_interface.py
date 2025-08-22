@@ -32,6 +32,7 @@ class ProcessingResult:
         error_message: Error message if processing failed
         metadata: Additional processor-specific data
         layout_impact: Layout impact analysis results (if applicable)
+        is_summary_only: Whether this result represents a summary document (not full processing)
     """
     success: bool
     processor_type: str
@@ -41,6 +42,7 @@ class ProcessingResult:
     error_message: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
     layout_impact: Optional[Dict[str, Any]] = None
+    is_summary_only: bool = False
     
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -55,6 +57,7 @@ class ProcessingResult:
             'matches_found': self.matches_found,
             'output_path': str(self.output_path) if self.output_path else None,
             'processing_time_seconds': round(self.processing_time, 3),
+            'is_summary_only': self.is_summary_only,
             'error_message': self.error_message,
             'metadata': self.metadata,
             'layout_impact': self.layout_impact
