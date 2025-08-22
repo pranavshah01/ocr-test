@@ -722,8 +722,17 @@ class DocumentProcessor:
                 # Copy the original document
                 shutil.copy2(docx_path, temp_path)
                 
-                # Load the document with copied structure
-                document = Document(temp_path)
+                # Try to load the document with copied structure
+                try:
+                    document = Document(temp_path)
+                except Exception as doc_error:
+                    # If even the copied document fails to load, use raw text approach
+                    if "AttValue" in str(doc_error) and "length too long" in str(doc_error):
+                        logger.warning(f"Even copied document failed with AttValue error, using raw text approach: {doc_error}")
+                        processing_log.add_warning("Copied document failed with AttValue error, using raw text approach")
+                        return self._create_document_with_raw_text(docx_path, processing_log)
+                    else:
+                        raise doc_error
                 
                 # Extract and process document.xml directly
                 with zipfile.ZipFile(docx_path, 'r') as source_zip:
@@ -742,6 +751,80 @@ class DocumentProcessor:
                         
         except Exception as e:
             error_msg = f"Direct XML processing failed: {e}"
+            processing_log.add_error(error_msg)
+            logger.error(error_msg)
+            return None
+
+    def _create_document_with_raw_text(self, docx_path: Path, processing_log: ProcessingLog) -> Optional[Document]:
+        """
+        Create a new document using raw text parsing for extremely problematic files.
+        
+        This method creates a completely new document and populates it with text
+        extracted using regex patterns, avoiding XML parsing entirely.
+        
+        Args:
+            docx_path: Path to the DOCX file
+            processing_log: Processing log to record activities
+            
+        Returns:
+            Document instance with text content
+        """
+        try:
+            from docx import Document
+            import zipfile
+            import re
+            
+            logger.info("Creating new document with raw text parsing")
+            processing_log.add_info("Raw text document creation: Avoiding XML parsing entirely")
+            
+            # Create a new document
+            document = Document()
+            
+            # Extract text from the original document
+            with zipfile.ZipFile(docx_path, 'r') as source_zip:
+                # Read the XML as raw text
+                xml_content = source_zip.read('word/document.xml').decode('utf-8', errors='ignore')
+                
+                # Extract text content using regex patterns
+                # Pattern to match text within <w:t> tags
+                text_pattern = r'<w:t[^>]*>(.*?)</w:t>'
+                
+                # Find all text matches
+                text_matches = re.findall(text_pattern, xml_content, re.DOTALL)
+                
+                # Group text into paragraphs (simplified approach)
+                current_paragraph = ""
+                paragraph_count = 0
+                max_paragraphs = 10000
+                
+                for text_match in text_matches:
+                    # Clean up the text
+                    clean_text = text_match.strip()
+                    if clean_text:
+                        current_paragraph += clean_text + " "
+                        
+                        # If we hit a paragraph break or reach limit, add paragraph
+                        if len(current_paragraph.strip()) > 200 or paragraph_count >= max_paragraphs:
+                            if current_paragraph.strip():
+                                document.add_paragraph(current_paragraph.strip())
+                                paragraph_count += 1
+                                current_paragraph = ""
+                            
+                            if paragraph_count >= max_paragraphs:
+                                document.add_paragraph("... (content truncated due to size limits)")
+                                break
+                
+                # Add any remaining text
+                if current_paragraph.strip() and paragraph_count < max_paragraphs:
+                    document.add_paragraph(current_paragraph.strip())
+                    paragraph_count += 1
+            
+            logger.info(f"Raw text document creation completed: {paragraph_count} paragraphs")
+            processing_log.add_info(f"Raw text document creation: {paragraph_count} paragraphs processed")
+            return document
+            
+        except Exception as e:
+            error_msg = f"Raw text document creation failed: {e}"
             processing_log.add_error(error_msg)
             logger.error(error_msg)
             return None
