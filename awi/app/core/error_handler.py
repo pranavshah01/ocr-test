@@ -382,7 +382,15 @@ class ErrorHandler:
     def get_error_summary(self) -> Dict[str, Any]:
         """Get summary of all errors encountered."""
         if not self.errors:
-            return {'total_errors': 0}
+            return {
+                'total_errors': 0,
+                'category_distribution': {},
+                'severity_distribution': {},
+                'fallback_usage_count': 0,
+                'fallback_usage_percent': 0.0,
+                'most_common_category': None,
+                'most_common_severity': None
+            }
         
         # Count errors by category and severity
         category_counts = {}

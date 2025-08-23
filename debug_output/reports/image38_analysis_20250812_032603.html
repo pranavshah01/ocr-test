@@ -1,0 +1,75 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OCR Analysis Report - image38.jpeg</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .header { background-color: #f0f0f0; padding: 15px; border-radius: 5px; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { color: green; }
+        .warning { color: orange; }
+        .error { color: red; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .bbox { font-family: monospace; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>OCR Analysis Report</h1>
+        <p><strong>Image:</strong> image38.jpeg</p>
+        <p><strong>Generated:</strong> 2025-08-12T03:26:03.075753</p>
+        <p><strong>OCR Results:</strong> 0 text regions detected</p>
+        <p><strong>Pattern Matches:</strong> 0 matches found</p>
+    </div>
+    
+    <div class="section">
+        <h2>Summary</h2>
+        <p class="error">
+            OCR Detection: 0 text regions found
+        </p>
+        <p class="warning">
+            Pattern Matching: 0 matches found
+        </p>
+    </div>
+    
+    <div class="section">
+        <h2>OCR Detection Results</h2>
+        <p class='error'>No OCR results found. This indicates the OCR engine could not detect any text in the image.</p>
+    </div>
+    
+    <div class="section">
+        <h2>Pattern Matches</h2>
+        <p class='warning'>No pattern matches found.</p>
+    </div>
+    
+    <div class="section">
+        <h2>Processing Information</h2>
+        <pre>{
+  "image_quality": {
+    "dimensions": "486x447",
+    "brightness": 112.0,
+    "contrast": 67.2,
+    "sharpness": 466.1,
+    "noise": 6578.413,
+    "edge_density": 0.068,
+    "quality_assessment": "Good quality for OCR"
+  },
+  "ocr_engines_tested": [
+    "easyocr",
+    "tesseract",
+    "hybrid"
+  ],
+  "best_ocr_result_count": 0,
+  "preprocessing_attempted": true
+}</pre>
+    </div>
+    
+    <div class="section">
+        <h2>Recommendations</h2>
+        <ul><li>❌ <strong>Critical Issue:</strong> No text detected by OCR engine</li><li>🔍 <strong>Possible Causes:</strong></li><li>   • Image resolution too low for text recognition</li><li>   • Poor contrast between text and background</li><li>   • Text embedded as graphics rather than selectable text</li><li>   • Image preprocessing needed (contrast, noise reduction, etc.)</li><li>   • Wrong OCR engine for this type of content</li><li>🛠️ <strong>Recommended Actions:</strong></li><li>   • Try different OCR engines (EasyOCR vs Tesseract vs Hybrid)</li><li>   • Apply image preprocessing (contrast enhancement, noise reduction)</li><li>   • Check if image contains actual text or is purely graphical</li><li>   • Increase image resolution if possible</li><li>   • Try manual text extraction to verify content</li></ul>
+    </div>
+</body>
+</html>

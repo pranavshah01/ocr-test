@@ -1,0 +1,824 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OCR Analysis Report - test_image.png</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .header { background-color: #f0f0f0; padding: 15px; border-radius: 5px; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { color: green; }
+        .warning { color: orange; }
+        .error { color: red; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .bbox { font-family: monospace; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>OCR Analysis Report</h1>
+        <p><strong>Image:</strong> test_image.png</p>
+        <p><strong>Generated:</strong> 2025-08-12T03:29:51.386593</p>
+        <p><strong>OCR Results:</strong> 108 text regions detected</p>
+        <p><strong>Pattern Matches:</strong> 0 matches found</p>
+    </div>
+    
+    <div class="section">
+        <h2>Summary</h2>
+        <p class="success">
+            OCR Detection: 108 text regions found
+        </p>
+        <p class="warning">
+            Pattern Matching: 0 matches found
+        </p>
+    </div>
+    
+    <div class="section">
+        <h2>OCR Detection Results</h2>
+        <table><tr><th>Text</th><th>Confidence</th><th>Bounding Box</th><th>Area</th></tr>
+            <tr>
+                <td>ae</td>
+                <td class="error">0.410</td>
+                <td class="bbox">(777, 717, 7, 23)</td>
+                <td>161</td>
+            </tr>
+            
+            <tr>
+                <td>|e</td>
+                <td class="error">0.310</td>
+                <td class="bbox">(777, 779, 7, 16)</td>
+                <td>112</td>
+            </tr>
+            
+            <tr>
+                <td>TEM</td>
+                <td class="warning">0.740</td>
+                <td class="bbox">(731, 576, 9, 26)</td>
+                <td>234</td>
+            </tr>
+            
+            <tr>
+                <td>NO.</td>
+                <td class="success">0.860</td>
+                <td class="bbox">(731, 607, 9, 24)</td>
+                <td>216</td>
+            </tr>
+            
+            <tr>
+                <td>Port</td>
+                <td class="success">0.850</td>
+                <td class="bbox">(730, 712, 10, 24)</td>
+                <td>240</td>
+            </tr>
+            
+            <tr>
+                <td>Number</td>
+                <td class="success">0.950</td>
+                <td class="bbox">(730, 741, 10, 50)</td>
+                <td>500</td>
+            </tr>
+            
+            <tr>
+                <td>DESCRIPTION</td>
+                <td class="success">0.890</td>
+                <td class="bbox">(721, 958, 29, 81)</td>
+                <td>2349</td>
+            </tr>
+            
+            <tr>
+                <td>any.</td>
+                <td class="error">0.280</td>
+                <td class="bbox">(730, 1180, 10, 28)</td>
+                <td>280</td>
+            </tr>
+            
+            <tr>
+                <td>7</td>
+                <td class="warning">0.670</td>
+                <td class="bbox">(710, 601, 9, 3)</td>
+                <td>27</td>
+            </tr>
+            
+            <tr>
+                <td>‘Adapt</td>
+                <td class="success">0.860</td>
+                <td class="bbox">(707, 912, 13, 40)</td>
+                <td>520</td>
+            </tr>
+            
+            <tr>
+                <td>Pin,</td>
+                <td class="success">0.880</td>
+                <td class="bbox">(709, 956, 10, 21)</td>
+                <td>210</td>
+            </tr>
+            
+            <tr>
+                <td>Window</td>
+                <td class="success">0.960</td>
+                <td class="bbox">(710, 1035, 10, 51)</td>
+                <td>510</td>
+            </tr>
+            
+            <tr>
+                <td>7</td>
+                <td class="warning">0.520</td>
+                <td class="bbox">(710, 1192, 9, 3)</td>
+                <td>27</td>
+            </tr>
+            
+            <tr>
+                <td>2</td>
+                <td class="success">0.950</td>
+                <td class="bbox">(687, 600, 9, 7)</td>
+                <td>63</td>
+            </tr>
+            
+            <tr>
+                <td>(0-0244513-00</td>
+                <td class="warning">0.580</td>
+                <td class="bbox">(677, 687, 30, 88)</td>
+                <td>2640</td>
+            </tr>
+            
+            <tr>
+                <td>vacuum</td>
+                <td class="success">0.910</td>
+                <td class="bbox">(687, 950, 8, 52)</td>
+                <td>416</td>
+            </tr>
+            
+            <tr>
+                <td>window</td>
+                <td class="success">0.940</td>
+                <td class="bbox">(687, 1006, 10, 50)</td>
+                <td>500</td>
+            </tr>
+            
+            <tr>
+                <td>holder</td>
+                <td class="success">0.960</td>
+                <td class="bbox">(687, 1060, 10, 41)</td>
+                <td>410</td>
+            </tr>
+            
+            <tr>
+                <td>1</td>
+                <td class="warning">0.670</td>
+                <td class="bbox">(687, 1192, 9, 3)</td>
+                <td>27</td>
+            </tr>
+            
+            <tr>
+                <td>3</td>
+                <td class="success">0.810</td>
+                <td class="bbox">(666, 600, 10, 7)</td>
+                <td>70</td>
+            </tr>
+            
+            <tr>
+                <td>(0-0244514-00</td>
+                <td class="warning">0.650</td>
+                <td class="bbox">(656, 687, 30, 88)</td>
+                <td>2640</td>
+            </tr>
+            
+            <tr>
+                <td>‘ACC6.1</td>
+                <td class="error">0.200</td>
+                <td class="bbox">(666, 907, 10, 47)</td>
+                <td>470</td>
+            </tr>
+            
+            <tr>
+                <td>VACUUM</td>
+                <td class="success">0.920</td>
+                <td class="bbox">(666, 960, 10, 58)</td>
+                <td>580</td>
+            </tr>
+            
+            <tr>
+                <td>GLASS</td>
+                <td class="success">0.960</td>
+                <td class="bbox">(666, 1022, 10, 40)</td>
+                <td>400</td>
+            </tr>
+            
+            <tr>
+                <td>NUT</td>
+                <td class="success">0.960</td>
+                <td class="bbox">(666, 1067, 10, 23)</td>
+                <td>230</td>
+            </tr>
+            
+            <tr>
+                <td>1</td>
+                <td class="warning">0.710</td>
+                <td class="bbox">(667, 1192, 9, 3)</td>
+                <td>27</td>
+            </tr>
+            
+            <tr>
+                <td>4</td>
+                <td class="success">0.920</td>
+                <td class="bbox">(645, 600, 8, 7)</td>
+                <td>56</td>
+            </tr>
+            
+            <tr>
+                <td>-810005-000</td>
+                <td class="error">0.250</td>
+                <td class="bbox">(634, 694, 30, 80)</td>
+                <td>2400</td>
+            </tr>
+            
+            <tr>
+                <td>VITON,</td>
+                <td class="success">0.890</td>
+                <td class="bbox">(644, 955, 10, 41)</td>
+                <td>410</td>
+            </tr>
+            
+            <tr>
+                <td>70</td>
+                <td class="success">0.920</td>
+                <td class="bbox">(644, 1002, 10, 13)</td>
+                <td>130</td>
+            </tr>
+            
+            <tr>
+                <td>DUROMETER</td>
+                <td class="success">0.850</td>
+                <td class="bbox">(644, 1020, 10, 76)</td>
+                <td>760</td>
+            </tr>
+            
+            <tr>
+                <td>1</td>
+                <td class="warning">0.770</td>
+                <td class="bbox">(645, 1192, 9, 3)</td>
+                <td>27</td>
+            </tr>
+            
+            <tr>
+                <td>5</td>
+                <td class="warning">0.630</td>
+                <td class="bbox">(625, 600, 9, 7)</td>
+                <td>63</td>
+            </tr>
+            
+            <tr>
+                <td>-810093-000</td>
+                <td class="error">0.420</td>
+                <td class="bbox">(625, 698, 9, 74)</td>
+                <td>666</td>
+            </tr>
+            
+            <tr>
+                <td>ID</td>
+                <td class="warning">0.780</td>
+                <td class="bbox">(625, 937, 9, 12)</td>
+                <td>108</td>
+            </tr>
+            
+            <tr>
+                <td>0.801",</td>
+                <td class="success">0.880</td>
+                <td class="bbox">(624, 953, 11, 39)</td>
+                <td>429</td>
+            </tr>
+            
+            <tr>
+                <td>CSD</td>
+                <td class="warning">0.660</td>
+                <td class="bbox">(625, 997, 9, 26)</td>
+                <td>234</td>
+            </tr>
+            
+            <tr>
+                <td>0.07"</td>
+                <td class="warning">0.700</td>
+                <td class="bbox">(625, 1027, 10, 30)</td>
+                <td>300</td>
+            </tr>
+            
+            <tr>
+                <td>#2-019</td>
+                <td class="success">0.820</td>
+                <td class="bbox">(625, 1061, 10, 42)</td>
+                <td>420</td>
+            </tr>
+            
+            <tr>
+                <td>7</td>
+                <td class="error">0.460</td>
+                <td class="bbox">(625, 1192, 9, 3)</td>
+                <td>27</td>
+            </tr>
+            
+            <tr>
+                <td>é</td>
+                <td class="error">0.380</td>
+                <td class="bbox">(602, 600, 9, 7)</td>
+                <td>63</td>
+            </tr>
+            
+            <tr>
+                <td>DOWEL</td>
+                <td class="success">0.900</td>
+                <td class="bbox">(602, 894, 10, 46)</td>
+                <td>460</td>
+            </tr>
+            
+            <tr>
+                <td>PIN</td>
+                <td class="success">0.850</td>
+                <td class="bbox">(602, 944, 10, 20)</td>
+                <td>200</td>
+            </tr>
+            
+            <tr>
+                <td>4MMDIA</td>
+                <td class="success">0.830</td>
+                <td class="bbox">(602, 968, 10, 53)</td>
+                <td>530</td>
+            </tr>
+            
+            <tr>
+                <td>X</td>
+                <td class="warning">0.690</td>
+                <td class="bbox">(602, 1025, 9, 7)</td>
+                <td>63</td>
+            </tr>
+            
+            <tr>
+                <td>SST</td>
+                <td class="success">0.900</td>
+                <td class="bbox">(602, 1085, 10, 18)</td>
+                <td>180</td>
+            </tr>
+            
+            <tr>
+                <td>1</td>
+                <td class="warning">0.770</td>
+                <td class="bbox">(602, 1192, 10, 3)</td>
+                <td>30</td>
+            </tr>
+            
+            <tr>
+                <td>7</td>
+                <td class="success">0.900</td>
+                <td class="bbox">(577, 600, 9, 7)</td>
+                <td>63</td>
+            </tr>
+            
+            <tr>
+                <td>177-210-0000208-00</td>
+                <td class="warning">0.500</td>
+                <td class="bbox">(566, 654, 30, 120)</td>
+                <td>3600</td>
+            </tr>
+            
+            <tr>
+                <td>Fused</td>
+                <td class="success">0.960</td>
+                <td class="bbox">(576, 855, 10, 36)</td>
+                <td>360</td>
+            </tr>
+            
+            <tr>
+                <td>Silica</td>
+                <td class="success">0.870</td>
+                <td class="bbox">(576, 895, 11, 31)</td>
+                <td>341</td>
+            </tr>
+            
+            <tr>
+                <td>Window</td>
+                <td class="success">0.960</td>
+                <td class="bbox">(576, 930, 11, 52)</td>
+                <td>572</td>
+            </tr>
+            
+            <tr>
+                <td>Glass</td>
+                <td class="success">0.960</td>
+                <td class="bbox">(576, 986, 11, 32)</td>
+                <td>352</td>
+            </tr>
+            
+            <tr>
+                <td>Dia.</td>
+                <td class="success">0.930</td>
+                <td class="bbox">(576, 1023, 11, 24)</td>
+                <td>264</td>
+            </tr>
+            
+            <tr>
+                <td>20</td>
+                <td class="success">0.850</td>
+                <td class="bbox">(576, 1051, 10, 14)</td>
+                <td>140</td>
+            </tr>
+            
+            <tr>
+                <td>mm</td>
+                <td class="success">0.850</td>
+                <td class="bbox">(576, 1069, 8, 24)</td>
+                <td>192</td>
+            </tr>
+            
+            <tr>
+                <td>x2.</td>
+                <td class="error">0.400</td>
+                <td class="bbox">(576, 1097, 10, 17)</td>
+                <td>170</td>
+            </tr>
+            
+            <tr>
+                <td>mm.</td>
+                <td class="error">0.400</td>
+                <td class="bbox">(576, 1118, 8, 24)</td>
+                <td>192</td>
+            </tr>
+            
+            <tr>
+                <td>1</td>
+                <td class="success">0.920</td>
+                <td class="bbox">(577, 1192, 9, 3)</td>
+                <td>27</td>
+            </tr>
+            
+            <tr>
+                <td>8</td>
+                <td class="success">0.890</td>
+                <td class="bbox">(547, 600, 9, 7)</td>
+                <td>63</td>
+            </tr>
+            
+            <tr>
+                <td>177-230-0004100-00</td>
+                <td class="error">0.470</td>
+                <td class="bbox">(537, 654, 30, 120)</td>
+                <td>3600</td>
+            </tr>
+            
+            <tr>
+                <td>|SCREW.METRIC,SOCKET</td>
+                <td class="error">0.350</td>
+                <td class="bbox">(546, 848, 10, 148)</td>
+                <td>1480</td>
+            </tr>
+            
+            <tr>
+                <td>LOW</td>
+                <td class="success">0.950</td>
+                <td class="bbox">(547, 1000, 9, 29)</td>
+                <td>261</td>
+            </tr>
+            
+            <tr>
+                <td>HD</td>
+                <td class="warning">0.640</td>
+                <td class="bbox">(547, 1034, 9, 17)</td>
+                <td>153</td>
+            </tr>
+            
+            <tr>
+                <td>2</td>
+                <td class="error">0.430</td>
+                <td class="bbox">(547, 1191, 9, 6)</td>
+                <td>54</td>
+            </tr>
+            
+            <tr>
+                <td>°</td>
+                <td class="error">0.430</td>
+                <td class="bbox">(519, 600, 9, 6)</td>
+                <td>54</td>
+            </tr>
+            
+            <tr>
+                <td>177-230-0220301-00</td>
+                <td class="warning">0.500</td>
+                <td class="bbox">(509, 654, 30, 120)</td>
+                <td>3600</td>
+            </tr>
+            
+            <tr>
+                <td>Screws,</td>
+                <td class="success">0.960</td>
+                <td class="bbox">(518, 858, 10, 46)</td>
+                <td>460</td>
+            </tr>
+            
+            <tr>
+                <td>Metric,</td>
+                <td class="success">0.910</td>
+                <td class="bbox">(518, 909, 11, 42)</td>
+                <td>462</td>
+            </tr>
+            
+            <tr>
+                <td>Steel,</td>
+                <td class="success">0.890</td>
+                <td class="bbox">(518, 956, 11, 33)</td>
+                <td>363</td>
+            </tr>
+            
+            <tr>
+                <td>Philips</td>
+                <td class="warning">0.680</td>
+                <td class="bbox">(516, 994, 13, 40)</td>
+                <td>520</td>
+            </tr>
+            
+            <tr>
+                <td>Flat</td>
+                <td class="success">0.960</td>
+                <td class="bbox">(519, 1038, 10, 22)</td>
+                <td>220</td>
+            </tr>
+            
+            <tr>
+                <td>Head,</td>
+                <td class="success">0.920</td>
+                <td class="bbox">(518, 1064, 11, 38)</td>
+                <td>418</td>
+            </tr>
+            
+            <tr>
+                <td>M2x3</td>
+                <td class="success">0.880</td>
+                <td class="bbox">(519, 1106, 9, 33)</td>
+                <td>297</td>
+            </tr>
+            
+            <tr>
+                <td>1</td>
+                <td class="success">0.840</td>
+                <td class="bbox">(519, 1192, 9, 3)</td>
+                <td>27</td>
+            </tr>
+            
+            <tr>
+                <td>1</td>
+                <td class="warning">0.570</td>
+                <td class="bbox">(350, 192, 7, 2)</td>
+                <td>14</td>
+            </tr>
+            
+            <tr>
+                <td>SECTION</td>
+                <td class="success">0.910</td>
+                <td class="bbox">(184, 253, 9, 53)</td>
+                <td>477</td>
+            </tr>
+            
+            <tr>
+                <td>A-A</td>
+                <td class="warning">0.750</td>
+                <td class="bbox">(184, 310, 8, 24)</td>
+                <td>192</td>
+            </tr>
+            
+            <tr>
+                <td>ESHEETS</td>
+                <td class="error">0.290</td>
+                <td class="bbox">(119, 726, 29, 74)</td>
+                <td>2146</td>
+            </tr>
+            
+            <tr>
+                <td>Hermes-Microvision,</td>
+                <td class="error">0.350</td>
+                <td class="bbox">(127, 1024, 16, 175)</td>
+                <td>2800</td>
+            </tr>
+            
+            <tr>
+                <td>Inc.</td>
+                <td class="success">0.910</td>
+                <td class="bbox">(129, 1204, 14, 31)</td>
+                <td>434</td>
+            </tr>
+            
+            <tr>
+                <td>ABE</td>
+                <td class="error">0.390</td>
+                <td class="bbox">(112, 732, 29, 15)</td>
+                <td>435</td>
+            </tr>
+            
+            <tr>
+                <td>|Ning</td>
+                <td class="error">0.410</td>
+                <td class="bbox">(113, 927, 11, 40)</td>
+                <td>440</td>
+            </tr>
+            
+            <tr>
+                <td>Ye</td>
+                <td class="warning">0.780</td>
+                <td class="bbox">(109, 956, 30, 11)</td>
+                <td>330</td>
+            </tr>
+            
+            <tr>
+                <td>TANCE</td>
+                <td class="error">0.270</td>
+                <td class="bbox">(101, 683, 30, 48)</td>
+                <td>1440</td>
+            </tr>
+            
+            <tr>
+                <td>mE</td>
+                <td class="error">0.270</td>
+                <td class="bbox">(108, 1025, 9, 24)</td>
+                <td>216</td>
+            </tr>
+            
+            <tr>
+                <td>x</td>
+                <td class="error">0.440</td>
+                <td class="bbox">(100, 681, 5, 4)</td>
+                <td>20</td>
+            </tr>
+            
+            <tr>
+                <td>|</td>
+                <td class="error">0.310</td>
+                <td class="bbox">(87, 695, 26, 20)</td>
+                <td>520</td>
+            </tr>
+            
+            <tr>
+                <td>RAD</td>
+                <td class="error">0.400</td>
+                <td class="bbox">(87, 812, 26, 27)</td>
+                <td>702</td>
+            </tr>
+            
+            <tr>
+                <td>TUBE</td>
+                <td class="error">0.300</td>
+                <td class="bbox">(87, 842, 26, 40)</td>
+                <td>1040</td>
+            </tr>
+            
+            <tr>
+                <td>cing</td>
+                <td class="warning">0.570</td>
+                <td class="bbox">(94, 926, 8, 55)</td>
+                <td>440</td>
+            </tr>
+            
+            <tr>
+                <td>ju</td>
+                <td class="success">0.850</td>
+                <td class="bbox">(87, 948, 26, 10)</td>
+                <td>260</td>
+            </tr>
+            
+            <tr>
+                <td>chen</td>
+                <td class="warning">0.510</td>
+                <td class="bbox">(94, 959, 8, 21)</td>
+                <td>168</td>
+            </tr>
+            
+            <tr>
+                <td>Assy.</td>
+                <td class="success">0.930</td>
+                <td class="bbox">(91, 1071, 17, 41)</td>
+                <td>697</td>
+            </tr>
+            
+            <tr>
+                <td>ACC6.1</td>
+                <td class="success">0.850</td>
+                <td class="bbox">(94, 1118, 15, 64)</td>
+                <td>960</td>
+            </tr>
+            
+            <tr>
+                <td>Capac</td>
+                <td class="error">0.220</td>
+                <td class="bbox">(88, 613, 7, 39)</td>
+                <td>273</td>
+            </tr>
+            
+            <tr>
+                <td>att</td>
+                <td class="error">0.310</td>
+                <td class="bbox">(88, 674, 7, 14)</td>
+                <td>98</td>
+            </tr>
+            
+            <tr>
+                <td>z</td>
+                <td class="error">0.480</td>
+                <td class="bbox">(91, 852, 5, 3)</td>
+                <td>15</td>
+            </tr>
+            
+            <tr>
+                <td>v</td>
+                <td class="warning">0.730</td>
+                <td class="bbox">(77, 1049, 14, 12)</td>
+                <td>168</td>
+            </tr>
+            
+            <tr>
+                <td>sons</td>
+                <td class="error">0.200</td>
+                <td class="bbox">(78, 616, 6, 39)</td>
+                <td>234</td>
+            </tr>
+            
+            <tr>
+                <td>‘acuum</td>
+                <td class="warning">0.760</td>
+                <td class="bbox">(77, 1062, 10, 63)</td>
+                <td>630</td>
+            </tr>
+            
+            <tr>
+                <td>Window,</td>
+                <td class="success">0.910</td>
+                <td class="bbox">(76, 1131, 15, 75)</td>
+                <td>1125</td>
+            </tr>
+            
+            <tr>
+                <td>MARAE</td>
+                <td class="error">0.440</td>
+                <td class="bbox">(57, 774, 7, 38)</td>
+                <td>266</td>
+            </tr>
+            
+            <tr>
+                <td>Upgrade</td>
+                <td class="success">0.960</td>
+                <td class="bbox">(55, 1090, 18, 77)</td>
+                <td>1386</td>
+            </tr>
+            
+            <tr>
+                <td>woe</td>
+                <td class="error">0.460</td>
+                <td class="bbox">(34, 775, 7, 21)</td>
+                <td>147</td>
+            </tr>
+            
+            <tr>
+                <td>SER</td>
+                <td class="error">0.270</td>
+                <td class="bbox">(10, 605, 24, 66)</td>
+                <td>1584</td>
+            </tr>
+            
+            <tr>
+                <td>at</td>
+                <td class="error">0.320</td>
+                <td class="bbox">(10, 735, 24, 18)</td>
+                <td>432</td>
+            </tr>
+            
+            <tr>
+                <td>SCALE:1:1</td>
+                <td class="error">0.350</td>
+                <td class="bbox">(7, 1028, 9, 50)</td>
+                <td>450</td>
+            </tr>
+            </table>
+    </div>
+    
+    <div class="section">
+        <h2>Pattern Matches</h2>
+        <p class='warning'>No pattern matches found.</p>
+    </div>
+    
+    <div class="section">
+        <h2>Processing Information</h2>
+        <pre>{
+  "best_orientation": 180,
+  "orientation_scores": {
+    "0": 0.5079746835443035,
+    "90": 0.692452830188679,
+    "180": 0.679074074074074,
+    "270": 0.49788235294117633
+  },
+  "ocr_engine": "tesseract",
+  "systematic_orientation_testing": true
+}</pre>
+    </div>
+    
+    <div class="section">
+        <h2>Recommendations</h2>
+        <ul><li>⚠️ <strong>OCR Working but No Pattern Matches:</strong></li><li>🔍 <strong>Possible Causes:</strong></li><li>   • OCR text doesn't match expected patterns</li><li>   • Pattern definitions need adjustment</li><li>   • OCR confidence too low</li><li>   • Text formatting issues in OCR output</li><li>🛠️ <strong>Recommended Actions:</strong></li><li>   • Review OCR text output for accuracy</li><li>   • Adjust pattern matching rules</li><li>   • Lower OCR confidence threshold</li><li>   • Check mapping file for missing entries</li></ul>
+    </div>
+</body>
+</html>

@@ -38,11 +38,11 @@ class DocConverter:
         self.preferred_tool = self._select_preferred_tool()
         
         if not self.available_tools:
-            logger.warning("No conversion tools detected. Conversion may fail.")
-            logger.info("To fix this issue:")
-            logger.info("  - Install LibreOffice for .doc file support")
-            logger.info("  - On macOS: Download from https://www.libreoffice.org")
-            logger.info("  - On Windows: Word COM interface can also be used if Microsoft Word is installed")
+            logger.info("No .doc file conversion tools detected. .docx files will work normally.")
+            logger.debug("To enable .doc file support:")
+            logger.debug("  - Install LibreOffice for .doc file support")
+            logger.debug("  - On macOS: Download from https://www.libreoffice.org")
+            logger.debug("  - On Windows: Word COM interface can also be used if Microsoft Word is installed")
         else:
             logger.info(f"Available conversion tools: {self.available_tools}")
             logger.info(f"Preferred conversion tool: {self.preferred_tool}")

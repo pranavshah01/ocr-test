@@ -137,15 +137,15 @@ class DocumentInfo:
     
     def __post_init__(self):
         """Initialize derived fields after object creation."""
-        if self.file_path.exists():
+        if self.file_path and self.file_path.exists():
             self.file_size = self.file_path.stat().st_size
-        self.file_extension = self.file_path.suffix.lower()
+        self.file_extension = self.file_path.suffix.lower() if self.file_path else ""
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert document info to dictionary for serialization."""
         return {
-            'file_path': str(self.file_path),
-            'file_name': self.file_path.name,
+            'file_path': str(self.file_path) if self.file_path else "",
+            'file_name': self.file_path.name if self.file_path else "",
             'file_size': self.file_size,
             'file_size_mb': round(self.file_size / (1024 * 1024), 2),
             'file_extension': self.file_extension,

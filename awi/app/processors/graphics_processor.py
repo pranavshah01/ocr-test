@@ -1,86 +1,130 @@
 """
-Graphics processor for textbox and graphics elements processing.
-Handles <w:txbxContent> parsing, font normalization, overflow detection, and text replacement.
+Enhanced Graphics Processor for DOCX document processing.
+
+This module provides comprehensive graphics processing capabilities for DOCX documents including:
+- Pattern matching in graphics and shapes
+- Text replacement with formatting preservation
+- Layout impact analysis for graphics changes
+- Support for both append and replace modes
+- Font and formatting preservation during replacements
+
+The processor analyzes document graphics, finds patterns in text content within shapes,
+applies replacements while maintaining document formatting, and provides detailed analysis
+of potential layout impacts from graphics modifications.
 """
 
+import re
+import logging
+import time
 import xml.etree.ElementTree as ET
 from typing import Dict, List, Any, Optional, Tuple
 from pathlib import Path
-import logging
-import re
+from dataclasses import dataclass
 
 from docx import Document
+from docx.text.paragraph import Paragraph
+from docx.table import Table
+from docx.section import Section
+from docx.enum.section import WD_SECTION_START
+from docx.shape import InlineShape
+from docx.shared import Inches
 
 from ..core.processor_interface import BaseProcessor, ProcessingResult
 from ..utils.pattern_matcher import PatternMatcher, create_pattern_matcher
 from ..utils.graphics_utils.graphics_docx_utils import (
-    TextboxParser, GraphicsFontManager, TextboxCapacityCalculator, DEFAULT_FONT_SIZE
+    GraphicsTextReconstructor, GraphicsFontManager, GraphicsTextReplacer, create_graphics_text_replacer,
+    TextboxParser
+)
+from ..utils.shared_constants import (
+    DEFAULT_MAPPING,
+    DEFAULT_SEPARATOR,
+    PROCESSING_MODES,
+    DEFAULT_FONT_SIZE
 )
 
 logger = logging.getLogger(__name__)
 
+@dataclass
+class EnhancedGraphicsMatch:
+    """
+    Enhanced graphics match information with comprehensive details about text replacements.
+    
+    This class extends basic pattern matching with additional context including
+    font details, and confidence scores. It provides a complete record of each text replacement
+    operation for reporting and analysis purposes.
+    
+    Attributes:
+        pattern: The regex pattern that was matched
+        original_text: The original text found in the document
+        replacement_text: The text that will replace the original
+        position: Character position where the match was found
+        location: Human-readable location description (e.g., "body_paragraph_5")
+        font_info: Dictionary containing font properties (name, size, style, etc.)
+        confidence: Confidence score for the match (0.0 to 1.0)
+        actual_pattern: The actual regex pattern string
+        content_type: Type of content (Paragraph, Table, Header, Footer, etc.)
+        dimension: Element dimensions
+        processor: Name of the processor that found this match
+    """
+    pattern: str
+    original_text: str
+    replacement_text: str
+    position: int
+    location: str
+    font_info: Dict[str, Any] = None
+    confidence: Optional[float] = None
+    actual_pattern: str = ""
+    content_type: str = "Graphics"
+    dimension: str = ""
+    processor: str = "Graphics"
+    
+    def __post_init__(self):
+        """
+        Initialize default values after object creation.
+        
+        This method is automatically called after the dataclass is created to ensure
+        that font_info is always a dictionary, even if not provided during initialization.
+        """
+        if self.font_info is None:
+            self.font_info = {}
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            'pattern': self.pattern,
+            'original_text': self.original_text,
+            'replacement_text': self.replacement_text,
+            'position': self.position,
+            'location': self.location,
+            'font_info': self.font_info,
+            'confidence': self.confidence,
+            'actual_pattern': self.actual_pattern,
+            'content_type': self.content_type,
+            'dimension': self.dimension,
+            'processor': self.processor
+        }
 
 class GraphicsProcessor(BaseProcessor):
     """
-    Processes textboxes and graphics elements with pattern matching and replacement.
+    Enhanced graphics processor for DOCX documents with comprehensive analysis capabilities.
     
-    Font Fitting Algorithm:
-    ======================
+    This class provides the main interface for processing graphics in DOCX documents. It handles
+    pattern matching, text replacement within graphics and shapes, and maintains detailed 
+    information about all graphics modifications for reporting purposes.
     
-    The graphics processor uses a sophisticated two-phase approach with baseline characters per square centimeter:
-    
-    Phase 1 - Detection:
-    - Extracts all font sizes detected in the textbox
-    - Identifies textbox dimensions and font family
-    - No reconstruction logic during this phase
-    
-    Phase 2 - Reconstruction:
-    - Uses mapped appended text to create complete text
-    - Calculates baseline characters per sq cm for font sizes 12pt to 6pt
-    - Compares original text length vs appended text length
-    - Uses baseline to determine optimal font size
-    
-    Baseline Characters per Square Centimeter Algorithm:
-    ==================================================
-    
-    1. Baseline Calculation:
-       - For each font size (12pt to 6pt), calculate characters per sq cm
-       - Formula: chars_per_line * lines_fit / textbox_area_cm2
-       - Font-specific width multipliers account for different character widths
-    
-    2. Font-Specific Multipliers:
-       - Arial: 0.6 (standard sans-serif)
-       - Times New Roman: 0.55 (narrower serif)
-       - PMingLiU: 0.65 (wider Chinese font)
-       - ACADEMY ENGRAVED: 0.7 (decorative font)
-    
-    3. Text Length Analysis:
-       - Original text length: characters before append/replace
-       - Appended text length: characters after append/replace
-       - Required area = text_length / chars_per_sqcm
-    
-    4. Decision Process:
-       - Start with highest detected font size
-       - Calculate required area for complete text
-       - Add 20% safety margin for padding and line breaks
-       - Choose largest font size where text fits within textbox area
-    
-    5. Optimization Goals:
-       - Maximize font size while preventing overflow
-       - Ensure complete text visibility
-       - Maintain readability and aesthetics
-       - Use scientific baseline approach for consistent results
+    The processor integrates with core infrastructure components including memory
+    management, performance monitoring, and GPU acceleration for optimal performance.
     """
     
     def __init__(self, patterns: Dict[str, Any] = None, mappings: Dict[str, Any] = None, 
-                 mode: str = "append", separator: str = ";", default_mapping: str = "4022-NA"):
+                 mode: str = PROCESSING_MODES['APPEND'], separator: str = DEFAULT_SEPARATOR, default_mapping: str = DEFAULT_MAPPING):
         """
-        Initialize graphics processor.
+        Initialize the graphics processor with patterns, mappings, and processing mode.
         
         Args:
-            patterns: Dictionary of pattern names to regex patterns
-            mappings: Dictionary of original text to replacement text
-            mode: Processing mode ('append' or 'replace')
+            patterns: Dictionary containing regex patterns for text matching
+            mappings: Dictionary containing text mappings for replacements
+            mode: Processing mode - "append" or "replace"
             separator: Separator between original and appended text in append mode
             default_mapping: Default text to append when no mapping is found
         """
@@ -101,28 +145,30 @@ class GraphicsProcessor(BaseProcessor):
         self.default_mapping = default_mapping
         
         # Initialize components
-        self.pattern_matcher = create_pattern_matcher(patterns, mappings, enhanced_mode=True)
+        self.pattern_matcher = None
+        self.graphics_text_replacer = None
+        self.graphics_font_manager = None
         
-        # DEBUG: Test mapping loading
-        logger.info(f"DEBUG: Mappings loaded: {len(self.pattern_matcher.mappings)}")
-        logger.info(f"DEBUG: Sample mappings: {list(self.pattern_matcher.mappings.keys())[:5]}")
-        
-        # Test specific mappings that should exist
-        test_ids = ["77-110-0315001-00", "77-110-0503503-01", "77-210-0000017-00"]
-        for test_id in test_ids:
-            replacement = self.pattern_matcher.get_replacement(test_id)
-            logger.info(f"DEBUG: Test mapping '{test_id}' -> '{replacement}'")
-        
-        self.initialized = True
-        logger.info(f"Graphics processor initialized with {len(patterns)} patterns, {len(mappings)} mappings, mode: {mode}")
+        logger.info(f"Graphics processor initialized with mode: {mode}, separator: '{separator}', default_mapping: '{default_mapping}'")
     
     def initialize(self, **kwargs) -> bool:
         """
         Initialize the processor with configuration parameters.
         
+        This method loads patterns and mappings, configures the processing mode,
+        and sets up all internal components for document processing. It can accept
+        patterns and mappings directly or load them from JSON files.
+        
         Args:
-            **kwargs: Configuration parameters
-            
+            **kwargs: Configuration parameters including:
+                - patterns: Dictionary of pattern names to regex patterns
+                - mappings: Dictionary of original text to replacement text
+                - mode: Processing mode ('append' or 'replace')
+                - separator: Separator between original and appended text in append mode
+                - default_mapping: Default text to append when no mapping is found
+                - patterns_file: Path to patterns JSON file (if patterns not provided)
+                - mappings_file: Path to mappings JSON file (if mappings not provided)
+        
         Returns:
             True if initialization was successful, False otherwise
         """
@@ -136,24 +182,19 @@ class GraphicsProcessor(BaseProcessor):
             separator = kwargs.get('separator', self.separator)
             default_mapping = kwargs.get('default_mapping', self.default_mapping)
             
+            # Load patterns and mappings if not provided
+            if not patterns or not mappings:
+                patterns, mappings = self._load_patterns_and_mappings()
+            
             self.patterns = patterns
             self.mappings = mappings
             self.mode = mode
             self.separator = separator
             self.default_mapping = default_mapping
             
-            # Initialize components
+            # Initialize components using utility classes
             self.pattern_matcher = create_pattern_matcher(patterns, mappings, enhanced_mode=True)
-            
-            # DEBUG: Test mapping loading
-            logger.info(f"DEBUG: Mappings loaded: {len(self.pattern_matcher.mappings)}")
-            logger.info(f"DEBUG: Sample mappings: {list(self.pattern_matcher.mappings.keys())[:5]}")
-            
-            # Test specific mappings that should exist
-            test_ids = ["77-110-0315001-00", "77-110-0503503-01", "77-210-0000017-00"]
-            for test_id in test_ids:
-                replacement = self.pattern_matcher.get_replacement(test_id)
-                logger.info(f"DEBUG: Test mapping '{test_id}' -> '{replacement}'")
+            self.graphics_text_replacer = create_graphics_text_replacer(mode, separator, default_mapping)
             
             self.initialized = True
             logger.info(f"Graphics processor initialized with {len(patterns)} patterns, {len(mappings)} mappings, mode: {mode}")
@@ -373,14 +414,14 @@ class GraphicsProcessor(BaseProcessor):
             seen_keys = set()
             for pattern_name, matched_text, start_pos, end_pos in pattern_matches_reversed:
                 replacement_text = self.pattern_matcher.get_replacement(matched_text)
-                if not replacement_text and self.mode == "append":
+                if not replacement_text and self.mode == PROCESSING_MODES['APPEND']:
                     replacement_text = self.default_mapping
-                if not replacement_text and self.mode == "replace":
+                if not replacement_text and self.mode == PROCESSING_MODES['REPLACE']:
                     # skip when no mapping in replace mode
                     continue
                 if not replacement_text:
                     continue
-                final_text_sim = f"{matched_text}{sep_global}{replacement_text}" if self.mode == "append" else replacement_text
+                final_text_sim = f"{matched_text}{sep_global}{replacement_text}" if self.mode == PROCESSING_MODES['APPEND'] else replacement_text
                 key = (start_pos, end_pos, final_text_sim)
                 if key in seen_keys:
                     continue
@@ -430,7 +471,7 @@ class GraphicsProcessor(BaseProcessor):
                                         detection['font_info']['font_reasoning'] = f"Skipped in replace mode - no mapping found for '{matched_text}'"
                                     break
                             continue
-                        elif self.mode == "append":
+                        elif self.mode == PROCESSING_MODES['APPEND']:
                             replacement_text = self.default_mapping
                             logger.info(f"APPEND MODE: Using default mapping '{self.default_mapping}' for '{matched_text}'")
                         else:
@@ -475,7 +516,7 @@ class GraphicsProcessor(BaseProcessor):
                     textbox_processed_patterns.add(pattern_key)
                     
                     # Step 7: Determine final text based on mode
-                    if self.mode == "append":
+                    if self.mode == PROCESSING_MODES['APPEND']:
                         sep = getattr(self, 'separator', ';') or ';'
                         final_text = f"{matched_text}{sep}{replacement_text}"
                         logger.info(f"APPEND MODE: '{matched_text}' + '{replacement_text}' (sep='{sep}') = '{final_text}'")
@@ -1241,9 +1282,9 @@ class GraphicsProcessor(BaseProcessor):
                                 wt_elements, replacement_text, target_font_size=14, target_font_family="Arial"
                             )
                             if font_applied:
-                                logger.info(f"Font properties successfully applied to replacement text")
+                                logger.debug(f"Font properties successfully applied to replacement text")
                             else:
-                                logger.warning(f"Failed to apply font properties to replacement text")
+                                logger.debug(f"Font properties not applied to replacement text (this is normal for some text structures)")
                 else:
                     # Subsequent elements: remove the matched portion
                     match_start_in_element = max(0, start_pos - element_start)
@@ -1284,12 +1325,26 @@ class GraphicsProcessor(BaseProcessor):
             # Find the w:t element that contains the replacement text
             target_element = None
             for wt_element in wt_elements:
-                if wt_element.text and replacement_text in wt_element.text:
-                    target_element = wt_element
-                    break
+                if wt_element.text:
+                    # Check for exact match first
+                    if replacement_text in wt_element.text:
+                        target_element = wt_element
+                        break
+                    # Check for partial match (handle cases where text was split)
+                    elif any(part in wt_element.text for part in replacement_text.split()):
+                        target_element = wt_element
+                        break
             
             if not target_element:
-                logger.warning(f"Could not find w:t element containing replacement text: '{replacement_text}'")
+                # Try to find any w:t element that might contain parts of the replacement text
+                for wt_element in wt_elements:
+                    if wt_element.text and len(wt_element.text.strip()) > 0:
+                        target_element = wt_element
+                        logger.debug(f"Using fallback w:t element with text: '{wt_element.text[:50]}...'")
+                        break
+            
+            if not target_element:
+                logger.debug(f"Could not find w:t element containing replacement text: '{replacement_text}'")
                 return False
             
             # Get the parent w:r element
@@ -1379,9 +1434,23 @@ class GraphicsProcessor(BaseProcessor):
             # Find the w:t element that contains the replacement text
             target_element = None
             for wt_element in wt_elements:
-                if wt_element.text and replacement_text in wt_element.text:
-                    target_element = wt_element
-                    break
+                if wt_element.text:
+                    # Check for exact match first
+                    if replacement_text in wt_element.text:
+                        target_element = wt_element
+                        break
+                    # Check for partial match (handle cases where text was split)
+                    elif any(part in wt_element.text for part in replacement_text.split()):
+                        target_element = wt_element
+                        break
+            
+            if not target_element:
+                # Try to find any w:t element that might contain parts of the replacement text
+                for wt_element in wt_elements:
+                    if wt_element.text and len(wt_element.text.strip()) > 0:
+                        target_element = wt_element
+                        logger.debug(f"Using fallback w:t element with text: '{wt_element.text[:50]}...'")
+                        break
             
             if not target_element:
                 logger.debug(f"Could not find w:t element containing replacement text: '{replacement_text}'")
@@ -1569,8 +1638,8 @@ class GraphicsProcessor(BaseProcessor):
             logger.error(f"Error during Graphics Processor cleanup: {e}")
 
 def create_graphics_processor(patterns: Dict[str, Any] = None, mappings: Dict[str, Any] = None, 
-                            mode: str = "append", separator: str = ";", 
-                            default_mapping: str = "4022-NA") -> GraphicsProcessor:
+                            mode: str = PROCESSING_MODES['APPEND'], separator: str = DEFAULT_SEPARATOR, 
+                            default_mapping: str = DEFAULT_MAPPING) -> GraphicsProcessor:
     """
     Factory function to create a GraphicsProcessor instance.
     

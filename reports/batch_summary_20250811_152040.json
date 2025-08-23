@@ -1,0 +1,2111 @@
+{
+  "report_type": "batch_summary",
+  "generated_at": "2025-08-11T15:20:40.365751",
+  "batch_summary": {
+    "total_files": 1,
+    "successful_files": 1,
+    "failed_files": 0,
+    "success_rate": 100.0,
+    "total_processing_time": 95.3700819015503,
+    "average_processing_time": 95.3700819015503
+  },
+  "aggregate_statistics": {
+    "files_processed": 1,
+    "files_successful": 1,
+    "files_failed": 0,
+    "success_rate": 100.0,
+    "total_text_matches": 3,
+    "total_graphics_matches": 6,
+    "total_image_matches": 6,
+    "total_matches": 15,
+    "total_processing_time": 93.10302519798279,
+    "average_processing_time": 93.10302519798279,
+    "errors": [],
+    "warnings": []
+  },
+  "individual_results": [
+    {
+      "success": true,
+      "input_path": "source_documents/test_file2.docx",
+      "output_path": "processed/test_file2_processed.docx",
+      "processing_time": 93.10302519798279,
+      "error_message": null,
+      "text_matches": 3,
+      "graphics_matches": 6,
+      "image_matches": 6,
+      "total_matches": 15,
+      "processing_log": {
+        "document_path": "source_documents/test_file2.docx",
+        "processing_time": 0.0,
+        "timestamp": "2025-08-11T15:19:07.290560",
+        "text_matches": [
+          {
+            "pattern": "pattern_77_enforced_structure",
+            "original_text": "77-160-0001087-00",
+            "replacement_text": "4022-680-909513-74",
+            "position": 18,
+            "font_info": {
+              "name": "Arial",
+              "size": 12,
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "color": "0070C0",
+              "highlight": null
+            },
+            "location": "body_paragraph_124",
+            "confidence": null
+          },
+          {
+            "pattern": "pattern_77_enforced_structure",
+            "original_text": "77-110-0244513-00",
+            "replacement_text": "4022-110-0244513-00",
+            "position": 89,
+            "font_info": {
+              "name": "Arial",
+              "size": 12,
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "color": "0070C0",
+              "highlight": null
+            },
+            "location": "body_paragraph_124",
+            "confidence": null
+          },
+          {
+            "pattern": "pattern_77_enforced_structure",
+            "original_text": "77-141-810032-000",
+            "replacement_text": "4022-141-810032-00",
+            "position": 58,
+            "font_info": {
+              "name": "Arial",
+              "size": 12,
+              "bold": false,
+              "italic": false,
+              "underline": false,
+              "color": null,
+              "highlight": null
+            },
+            "location": "table_1_row_0_cell_1_paragraph_0",
+            "confidence": null
+          }
+        ],
+        "graphics_matches": [
+          {
+            "pattern": "pattern_77_enforced_structure",
+            "original_text": "77-141-810024-000",
+            "replacement_text": "4022-141-810024-00",
+            "position": 8,
+            "font_info": {
+              "size": 6.0,
+              "family": "Arial",
+              "original_size": 12,
+              "normalized": true
+            },
+            "location": "main_textbox_130",
+            "confidence": null
+          },
+          {
+            "pattern": "pattern_77_enforced_structure",
+            "original_text": "77-141-810024-000",
+            "replacement_text": "4022-141-810024-00",
+            "position": 8,
+            "font_info": {
+              "size": 6.0,
+              "family": "Arial",
+              "original_size": 12,
+              "normalized": true
+            },
+            "location": "main_textbox_131",
+            "confidence": null
+          },
+          {
+            "pattern": "pattern_77_enforced_structure",
+            "original_text": "77-110-0228201-01",
+            "replacement_text": "4022-110-0228201-01",
+            "position": 32,
+            "font_info": {
+              "size": 9.0,
+              "family": "Arial",
+              "original_size": 12,
+              "normalized": true
+            },
+            "location": "main_textbox_134",
+            "confidence": null
+          },
+          {
+            "pattern": "pattern_77_enforced_structure",
+            "original_text": "77-110-0228201-01",
+            "replacement_text": "4022-110-0228201-01",
+            "position": 32,
+            "font_info": {
+              "size": 9.0,
+              "family": "Arial",
+              "original_size": 12,
+              "normalized": true
+            },
+            "location": "main_textbox_135",
+            "confidence": null
+          },
+          {
+            "pattern": "pattern_77_enforced_structure",
+            "original_text": "77-141-810024-000",
+            "replacement_text": "4022-141-810024-00",
+            "position": 8,
+            "font_info": {
+              "size": 6.0,
+              "family": "Arial",
+              "original_size": 12,
+              "normalized": true
+            },
+            "location": "main_textbox_209",
+            "confidence": null
+          },
+          {
+            "pattern": "pattern_77_enforced_structure",
+            "original_text": "77-110-0228201-01",
+            "replacement_text": "4022-110-0228201-01",
+            "position": 32,
+            "font_info": {
+              "size": 6.0,
+              "family": "Arial",
+              "original_size": 12,
+              "normalized": true
+            },
+            "location": "main_textbox_211",
+            "confidence": null
+          }
+        ],
+        "image_matches": [
+          {
+            "ocr_result": {
+              "text": "77-160-810105-000",
+              "confidence": 0.9899575427935218,
+              "bounding_box": {
+                "x": 289,
+                "y": 255,
+                "width": 150,
+                "height": 20
+              }
+            },
+            "pattern": "pattern_77_enforced_structure",
+            "replacement_text": "4022-680-909513-74",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_1_modified.png",
+            "processing_mode": "replace"
+          },
+          {
+            "ocr_result": {
+              "text": "77-618-0100361",
+              "confidence": 0.95565499710918,
+              "bounding_box": {
+                "x": 125,
+                "y": 411,
+                "width": 122,
+                "height": 20
+              }
+            },
+            "pattern": "pattern_77_two_dash_structure",
+            "replacement_text": "4022-618-0100361",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_1_modified.png",
+            "processing_mode": "replace"
+          },
+          {
+            "ocr_result": {
+              "text": "Heat ShrinkHeat:77-531-116BLK-245",
+              "confidence": 0.8799025995110147,
+              "bounding_box": {
+                "x": 446,
+                "y": 56,
+                "width": 454,
+                "height": 30
+              }
+            },
+            "pattern": "pattern_77_enforced_structure",
+            "replacement_text": "4022-325-927523-30",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_27_modified.png",
+            "processing_mode": "replace"
+          },
+          {
+            "ocr_result": {
+              "text": "77-232-0403040-00",
+              "confidence": 0.9080339419967186,
+              "bounding_box": {
+                "x": 173,
+                "y": 151,
+                "width": 146,
+                "height": 16
+              }
+            },
+            "pattern": "pattern_77_enforced_structure",
+            "replacement_text": "4022-688-906531-10",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_35_modified.png",
+            "processing_mode": "replace"
+          },
+          {
+            "ocr_result": {
+              "text": "77-130-120541-001",
+              "confidence": 0.9796573894893659,
+              "bounding_box": {
+                "x": 173,
+                "y": 207,
+                "width": 144,
+                "height": 18
+              }
+            },
+            "pattern": "pattern_77_enforced_structure",
+            "replacement_text": "4022-172-240862-36",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_35_modified.png",
+            "processing_mode": "replace"
+          },
+          {
+            "ocr_result": {
+              "text": "77-110-817895-000",
+              "confidence": 0.9984902864936247,
+              "bounding_box": {
+                "x": 171,
+                "y": 403,
+                "width": 142,
+                "height": 18
+              }
+            },
+            "pattern": "pattern_77_enforced_structure",
+            "replacement_text": "4022-817823A-HG2",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_35_modified.png",
+            "processing_mode": "replace"
+          }
+        ],
+        "errors": [],
+        "warnings": [],
+        "total_matches": 15,
+        "success": true,
+        "ocr_comparison_data": [
+          {
+            "location": "image_0",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_0.png",
+            "image_name": "image_0.png",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_1",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_1.png",
+            "image_name": "image_1.png",
+            "easyocr_results": [
+              {
+                "text": "3",
+                "confidence": 0.999946833363552,
+                "bounding_box": [
+                  19,
+                  15,
+                  20,
+                  24
+                ]
+              },
+              {
+                "text": "77-160-810105-000",
+                "confidence": 0.7479544416503706,
+                "bounding_box": [
+                  289,
+                  255,
+                  150,
+                  20
+                ]
+              },
+              {
+                "text": "SSDDXBoard:",
+                "confidence": 0.9965097378458126,
+                "bounding_box": [
+                  123,
+                  391,
+                  124,
+                  18
+                ]
+              },
+              {
+                "text": "77-618-0100361",
+                "confidence": 0.9955718057094884,
+                "bounding_box": [
+                  125,
+                  411,
+                  122,
+                  20
+                ]
+              }
+            ],
+            "tesseract_results": [
+              {
+                "text": "4,",
+                "confidence": 0.7,
+                "bounding_box": [
+                  23,
+                  76,
+                  20,
+                  16
+                ]
+              },
+              {
+                "text": "Spacer:",
+                "confidence": 0.96,
+                "bounding_box": [
+                  373,
+                  239,
+                  59,
+                  16
+                ]
+              },
+              {
+                "text": "77-160-810105-000",
+                "confidence": 0.92,
+                "bounding_box": [
+                  294,
+                  260,
+                  143,
+                  12
+                ]
+              },
+              {
+                "text": "SSDDX",
+                "confidence": 0.79,
+                "bounding_box": [
+                  127,
+                  394,
+                  59,
+                  12
+                ]
+              },
+              {
+                "text": "Board:",
+                "confidence": 0.96,
+                "bounding_box": [
+                  190,
+                  394,
+                  48,
+                  12
+                ]
+              },
+              {
+                "text": "77-618-0100361",
+                "confidence": 0.9,
+                "bounding_box": [
+                  126,
+                  415,
+                  118,
+                  12
+                ]
+              }
+            ],
+            "easyocr_text_count": 4,
+            "tesseract_text_count": 6,
+            "easyocr_texts": [
+              "3",
+              "77-160-810105-000",
+              "SSDDXBoard:",
+              "77-618-0100361"
+            ],
+            "tesseract_texts": [
+              "4,",
+              "Spacer:",
+              "77-160-810105-000",
+              "SSDDX",
+              "Board:",
+              "77-618-0100361"
+            ]
+          },
+          {
+            "location": "image_2",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_2.jpg",
+            "image_name": "image_2.jpg",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_3",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_3.jpg",
+            "image_name": "image_3.jpg",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_4",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_4.jpg",
+            "image_name": "image_4.jpg",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_5",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_5.jpg",
+            "image_name": "image_5.jpg",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_6",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_6.jpg",
+            "image_name": "image_6.jpg",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_7",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_7.jpg",
+            "image_name": "image_7.jpg",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_8",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_8.png",
+            "image_name": "image_8.png",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_9",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_9.png",
+            "image_name": "image_9.png",
+            "easyocr_results": [
+              {
+                "text": "Push in",
+                "confidence": 0.9975757177590648,
+                "bounding_box": [
+                  289,
+                  15,
+                  136,
+                  42
+                ]
+              },
+              {
+                "text": "No",
+                "confidence": 0.9994896398175098,
+                "bounding_box": [
+                  267,
+                  291,
+                  54,
+                  38
+                ]
+              },
+              {
+                "text": "Gap",
+                "confidence": 0.9817297268840136,
+                "bounding_box": [
+                  319,
+                  283,
+                  88,
+                  57
+                ]
+              }
+            ],
+            "tesseract_results": [],
+            "easyocr_text_count": 3,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [
+              "Push in",
+              "No",
+              "Gap"
+            ],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_10",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_10.jpg",
+            "image_name": "image_10.jpg",
+            "easyocr_results": [
+              {
+                "text": "Cap",
+                "confidence": 0.9997910486601499,
+                "bounding_box": [
+                  349,
+                  21,
+                  32,
+                  16
+                ]
+              },
+              {
+                "text": "OM",
+                "confidence": 0.9891726959118642,
+                "bounding_box": [
+                  555,
+                  17,
+                  28,
+                  20
+                ]
+              },
+              {
+                "text": "Pole Piece ",
+                "confidence": 0.749667507154837,
+                "bounding_box": [
+                  355,
+                  174,
+                  78,
+                  20
+                ]
+              }
+            ],
+            "tesseract_results": [],
+            "easyocr_text_count": 3,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [
+              "Cap",
+              "OM",
+              "Pole Piece "
+            ],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_12",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_12.jpg",
+            "image_name": "image_12.jpg",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_15",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_15.png",
+            "image_name": "image_15.png",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_16",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_16.jpg",
+            "image_name": "image_16.jpg",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_17",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_17.jpg",
+            "image_name": "image_17.jpg",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_18",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_18.jpg",
+            "image_name": "image_18.jpg",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_19",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_19.jpg",
+            "image_name": "image_19.jpg",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_20",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_20.jpg",
+            "image_name": "image_20.jpg",
+            "easyocr_results": [
+              {
+                "text": "OM",
+                "confidence": 0.9937936321172169,
+                "bounding_box": [
+                  172,
+                  304,
+                  54,
+                  32
+                ]
+              }
+            ],
+            "tesseract_results": [],
+            "easyocr_text_count": 1,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [
+              "OM"
+            ],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_21",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_21.jpg",
+            "image_name": "image_21.jpg",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_22",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_22.jpg",
+            "image_name": "image_22.jpg",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_23",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_23.png",
+            "image_name": "image_23.png",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_24",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_24.jpg",
+            "image_name": "image_24.jpg",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_25",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_25.png",
+            "image_name": "image_25.png",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_27",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_27.png",
+            "image_name": "image_27.png",
+            "easyocr_results": [
+              {
+                "text": "Heat ShrinkHeat:77-531-116BLK-245",
+                "confidence": 0.9181430911357431,
+                "bounding_box": [
+                  446,
+                  56,
+                  452,
+                  30
+                ]
+              },
+              {
+                "text": "1 2",
+                "confidence": 0.9304598569869995,
+                "bounding_box": [
+                  180,
+                  134,
+                  58,
+                  26
+                ]
+              },
+              {
+                "text": "10 9",
+                "confidence": 0.9251875281333923,
+                "bounding_box": [
+                  244,
+                  296,
+                  70,
+                  30
+                ]
+              }
+            ],
+            "tesseract_results": [
+              {
+                "text": "Heat",
+                "confidence": 0.92,
+                "bounding_box": [
+                  450,
+                  61,
+                  54,
+                  18
+                ]
+              },
+              {
+                "text": "ShrinkHeat:77-531-116BLK-245",
+                "confidence": 0.91,
+                "bounding_box": [
+                  513,
+                  61,
+                  381,
+                  18
+                ]
+              },
+              {
+                "text": ">",
+                "confidence": 0.92,
+                "bounding_box": [
+                  703,
+                  99,
+                  5,
+                  7
+                ]
+              },
+              {
+                "text": "|",
+                "confidence": 0.89,
+                "bounding_box": [
+                  436,
+                  199,
+                  18,
+                  42
+                ]
+              },
+              {
+                "text": "@",
+                "confidence": 0.82,
+                "bounding_box": [
+                  460,
+                  203,
+                  34,
+                  33
+                ]
+              },
+              {
+                "text": "22",
+                "confidence": 0.92,
+                "bounding_box": [
+                  153,
+                  394,
+                  25,
+                  18
+                ]
+              },
+              {
+                "text": "AWG(77-525-551WH1-000)",
+                "confidence": 0.89,
+                "bounding_box": [
+                  185,
+                  391,
+                  519,
+                  26
+                ]
+              }
+            ],
+            "easyocr_text_count": 3,
+            "tesseract_text_count": 7,
+            "easyocr_texts": [
+              "Heat ShrinkHeat:77-531-116BLK-245",
+              "1 2",
+              "10 9"
+            ],
+            "tesseract_texts": [
+              "Heat",
+              "ShrinkHeat:77-531-116BLK-245",
+              ">",
+              "|",
+              "@",
+              "22",
+              "AWG(77-525-551WH1-000)"
+            ]
+          },
+          {
+            "location": "image_28",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_28.jpg",
+            "image_name": "image_28.jpg",
+            "easyocr_results": [
+              {
+                "text": "4.11mm",
+                "confidence": 0.7597438104185832,
+                "bounding_box": [
+                  165,
+                  61,
+                  56,
+                  16
+                ]
+              }
+            ],
+            "tesseract_results": [],
+            "easyocr_text_count": 1,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [
+              "4.11mm"
+            ],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_29",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_29.jpg",
+            "image_name": "image_29.jpg",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_30",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_30.jpg",
+            "image_name": "image_30.jpg",
+            "easyocr_results": [
+              {
+                "text": "Quantity:",
+                "confidence": 0.9699768505246735,
+                "bounding_box": [
+                  328,
+                  166,
+                  59,
+                  19
+                ]
+              },
+              {
+                "text": "Customer Part No:",
+                "confidence": 0.9859660596315221,
+                "bounding_box": [
+                  328,
+                  190,
+                  113,
+                  19
+                ]
+              },
+              {
+                "text": "2-151",
+                "confidence": 0.9982638228692006,
+                "bounding_box": [
+                  450,
+                  192,
+                  41,
+                  19
+                ]
+              },
+              {
+                "text": "ACE Seal Part No:",
+                "confidence": 0.9183709933202533,
+                "bounding_box": [
+                  329,
+                  217,
+                  108,
+                  18
+                ]
+              },
+              {
+                "text": "2-151",
+                "confidence": 0.9995864486050738,
+                "bounding_box": [
+                  451,
+                  221,
+                  40,
+                  16
+                ]
+              },
+              {
+                "text": "Description:",
+                "confidence": 0.7754898980411786,
+                "bounding_box": [
+                  327,
+                  245,
+                  76,
+                  16
+                ]
+              },
+              {
+                "text": "V-75",
+                "confidence": 0.9452353715896606,
+                "bounding_box": [
+                  451,
+                  245,
+                  30,
+                  16
+                ]
+              }
+            ],
+            "tesseract_results": [
+              {
+                "text": "2-151",
+                "confidence": 0.73,
+                "bounding_box": [
+                  454,
+                  196,
+                  34,
+                  10
+                ]
+              },
+              {
+                "text": "ACE",
+                "confidence": 0.83,
+                "bounding_box": [
+                  329,
+                  221,
+                  27,
+                  10
+                ]
+              },
+              {
+                "text": "2-151",
+                "confidence": 0.76,
+                "bounding_box": [
+                  453,
+                  222,
+                  34,
+                  10
+                ]
+              },
+              {
+                "text": "Description:",
+                "confidence": 0.95,
+                "bounding_box": [
+                  325,
+                  239,
+                  74,
+                  28
+                ]
+              }
+            ],
+            "easyocr_text_count": 7,
+            "tesseract_text_count": 4,
+            "easyocr_texts": [
+              "Quantity:",
+              "Customer Part No:",
+              "2-151",
+              "ACE Seal Part No:",
+              "2-151",
+              "Description:",
+              "V-75"
+            ],
+            "tesseract_texts": [
+              "2-151",
+              "ACE",
+              "2-151",
+              "Description:"
+            ]
+          },
+          {
+            "location": "image_31",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_31.png",
+            "image_name": "image_31.png",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_32",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_32.png",
+            "image_name": "image_32.png",
+            "easyocr_results": [
+              {
+                "text": "FN",
+                "confidence": 0.7656307065176297,
+                "bounding_box": [
+                  9,
+                  415,
+                  32,
+                  14
+                ]
+              }
+            ],
+            "tesseract_results": [],
+            "easyocr_text_count": 1,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [
+              "FN"
+            ],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_33",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_33.jpg",
+            "image_name": "image_33.jpg",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_34",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_34.png",
+            "image_name": "image_34.png",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_35",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_35.png",
+            "image_name": "image_35.png",
+            "easyocr_results": [
+              {
+                "text": "77-232-0403040-00",
+                "confidence": 0.856988561747443,
+                "bounding_box": [
+                  173,
+                  149,
+                  146,
+                  18
+                ]
+              },
+              {
+                "text": "SS BOXEMFISO PLATE:",
+                "confidence": 0.8967286088250703,
+                "bounding_box": [
+                  171,
+                  186,
+                  210,
+                  19
+                ]
+              },
+              {
+                "text": "77-130-120541-001",
+                "confidence": 0.8085172811453326,
+                "bounding_box": [
+                  172,
+                  207,
+                  145,
+                  18
+                ]
+              },
+              {
+                "text": "SSBOX COPPER PLATE :",
+                "confidence": 0.8241197504340487,
+                "bounding_box": [
+                  169,
+                  381,
+                  210,
+                  20
+                ]
+              },
+              {
+                "text": "77-110-817895-000",
+                "confidence": 0.8760070102033086,
+                "bounding_box": [
+                  171,
+                  405,
+                  142,
+                  16
+                ]
+              }
+            ],
+            "tesseract_results": [
+              {
+                "text": "S5",
+                "confidence": 0.83,
+                "bounding_box": [
+                  171,
+                  386,
+                  18,
+                  12
+                ]
+              },
+              {
+                "text": "BOX",
+                "confidence": 0.94,
+                "bounding_box": [
+                  193,
+                  386,
+                  38,
+                  12
+                ]
+              },
+              {
+                "text": "COPPER",
+                "confidence": 0.94,
+                "bounding_box": [
+                  235,
+                  386,
+                  71,
+                  12
+                ]
+              },
+              {
+                "text": "PLATE",
+                "confidence": 0.94,
+                "bounding_box": [
+                  309,
+                  386,
+                  57,
+                  12
+                ]
+              },
+              {
+                "text": "77-110-817895-000",
+                "confidence": 0.74,
+                "bounding_box": [
+                  171,
+                  406,
+                  139,
+                  12
+                ]
+              }
+            ],
+            "easyocr_text_count": 5,
+            "tesseract_text_count": 5,
+            "easyocr_texts": [
+              "77-232-0403040-00",
+              "SS BOXEMFISO PLATE:",
+              "77-130-120541-001",
+              "SSBOX COPPER PLATE :",
+              "77-110-817895-000"
+            ],
+            "tesseract_texts": [
+              "S5",
+              "BOX",
+              "COPPER",
+              "PLATE",
+              "77-110-817895-000"
+            ]
+          },
+          {
+            "location": "image_36",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_36.jpg",
+            "image_name": "image_36.jpg",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_37",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_37.jpg",
+            "image_name": "image_37.jpg",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_38",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_38.png",
+            "image_name": "image_38.png",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_39",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_39.jpg",
+            "image_name": "image_39.jpg",
+            "easyocr_results": [
+              {
+                "text": "8",
+                "confidence": 0.9820632730034653,
+                "bounding_box": [
+                  227,
+                  79,
+                  14,
+                  34
+                ]
+              }
+            ],
+            "tesseract_results": [],
+            "easyocr_text_count": 1,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [
+              "8"
+            ],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_40",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_40.png",
+            "image_name": "image_40.png",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_43",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_43.png",
+            "image_name": "image_43.png",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_44",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_44.jpg",
+            "image_name": "image_44.jpg",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_45",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_45.png",
+            "image_name": "image_45.png",
+            "easyocr_results": [
+              {
+                "text": "OM",
+                "confidence": 0.9987466985890502,
+                "bounding_box": [
+                  213,
+                  25,
+                  30,
+                  20
+                ]
+              },
+              {
+                "text": "16.11m",
+                "confidence": 0.9960633847618583,
+                "bounding_box": [
+                  108,
+                  86,
+                  74,
+                  24
+                ]
+              }
+            ],
+            "tesseract_results": [],
+            "easyocr_text_count": 2,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [
+              "OM",
+              "16.11m"
+            ],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_46",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_46.jpg",
+            "image_name": "image_46.jpg",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_47",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_47.png",
+            "image_name": "image_47.png",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_48",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_48.jpg",
+            "image_name": "image_48.jpg",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_49",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_49.jpg",
+            "image_name": "image_49.jpg",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_50",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_50.png",
+            "image_name": "image_50.png",
+            "easyocr_results": [
+              {
+                "text": "4",
+                "confidence": 0.9825179103961581,
+                "bounding_box": [
+                  868,
+                  2,
+                  24,
+                  48
+                ]
+              },
+              {
+                "text": "6",
+                "confidence": 0.966411655776156,
+                "bounding_box": [
+                  87,
+                  45,
+                  16,
+                  34
+                ]
+              },
+              {
+                "text": "3",
+                "confidence": 0.8860062569118696,
+                "bounding_box": [
+                  361,
+                  127,
+                  20,
+                  50
+                ]
+              },
+              {
+                "text": "5",
+                "confidence": 0.9125858541590368,
+                "bounding_box": [
+                  253,
+                  175,
+                  18,
+                  30
+                ]
+              },
+              {
+                "text": "3",
+                "confidence": 0.9269993846001547,
+                "bounding_box": [
+                  29,
+                  237,
+                  14,
+                  32
+                ]
+              },
+              {
+                "text": "H",
+                "confidence": 0.9401399220210216,
+                "bounding_box": [
+                  105,
+                  191,
+                  88,
+                  124
+                ]
+              },
+              {
+                "text": "8",
+                "confidence": 0.9999337207332815,
+                "bounding_box": [
+                  285,
+                  223,
+                  20,
+                  26
+                ]
+              },
+              {
+                "text": "2",
+                "confidence": 0.9854525417185869,
+                "bounding_box": [
+                  361,
+                  231,
+                  20,
+                  36
+                ]
+              },
+              {
+                "text": "4",
+                "confidence": 0.9279306785899202,
+                "bounding_box": [
+                  903,
+                  247,
+                  14,
+                  34
+                ]
+              },
+              {
+                "text": "8",
+                "confidence": 0.9997149908991254,
+                "bounding_box": [
+                  223,
+                  279,
+                  18,
+                  40
+                ]
+              },
+              {
+                "text": "8",
+                "confidence": 0.9444060707610333,
+                "bounding_box": [
+                  287,
+                  285,
+                  18,
+                  48
+                ]
+              },
+              {
+                "text": "4",
+                "confidence": 0.702891683319681,
+                "bounding_box": [
+                  111,
+                  339,
+                  20,
+                  34
+                ]
+              },
+              {
+                "text": "2",
+                "confidence": 0.8950541131221748,
+                "bounding_box": [
+                  253,
+                  355,
+                  18,
+                  34
+                ]
+              },
+              {
+                "text": "8",
+                "confidence": 0.9142459520484323,
+                "bounding_box": [
+                  1037,
+                  349,
+                  14,
+                  26
+                ]
+              },
+              {
+                "text": "9",
+                "confidence": 0.8348107377785006,
+                "bounding_box": [
+                  325,
+                  487,
+                  18,
+                  28
+                ]
+              },
+              {
+                "text": "8",
+                "confidence": 0.7522344722628169,
+                "bounding_box": [
+                  221,
+                  398,
+                  23,
+                  57
+                ]
+              }
+            ],
+            "tesseract_results": [
+              {
+                "text": "0",
+                "confidence": 0.79,
+                "bounding_box": [
+                  1009,
+                  12,
+                  15,
+                  11
+                ]
+              },
+              {
+                "text": "q",
+                "confidence": 0.78,
+                "bounding_box": [
+                  1009,
+                  264,
+                  18,
+                  12
+                ]
+              },
+              {
+                "text": "WANDDA",
+                "confidence": 0.72,
+                "bounding_box": [
+                  937,
+                  150,
+                  19,
+                  99
+                ]
+              },
+              {
+                "text": "“Assy",
+                "confidence": 0.7,
+                "bounding_box": [
+                  915,
+                  166,
+                  23,
+                  55
+                ]
+              },
+              {
+                "text": "|",
+                "confidence": 0.93,
+                "bounding_box": [
+                  887,
+                  413,
+                  32,
+                  6
+                ]
+              },
+              {
+                "text": "ISS",
+                "confidence": 0.9,
+                "bounding_box": [
+                  329,
+                  120,
+                  12,
+                  16
+                ]
+              },
+              {
+                "text": "X3H",
+                "confidence": 0.83,
+                "bounding_box": [
+                  329,
+                  142,
+                  12,
+                  29
+                ]
+              },
+              {
+                "text": "OL",
+                "confidence": 0.9,
+                "bounding_box": [
+                  329,
+                  177,
+                  12,
+                  16
+                ]
+              },
+              {
+                "text": "X",
+                "confidence": 0.9,
+                "bounding_box": [
+                  329,
+                  201,
+                  12,
+                  9
+                ]
+              },
+              {
+                "text": "Z",
+                "confidence": 0.87,
+                "bounding_box": [
+                  290,
+                  164,
+                  12,
+                  9
+                ]
+              },
+              {
+                "text": "X",
+                "confidence": 0.9,
+                "bounding_box": [
+                  292,
+                  178,
+                  10,
+                  8
+                ]
+              },
+              {
+                "text": "MOPUIM",
+                "confidence": 0.89,
+                "bounding_box": [
+                  289,
+                  337,
+                  13,
+                  67
+                ]
+              },
+              {
+                "text": "iss",
+                "confidence": 0.72,
+                "bounding_box": [
+                  256,
+                  178,
+                  12,
+                  24
+                ]
+              },
+              {
+                "text": "IWWOL",
+                "confidence": 0.76,
+                "bounding_box": [
+                  256,
+                  207,
+                  12,
+                  56
+                ]
+              },
+              {
+                "text": "X",
+                "confidence": 0.89,
+                "bounding_box": [
+                  256,
+                  271,
+                  12,
+                  9
+                ]
+              },
+              {
+                "text": "Nid",
+                "confidence": 0.91,
+                "bounding_box": [
+                  256,
+                  361,
+                  12,
+                  25
+                ]
+              },
+              {
+                "text": "GSO",
+                "confidence": 0.89,
+                "bounding_box": [
+                  226,
+                  283,
+                  13,
+                  34
+                ]
+              },
+              {
+                "text": "GI",
+                "confidence": 0.73,
+                "bounding_box": [
+                  226,
+                  380,
+                  13,
+                  16
+                ]
+              },
+              {
+                "text": "‘NOLIA",
+                "confidence": 0.78,
+                "bounding_box": [
+                  200,
+                  318,
+                  14,
+                  54
+                ]
+              },
+              {
+                "text": "O",
+                "confidence": 0.85,
+                "bounding_box": [
+                  200,
+                  430,
+                  13,
+                  13
+                ]
+              },
+              {
+                "text": "MOPUIM",
+                "confidence": 0.91,
+                "bounding_box": [
+                  143,
+                  240,
+                  14,
+                  66
+                ]
+              },
+              {
+                "text": "z",
+                "confidence": 0.71,
+                "bounding_box": [
+                  145,
+                  829,
+                  12,
+                  8
+                ]
+              },
+              {
+                "text": "MOPUIM",
+                "confidence": 0.81,
+                "bounding_box": [
+                  114,
+                  201,
+                  13,
+                  67
+                ]
+              },
+              {
+                "text": "1-22",
+                "confidence": 0.71,
+                "bounding_box": [
+                  115,
+                  731,
+                  12,
+                  30
+                ]
+              },
+              {
+                "text": "“ALO",
+                "confidence": 0.8,
+                "bounding_box": [
+                  79,
+                  41,
+                  26,
+                  36
+                ]
+              },
+              {
+                "text": "“ON",
+                "confidence": 0.91,
+                "bounding_box": [
+                  88,
+                  797,
+                  12,
+                  31
+                ]
+              }
+            ],
+            "easyocr_text_count": 16,
+            "tesseract_text_count": 26,
+            "easyocr_texts": [
+              "4",
+              "6",
+              "3",
+              "5",
+              "3",
+              "H",
+              "8",
+              "2",
+              "4",
+              "8",
+              "8",
+              "4",
+              "2",
+              "8",
+              "9",
+              "8"
+            ],
+            "tesseract_texts": [
+              "0",
+              "q",
+              "WANDDA",
+              "“Assy",
+              "|",
+              "ISS",
+              "X3H",
+              "OL",
+              "X",
+              "Z",
+              "X",
+              "MOPUIM",
+              "iss",
+              "IWWOL",
+              "X",
+              "Nid",
+              "GSO",
+              "GI",
+              "‘NOLIA",
+              "O",
+              "MOPUIM",
+              "z",
+              "MOPUIM",
+              "1-22",
+              "“ALO",
+              "“ON"
+            ]
+          },
+          {
+            "location": "image_51",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_51.jpg",
+            "image_name": "image_51.jpg",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_52",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_52.jpg",
+            "image_name": "image_52.jpg",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_54",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_54.jpg",
+            "image_name": "image_54.jpg",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_55",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_55.png",
+            "image_name": "image_55.png",
+            "easyocr_results": [
+              {
+                "text": "85",
+                "confidence": 0.9914536613839895,
+                "bounding_box": [
+                  181,
+                  257,
+                  48,
+                  44
+                ]
+              }
+            ],
+            "tesseract_results": [],
+            "easyocr_text_count": 1,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [
+              "85"
+            ],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_58",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_58.png",
+            "image_name": "image_58.png",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_59",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_59.png",
+            "image_name": "image_59.png",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_60",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_60.jpg",
+            "image_name": "image_60.jpg",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_61",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_61.jpg",
+            "image_name": "image_61.jpg",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_62",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_62.jpg",
+            "image_name": "image_62.jpg",
+            "easyocr_results": [
+              {
+                "text": "ICU",
+                "confidence": 0.9933954045705362,
+                "bounding_box": [
+                  50,
+                  140,
+                  42,
+                  26
+                ]
+              },
+              {
+                "text": "2",
+                "confidence": 0.7813210186543671,
+                "bounding_box": [
+                  1,
+                  223,
+                  52,
+                  68
+                ]
+              }
+            ],
+            "tesseract_results": [],
+            "easyocr_text_count": 2,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [
+              "ICU",
+              "2"
+            ],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_63",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_63.jpg",
+            "image_name": "image_63.jpg",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_64",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_64.jpg",
+            "image_name": "image_64.jpg",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_65",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_65.png",
+            "image_name": "image_65.png",
+            "easyocr_results": [
+              {
+                "text": "Lift Obj: lens tool-",
+                "confidence": 0.7956731731785274,
+                "bounding_box": [
+                  17,
+                  153,
+                  130,
+                  18
+                ]
+              }
+            ],
+            "tesseract_results": [],
+            "easyocr_text_count": 1,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [
+              "Lift Obj: lens tool-"
+            ],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_66",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_66.jpg",
+            "image_name": "image_66.jpg",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_67",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_67.jpg",
+            "image_name": "image_67.jpg",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_68",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_68.png",
+            "image_name": "image_68.png",
+            "easyocr_results": [
+              {
+                "text": "Tool",
+                "confidence": 0.9991116523742676,
+                "bounding_box": [
+                  359,
+                  17,
+                  74,
+                  36
+                ]
+              },
+              {
+                "text": "Force",
+                "confidence": 0.998789570824648,
+                "bounding_box": [
+                  169,
+                  37,
+                  100,
+                  36
+                ]
+              }
+            ],
+            "tesseract_results": [],
+            "easyocr_text_count": 2,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [
+              "Tool",
+              "Force"
+            ],
+            "tesseract_texts": []
+          },
+          {
+            "location": "image_69",
+            "image_path": "/tmp/enhanced_docx_images_3cec56c9/image_69.jpg",
+            "image_name": "image_69.jpg",
+            "easyocr_results": [],
+            "tesseract_results": [],
+            "easyocr_text_count": 0,
+            "tesseract_text_count": 0,
+            "easyocr_texts": [],
+            "tesseract_texts": []
+          }
+        ]
+      }
+    }
+  ]
+}

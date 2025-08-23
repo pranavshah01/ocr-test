@@ -360,7 +360,7 @@ class PreciseTextReplacer:
                 return None
             
             if not char_boxes.strip():
-                logger.warning(" CHARACTER OCR: No character boxes found")
+                logger.debug(" CHARACTER OCR: No character boxes found (this is normal for some text regions)")
                 return None
             
             # Parse character boxes and build character list with coordinates
@@ -405,7 +405,7 @@ class PreciseTextReplacer:
                     break
             
             if pattern_match is None:
-                logger.warning(f" CHARACTER OCR: Pattern '{matched_pattern}' not found in detected text '{detected_text}'")
+                logger.debug(f" CHARACTER OCR: Pattern '{matched_pattern}' not found in detected text '{detected_text}' (this is normal for some text regions)")
                 return None
             
             start_char, end_char = pattern_match

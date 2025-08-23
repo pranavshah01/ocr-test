@@ -1,0 +1,152 @@
+[
+  {
+    "image": "image34.jpeg",
+    "ocr_results": 0,
+    "matches": 0,
+    "quality": {
+      "dimensions": "486x462",
+      "brightness": 115.9,
+      "contrast": 62.9,
+      "sharpness": 450.3,
+      "noise": 10190.204,
+      "edge_density": 0.087,
+      "quality_assessment": "Good quality for OCR"
+    },
+    "report": "debug_output/reports/image34_analysis_20250812_032534.html"
+  },
+  {
+    "image": "image22.jpeg",
+    "ocr_results": 0,
+    "matches": 0,
+    "quality": {
+      "dimensions": "649x486",
+      "brightness": 87.8,
+      "contrast": 59.4,
+      "sharpness": 96.7,
+      "noise": 3910.828,
+      "edge_density": 0.03,
+      "quality_assessment": "Issues: Blurry/Low sharpness"
+    },
+    "report": "debug_output/reports/image22_analysis_20250812_032544.html"
+  },
+  {
+    "image": "image18.jpeg",
+    "ocr_results": 1,
+    "matches": 0,
+    "quality": {
+      "dimensions": "649x486",
+      "brightness": 167.6,
+      "contrast": 26.1,
+      "sharpness": 148.1,
+      "noise": 5878.411,
+      "edge_density": 0.03,
+      "quality_assessment": "Issues: Low contrast"
+    },
+    "report": "debug_output/reports/image18_analysis_20250812_032553.html"
+  },
+  {
+    "image": "image38.jpeg",
+    "ocr_results": 0,
+    "matches": 0,
+    "quality": {
+      "dimensions": "486x447",
+      "brightness": 112.0,
+      "contrast": 67.2,
+      "sharpness": 466.1,
+      "noise": 6578.413,
+      "edge_density": 0.068,
+      "quality_assessment": "Good quality for OCR"
+    },
+    "report": "debug_output/reports/image38_analysis_20250812_032603.html"
+  },
+  {
+    "image": "image55.jpeg",
+    "ocr_results": 0,
+    "matches": 0,
+    "quality": {
+      "dimensions": "349x263",
+      "brightness": 117.6,
+      "contrast": 51.3,
+      "sharpness": 972.2,
+      "noise": 8668.02,
+      "edge_density": 0.089,
+      "quality_assessment": "Good quality for OCR"
+    },
+    "report": "debug_output/reports/image55_analysis_20250812_032611.html"
+  },
+  {
+    "image": "image14.jpeg",
+    "ocr_results": 0,
+    "matches": 0,
+    "quality": {
+      "dimensions": "649x488",
+      "brightness": 117.4,
+      "contrast": 71.7,
+      "sharpness": 117.0,
+      "noise": 6396.59,
+      "edge_density": 0.033,
+      "quality_assessment": "Good quality for OCR"
+    },
+    "report": "debug_output/reports/image14_analysis_20250812_032621.html"
+  },
+  {
+    "image": "image54.jpeg",
+    "ocr_results": 0,
+    "matches": 0,
+    "quality": {
+      "dimensions": "349x263",
+      "brightness": 117.9,
+      "contrast": 49.0,
+      "sharpness": 1068.7,
+      "noise": 8807.579,
+      "edge_density": 0.09,
+      "quality_assessment": "Good quality for OCR"
+    },
+    "report": "debug_output/reports/image54_analysis_20250812_032630.html"
+  },
+  {
+    "image": "image39.jpeg",
+    "ocr_results": 0,
+    "matches": 0,
+    "quality": {
+      "dimensions": "486x447",
+      "brightness": 110.1,
+      "contrast": 68.1,
+      "sharpness": 379.3,
+      "noise": 6371.595,
+      "edge_density": 0.067,
+      "quality_assessment": "Good quality for OCR"
+    },
+    "report": "debug_output/reports/image39_analysis_20250812_032639.html"
+  },
+  {
+    "image": "image19.jpeg",
+    "ocr_results": 0,
+    "matches": 0,
+    "quality": {
+      "dimensions": "642x484",
+      "brightness": 135.9,
+      "contrast": 75.4,
+      "sharpness": 160.2,
+      "noise": 8393.161,
+      "edge_density": 0.04,
+      "quality_assessment": "Good quality for OCR"
+    },
+    "report": "debug_output/reports/image19_analysis_20250812_032648.html"
+  },
+  {
+    "image": "image1.jpeg",
+    "ocr_results": 0,
+    "matches": 0,
+    "quality": {
+      "dimensions": "450x334",
+      "brightness": 96.3,
+      "contrast": 47.1,
+      "sharpness": 3169.3,
+      "noise": 9501.474,
+      "edge_density": 0.173,
+      "quality_assessment": "Good quality for OCR"
+    },
+    "report": "debug_output/reports/image1_analysis_20250812_032657.html"
+  }
+]

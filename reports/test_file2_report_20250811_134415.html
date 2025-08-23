@@ -1,0 +1,290 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document Processing Report - test_file2.docx</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .header { border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px; }
+        .status { font-weight: bold; color: green; }
+        .section { margin: 20px 0; }
+        .section h3 { color: #333; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
+        table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; font-weight: bold; }
+        .match-table { font-size: 14px; }
+        .error { color: red; }
+        .warning { color: orange; }
+        .success { color: green; }
+        .stats { display: flex; justify-content: space-around; background-color: #f9f9f9; padding: 15px; border-radius: 5px; }
+        .stat-item { text-align: center; }
+        .stat-number { font-size: 24px; font-weight: bold; color: #333; }
+        .stat-label { font-size: 12px; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Document Processing Report</h1>
+            <p><strong>Document:</strong> test_file2.docx</p>
+            <p><strong>Status:</strong> <span class="status">SUCCESS</span></p>
+            <p><strong>Generated:</strong> 2025-08-11 13:44:15</p>
+        </div>
+        
+        <div class="section">
+            <h3>Processing Summary</h3>
+            <div class="stats">
+                <div class="stat-item">
+                    <div class="stat-number">19</div>
+                    <div class="stat-label">Total Matches</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">7</div>
+                    <div class="stat-label">Text Matches</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">6</div>
+                    <div class="stat-label">Graphics Matches</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">6</div>
+                    <div class="stat-label">Image Matches</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">91.60s</div>
+                    <div class="stat-label">Processing Time</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h3>File Information</h3>
+            <table>
+                <tr><th>Property</th><th>Value</th></tr>
+                <tr><td>Input Path</td><td>source_documents/test_file2.docx</td></tr>
+                <tr><td>Output Path</td><td>processed/test_file2_processed.docx</td></tr>
+                <tr><td>Processing Time</td><td>91.595 seconds</td></tr>
+                <tr><td>Success</td><td>Yes</td></tr>
+                
+            </table>
+        </div>
+
+        <div class="section">
+            <h3>Text Matches</h3>
+            <table class="match-table">
+                <thead>
+                    <tr>
+                        <th>Pattern</th>
+                        <th>Original Text</th>
+                        <th>Replacement</th>
+                        <th>Location</th>
+                        <th>Position</th>
+                    </tr>
+                </thead>
+                <tbody>
+
+                    <tr>
+                        <td>pattern_77_enforced_structure</td>
+                        <td>77-160-0001087-00</td>
+                        <td>4022-680-909513-74</td>
+                        <td>body_paragraph_124</td>
+                        <td>18</td>
+                    </tr>
+
+                    <tr>
+                        <td>pattern_77_enforced_structure</td>
+                        <td>77-110-0244513-00</td>
+                        <td>4022-110-0244513-00</td>
+                        <td>body_paragraph_124</td>
+                        <td>89</td>
+                    </tr>
+
+                    <tr>
+                        <td>pattern_77_enforced_structure</td>
+                        <td>77-141-810032-000</td>
+                        <td>4022-141-810032-00</td>
+                        <td>table_0_row_6_cell_1_paragraph_0</td>
+                        <td>9</td>
+                    </tr>
+
+                    <tr>
+                        <td>pattern_77_enforced_structure</td>
+                        <td>77-141-810032-000</td>
+                        <td>4022-141-810032-00</td>
+                        <td>table_1_row_0_cell_1_paragraph_0</td>
+                        <td>58</td>
+                    </tr>
+
+                    <tr>
+                        <td>pattern_77_enforced_structure</td>
+                        <td>77-620-1908713-03</td>
+                        <td>4022-620-19087-13</td>
+                        <td>header_section_0_table_0_row_0_cell_1_paragraph_0</td>
+                        <td>0</td>
+                    </tr>
+
+                    <tr>
+                        <td>pattern_77_enforced_structure</td>
+                        <td>77-620-1908713-03</td>
+                        <td>4022-620-19087-13</td>
+                        <td>header_section_0_table_0_row_1_cell_1_paragraph_0</td>
+                        <td>0</td>
+                    </tr>
+
+                    <tr>
+                        <td>pattern_77_enforced_structure</td>
+                        <td>77-620-1908713-03</td>
+                        <td>4022-620-19087-13</td>
+                        <td>header_section_0_table_0_row_2_cell_1_paragraph_0</td>
+                        <td>0</td>
+                    </tr>
+
+                </tbody>
+            </table>
+        </div>
+
+        <div class="section">
+            <h3>Graphics Matches</h3>
+            <table class="match-table">
+                <thead>
+                    <tr>
+                        <th>Pattern</th>
+                        <th>Original Text</th>
+                        <th>Replacement</th>
+                        <th>Location</th>
+                        <th>Font Info</th>
+                    </tr>
+                </thead>
+                <tbody>
+
+                    <tr>
+                        <td>pattern_77_enforced_structure</td>
+                        <td>77-141-810024-000</td>
+                        <td>4022-141-810024-00</td>
+                        <td>main_textbox_130</td>
+                        <td>Size: 6.0</td>
+                    </tr>
+
+                    <tr>
+                        <td>pattern_77_enforced_structure</td>
+                        <td>77-141-810024-000</td>
+                        <td>4022-141-810024-00</td>
+                        <td>main_textbox_131</td>
+                        <td>Size: 6.0</td>
+                    </tr>
+
+                    <tr>
+                        <td>pattern_77_enforced_structure</td>
+                        <td>77-110-0228201-01</td>
+                        <td>4022-110-0228201-01</td>
+                        <td>main_textbox_134</td>
+                        <td>Size: 9.0</td>
+                    </tr>
+
+                    <tr>
+                        <td>pattern_77_enforced_structure</td>
+                        <td>77-110-0228201-01</td>
+                        <td>4022-110-0228201-01</td>
+                        <td>main_textbox_135</td>
+                        <td>Size: 9.0</td>
+                    </tr>
+
+                    <tr>
+                        <td>pattern_77_enforced_structure</td>
+                        <td>77-141-810024-000</td>
+                        <td>4022-141-810024-00</td>
+                        <td>main_textbox_209</td>
+                        <td>Size: 6.0</td>
+                    </tr>
+
+                    <tr>
+                        <td>pattern_77_enforced_structure</td>
+                        <td>77-110-0228201-01</td>
+                        <td>4022-110-0228201-01</td>
+                        <td>main_textbox_211</td>
+                        <td>Size: 6.0</td>
+                    </tr>
+
+                </tbody>
+            </table>
+        </div>
+
+        <div class="section">
+            <h3>Image Matches</h3>
+            <table class="match-table">
+                <thead>
+                    <tr>
+                        <th>Pattern</th>
+                        <th>Original Text</th>
+                        <th>Replacement</th>
+                        <th>Confidence</th>
+                        <th>Bounding Box</th>
+                        <th>Mode</th>
+                    </tr>
+                </thead>
+                <tbody>
+
+                    <tr>
+                        <td>pattern_77_enforced_structure</td>
+                        <td>77-160-810105-000</td>
+                        <td>4022-680-909513-74</td>
+                        <td>0.99</td>
+                        <td>(289, 255, 150, 20)</td>
+                        <td>replace</td>
+                    </tr>
+
+                    <tr>
+                        <td>pattern_77_two_dash_structure</td>
+                        <td>77-618-0100361</td>
+                        <td>4022-618-0100361</td>
+                        <td>0.96</td>
+                        <td>(125, 411, 122, 20)</td>
+                        <td>replace</td>
+                    </tr>
+
+                    <tr>
+                        <td>pattern_77_enforced_structure</td>
+                        <td>Heat ShrinkHeat:77-531-116BLK-245</td>
+                        <td>4022-325-927523-30</td>
+                        <td>0.88</td>
+                        <td>(446, 56, 454, 30)</td>
+                        <td>replace</td>
+                    </tr>
+
+                    <tr>
+                        <td>pattern_77_enforced_structure</td>
+                        <td>77-232-0403040-00</td>
+                        <td>4022-688-906531-10</td>
+                        <td>0.91</td>
+                        <td>(173, 151, 146, 16)</td>
+                        <td>replace</td>
+                    </tr>
+
+                    <tr>
+                        <td>pattern_77_enforced_structure</td>
+                        <td>77-130-120541-001</td>
+                        <td>4022-172-240862-36</td>
+                        <td>0.98</td>
+                        <td>(173, 207, 144, 18)</td>
+                        <td>replace</td>
+                    </tr>
+
+                    <tr>
+                        <td>pattern_77_enforced_structure</td>
+                        <td>77-110-817895-000</td>
+                        <td>4022-817823A-HG2</td>
+                        <td>1.00</td>
+                        <td>(171, 403, 142, 18)</td>
+                        <td>replace</td>
+                    </tr>
+
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+</body>
+</html>

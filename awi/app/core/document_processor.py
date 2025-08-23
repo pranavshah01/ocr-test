@@ -14,7 +14,6 @@ import os
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 import logging
-from datetime import datetime
 
 from docx import Document
 from docx.opc.exceptions import PackageNotFoundError
@@ -23,10 +22,6 @@ from .processor_interface import BaseProcessor, ProcessingResult
 from .models import ProcessingLog, DocumentInfo, BatchProcessingResult
 from app.converters.doc_converter import DocConverter, ConversionError
 from app.utils.shared_constants import MAX_FILE_SIZE_MB, LARGE_FILE_THRESHOLD_MB, VERY_LARGE_FILE_THRESHOLD_MB
-
-# Add these constants at the top of the file, after the existing imports
-MAX_PROCESSING_SIZE_MB = 200.0  # Maximum size for full processing
-LARGE_FILE_WARNING_MB = 150.0   # Size at which to warn about potential issues
 
 logger = logging.getLogger(__name__)
 
@@ -171,28 +166,13 @@ class DocumentProcessor:
                 result.error_message = error_msg
                 return result
             
-            # Check if this is a summary document (not full processing)
-            is_summary_document = self._is_summary_document(document)
-            if is_summary_document:
-                processing_log.add_warning("Document processed as summary only due to size limitations")
-                logger.warning(f"Document {file_path.name} processed as summary only")
-            
             # Step 4: Generate output path and save processed document
             try:
                 output_path = self._generate_output_path(file_path)
                 if self._save_document(document, output_path, processing_log):
                     result.output_path = output_path
-                    result.is_summary_only = is_summary_document
-                    
-                    if is_summary_document:
-                        # For summary documents, mark as failed processing
-                        result.success = False
-                        result.error_message = f"File too large ({docx_path.stat().st_size / (1024*1024):.1f}MB) for full processing - summary document created"
-                        result.matches_found = 0
-                    else:
-                        # For normal documents, mark as successful
-                        result.success = True
-                        result.matches_found = pipeline_results.get('total_matches', 0)
+                    result.success = True
+                    result.matches_found = pipeline_results.get('total_matches', 0)
                     # Add input_path to metadata for report generation
                     pipeline_results['input_path'] = str(file_path)
                     result.metadata = pipeline_results
@@ -279,49 +259,6 @@ class DocumentProcessor:
         logger.error(error_msg)
         return None
     
-    def _load_with_minimal_parser(self, docx_path: Path, processing_log: ProcessingLog) -> Optional[Document]:
-        """
-        Minimal parser that bypasses XML parsing for extremely problematic files.
-        
-        This is a last resort method that creates a minimal document structure
-        without parsing the full XML content.
-        
-        Args:
-            docx_path: Path to the DOCX file
-            processing_log: Processing log to record parsing activities
-            
-        Returns:
-            Document instance or None if parsing failed
-        """
-        try:
-            from docx import Document
-            
-            logger.warning(f"Using minimal parser for extremely problematic file: {docx_path.name}")
-            processing_log.add_warning("Minimal parser: Bypassing XML parsing for extremely large file")
-            
-            # Create a minimal document structure
-            # This bypasses the XML parsing entirely
-            document = Document()
-            
-            # Add a warning paragraph
-            warning_para = document.add_paragraph("WARNING: This document was loaded with minimal parsing due to XML size limits.")
-            warning_para.add_run(" The full content may not be accessible for processing.")
-            
-            # Add file info
-            info_para = document.add_paragraph(f"File: {docx_path.name}")
-            info_para.add_run(f" (Size: {docx_path.stat().st_size / (1024*1024):.1f}MB)")
-            
-            logger.warning(f"Created minimal document structure for extremely large file: {docx_path.name}")
-            processing_log.add_warning("Minimal parser: Created basic document structure")
-            
-            return document
-            
-        except Exception as e:
-            error_msg = f"Minimal parser failed for extremely large file: {e}"
-            processing_log.add_error(error_msg)
-            logger.error(error_msg)
-            return None
-    
     def _load_document(self, docx_path: Path, processing_log: ProcessingLog) -> Optional[Document]:
         """
         Load DOCX document with enhanced parser support for large files.
@@ -354,45 +291,56 @@ class DocumentProcessor:
             logger.error(error_msg)
             return None
         
-        # Try standard loading first for all files
-        try:
-            document = Document(docx_path)
-            logger.debug(f"Successfully loaded document with standard parser: {docx_path}")
-            processing_log.add_info("Used standard parser")
-            return document
-        except Exception as e:
-            # If AttValue error occurs, use streaming parser regardless of file size
-            if "AttValue" in str(e) and "length too long" in str(e):
-                logger.warning(f"AttValue error detected ({size_mb:.1f}MB), switching to streaming parser: {e}")
-                processing_log.add_warning(f"AttValue error detected, switching to streaming parser")
-                
-                try:
-                    document = self._load_with_streaming_parser(docx_path, processing_log)
-                    if document:
-                        logger.info(f"Successfully loaded document with streaming parser: {docx_path.name}")
-                        processing_log.add_info("Used streaming parser for AttValue error recovery")
-                        return document
-                except Exception as stream_error:
-                    logger.debug(f"Streaming parser failed: {stream_error}")
-                    processing_log.add_warning(f"Streaming parser failed: {stream_error}")
-            else:
+        # Prepare system for large files
+        if size_mb > LARGE_FILE_THRESHOLD_MB:
+            self._prepare_for_large_file()
+            processing_log.add_warning(f"Large document detected: {size_mb:.1f}MB")
+        
+        # Tier 1: Standard parser for files < 100MB
+        if size_mb < LARGE_FILE_THRESHOLD_MB:
+            try:
+                document = Document(docx_path)
+                logger.debug(f"Successfully loaded document with standard parser: {docx_path}")
+                processing_log.add_info("Used standard parser")
+                return document
+            except Exception as e:
                 logger.debug(f"Standard loading failed for {size_mb:.1f}MB file: {e}")
                 processing_log.add_warning(f"Standard parser failed: {e}")
         
-        # Check if file size exceeds maximum supported size
-        if size_mb > MAX_FILE_SIZE_MB:
-            error_msg = f"File size {size_mb:.1f}MB exceeds maximum supported size of {MAX_FILE_SIZE_MB}MB"
-            processing_log.add_error(error_msg)
-            logger.error(error_msg)
-            return None
+        # Tier 2: Enhanced parser for files 100MB - 200MB
+        if size_mb < VERY_LARGE_FILE_THRESHOLD_MB:
+            try:
+                document = self._load_with_enhanced_parser(docx_path, processing_log)
+                if document:
+                    logger.info(f"Successfully loaded document with enhanced parser: {docx_path.name}")
+                    processing_log.add_info("Used enhanced parser")
+                    return document
+            except Exception as e:
+                logger.debug(f"Enhanced parser failed for {size_mb:.1f}MB file: {e}")
+                processing_log.add_warning(f"Enhanced parser failed: {e}")
         
-        # Check if file size exceeds recommended processing size (for summary documents)
-        if size_mb > MAX_PROCESSING_SIZE_MB:
-            logger.warning(f"File size {size_mb:.1f}MB exceeds recommended processing size of {MAX_PROCESSING_SIZE_MB}MB")
-            processing_log.add_warning(f"File size {size_mb:.1f}MB exceeds recommended processing size")
-            
-            # Create a summary document instead of attempting full processing
-            return self._create_summary_document(docx_path, processing_log)
+        # Tier 3: Custom parser for files > 200MB
+        if size_mb >= VERY_LARGE_FILE_THRESHOLD_MB:
+            try:
+                document = self._load_with_custom_parser(docx_path, processing_log)
+                if document:
+                    logger.info(f"Successfully loaded document with custom parser: {docx_path.name}")
+                    processing_log.add_info("Used custom parser for very large file")
+                    return document
+            except Exception as e:
+                logger.debug(f"Custom parser failed for {size_mb:.1f}MB file: {e}")
+                processing_log.add_warning(f"Custom parser failed: {e}")
+        
+        # Final fallback: Try enhanced parser for any size
+        try:
+            document = self._load_with_enhanced_parser(docx_path, processing_log)
+            if document:
+                logger.info(f"Successfully loaded document with enhanced parser (fallback): {docx_path.name}")
+                processing_log.add_info("Used enhanced parser (fallback)")
+                return document
+        except Exception as e:
+            logger.debug(f"Enhanced parser fallback failed: {e}")
+            processing_log.add_warning(f"Enhanced parser fallback failed: {e}")
         
         error_msg = f"All loading methods failed for {size_mb:.1f}MB document {docx_path}"
         processing_log.add_error(error_msg)
@@ -412,20 +360,34 @@ class DocumentProcessor:
         """
         try:
             from lxml import etree
+            from app.utils.shared_constants import LXML_ATTRIBUTE_VALUE_LIMIT, LXML_TEXT_VALUE_LIMIT
             
-            # Configure lxml parser globally for large files with increased limits
-            # This affects all subsequent XML parsing operations
-            # Using the approach from python-docx PR #1272
+            # Parser optimized for large file size range
             parser = etree.XMLParser(
                 huge_tree=True,
                 recover=True,
-                remove_blank_text=True,
-                resolve_entities=False
+                strip_cdata=False,
+                resolve_entities=False,
+                attribute_defaults=False,
+                dtd_validation=False,
+                load_dtd=False,
+                no_network=True,
+                collect_ids=False,  # Performance boost
+                remove_blank_text=False,  # Preserve whitespace
+                remove_comments=False     # Preserve comments
             )
-            etree.set_default_parser(parser)
             
-            # Use standard Document constructor with global parser configuration
-            document = Document(docx_path)
+            from docx.opc.package import OpcPackage
+            package = OpcPackage.open(docx_path, parser=parser)
+            
+            if package.main_document_part is None:
+                error_msg = f"Main document part not found in: {docx_path}"
+                processing_log.add_error(error_msg)
+                logger.error(error_msg)
+                return None
+            
+            from docx.document import Document as DocxDocument
+            document = DocxDocument(package.main_document_part._element, package.main_document_part)
             
             logger.info(f"Successfully loaded large document with enhanced parser: {docx_path.name}")
             return document
@@ -441,7 +403,7 @@ class DocumentProcessor:
             logger.error(error_msg)
             return None
         except ValueError as e:
-            if "attvalue" in str(e).lower() or "length too long" in str(e).lower():
+            if "attvalue" in str(e).lower():
                 error_msg = f"Attribute value error during enhanced parsing (likely due to large file): {e}"
                 processing_log.add_error(error_msg)
                 logger.error(error_msg)
@@ -499,10 +461,21 @@ class DocumentProcessor:
                 remove_pis=False,  # Preserve processing instructions
                 compact=False      # Don't compact whitespace
             )
-            etree.set_default_parser(parser)
             
-            # Use standard Document constructor with extreme parser configuration
-            document = Document(docx_path)
+            from docx.opc.package import OpcPackage
+            
+            # Open package with extreme parser
+            package = OpcPackage.open(docx_path, parser=parser)
+            
+            if package.main_document_part is None:
+                error_msg = f"Main document part not found in problematic file: {docx_path}"
+                processing_log.add_error(error_msg)
+                logger.error(error_msg)
+                return None
+            
+            # Create document with extreme element handling
+            from docx.document import Document as DocxDocument
+            document = DocxDocument(package.main_document_part._element, package.main_document_part)
             
             logger.info(f"Successfully loaded problematic large document with extreme parser: {docx_path.name}")
             processing_log.add_info("Extreme parser: Successfully loaded problematic document")
@@ -519,29 +492,10 @@ class DocumentProcessor:
             logger.error(error_msg)
             return None
         except ValueError as e:
-            if "attvalue" in str(e).lower() or "length too long" in str(e).lower():
-                error_msg = f"Attribute value error during extreme parsing (trying custom parser): {e}"
-                processing_log.add_error(error_msg)
-                logger.error(error_msg)
-                # Try with custom parser as last resort
-                return self._load_with_custom_parser(docx_path, processing_log)
-            else:
-                error_msg = f"Value error during extreme parsing (file may be corrupted): {e}"
-                processing_log.add_error(error_msg)
-                logger.error(error_msg)
-                return None
-        except etree.XMLSyntaxError as e:
-            if "attvalue" in str(e).lower() or "length too long" in str(e).lower():
-                error_msg = f"XML syntax error with attvalue issue (trying custom parser): {e}"
-                processing_log.add_error(error_msg)
-                logger.error(error_msg)
-                # Try with custom parser as last resort
-                return self._load_with_custom_parser(docx_path, processing_log)
-            else:
-                error_msg = f"XML syntax error during extreme parsing: {e}"
-                processing_log.add_error(error_msg)
-                logger.error(error_msg)
-                return None
+            error_msg = f"Value error during extreme parsing (file may be corrupted): {e}"
+            processing_log.add_error(error_msg)
+            logger.error(error_msg)
+            return None
         except MemoryError as e:
             error_msg = f"Memory error during extreme parsing: {e}"
             processing_log.add_error(error_msg)
@@ -570,6 +524,7 @@ class DocumentProcessor:
         try:
             import zipfile
             from lxml import etree
+            from app.utils.shared_constants import LXML_ATTRIBUTE_VALUE_LIMIT, LXML_TEXT_VALUE_LIMIT
             
             logger.info(f"Using custom parser for very large file: {docx_path.name}")
             processing_log.add_info("Custom parser: Starting chunked processing")
@@ -586,33 +541,33 @@ class DocumentProcessor:
                 no_network=True,
                 collect_ids=False,
                 remove_blank_text=False,  # Preserve whitespace
-                remove_comments=False,    # Preserve comments
-                remove_pis=False,         # Preserve processing instructions
-                compact=False             # Don't compact whitespace
+                remove_comments=False     # Preserve comments
             )
-            etree.set_default_parser(parser)
             
-            # Try standard Document constructor with custom parser configuration
-            try:
-                document = Document(docx_path)
-                
-                # Validate document structure
-                if not hasattr(document, 'paragraphs') or len(document.paragraphs) == 0:
-                    logger.warning(f"Very large document has no paragraphs: {docx_path.name}")
-                    processing_log.add_warning("Very large document appears to have no text content")
-                
-                logger.info(f"Successfully loaded very large document with custom parser: {docx_path.name}")
-                processing_log.add_info("Custom parser: Successfully loaded very large document")
-                return document
-                
-            except (ValueError, etree.XMLSyntaxError) as e:
-                if "attvalue" in str(e).lower() or "length too long" in str(e).lower():
-                    # Last resort: try with minimal parsing
-                    logger.warning(f"Custom parser failed with attvalue error, trying minimal parsing: {e}")
-                    processing_log.add_warning("Attempting minimal parsing as last resort")
-                    return self._load_with_minimal_parser(docx_path, processing_log)
-                else:
-                    raise
+            # Use streaming approach for very large files
+            from docx.opc.package import OpcPackage
+            
+            # Open package with custom parser
+            package = OpcPackage.open(docx_path, parser=parser)
+            
+            if package.main_document_part is None:
+                error_msg = f"Main document part not found in very large file: {docx_path}"
+                processing_log.add_error(error_msg)
+                logger.error(error_msg)
+                return None
+            
+            # Create document with custom element handling
+            from docx.document import Document as DocxDocument
+            document = DocxDocument(package.main_document_part._element, package.main_document_part)
+            
+            # Validate document structure
+            if not hasattr(document, 'paragraphs') or len(document.paragraphs) == 0:
+                logger.warning(f"Very large document has no paragraphs: {docx_path.name}")
+                processing_log.add_warning("Very large document appears to have no text content")
+            
+            logger.info(f"Successfully loaded very large document with custom parser: {docx_path.name}")
+            processing_log.add_info("Custom parser: Successfully loaded very large document")
+            return document
             
         except ImportError as e:
             error_msg = f"Required dependencies not available for custom parser: {e}"
@@ -646,346 +601,6 @@ class DocumentProcessor:
             processing_log.add_error(error_msg)
             logger.error(error_msg)
             return None
-    
-    def _load_with_streaming_parser(self, docx_path: Path, processing_log: ProcessingLog) -> Optional[Document]:
-        """
-        Streaming parser for files with AttValue errors.
-        
-        This method uses direct XML processing with etree.iterparse to handle
-        files that fail normal loading due to AttValue length issues.
-        
-        Args:
-            docx_path: Path to the DOCX file
-            processing_log: Processing log to record parsing activities
-            
-        Returns:
-            Document instance with full functionality preserved
-        """
-        try:
-            from docx import Document
-            
-            logger.info(f"Using streaming parser for file with AttValue issues: {docx_path.name}")
-            processing_log.add_info("Streaming parser: Direct XML processing")
-            
-            # Try normal loading first
-            try:
-                document = Document(docx_path)
-                logger.info("Normal loading successful")
-                processing_log.add_info("Normal loading successful")
-                return document
-                
-            except Exception as e:
-                # If normal loading fails due to AttValue errors, use direct XML processing
-                if "AttValue" in str(e) and "length too long" in str(e):
-                    logger.warning(f"AttValue error detected, switching to direct XML processing: {e}")
-                    processing_log.add_warning(f"AttValue error detected, switching to direct XML processing")
-                    return self._direct_xml_processing(docx_path, processing_log)
-                else:
-                    # Re-raise other errors
-                    raise e
-            
-        except Exception as e:
-            error_msg = f"Streaming parser failed: {e}"
-            processing_log.add_error(error_msg)
-            logger.error(error_msg)
-            return None
-
-    def _direct_xml_processing(self, docx_path: Path, processing_log: ProcessingLog) -> Optional[Document]:
-        """
-        Direct XML processing for files with AttValue errors.
-        
-        This method uses etree.iterparse with huge_tree=True to directly process
-        the document XML while preserving all document structure.
-        
-        Args:
-            docx_path: Path to the DOCX file
-            processing_log: Processing log to record activities
-            
-        Returns:
-            Document instance with preserved structure
-        """
-        try:
-            from docx import Document
-            import zipfile
-            import tempfile
-            import shutil
-            import os
-            
-            logger.info("Using direct XML processing for AttValue error recovery")
-            processing_log.add_info("Direct XML processing: Using huge_tree=True parser")
-            
-            # Copy the original document to preserve structure
-            with tempfile.NamedTemporaryFile(suffix='.docx', delete=False) as temp_file:
-                temp_path = temp_file.name
-            
-            try:
-                # Copy the original document
-                shutil.copy2(docx_path, temp_path)
-                
-                # Try to load the document with copied structure
-                try:
-                    document = Document(temp_path)
-                except Exception as doc_error:
-                    # If even the copied document fails to load, use raw text approach
-                    if "AttValue" in str(doc_error) and "length too long" in str(doc_error):
-                        logger.warning(f"Even copied document failed with AttValue error, using raw text approach: {doc_error}")
-                        processing_log.add_warning("Copied document failed with AttValue error, using raw text approach")
-                        return self._create_document_with_raw_text(docx_path, processing_log)
-                    else:
-                        raise doc_error
-                
-                # Extract and process document.xml directly
-                with zipfile.ZipFile(docx_path, 'r') as source_zip:
-                    self._populate_document_with_iterparse(document, source_zip, processing_log)
-                
-                logger.info("Direct XML processing completed successfully")
-                processing_log.add_info("Direct XML processing completed")
-                return document
-                
-            finally:
-                # Clean up temp file
-                try:
-                    os.unlink(temp_path)
-                except:
-                    pass
-                        
-        except Exception as e:
-            error_msg = f"Direct XML processing failed: {e}"
-            processing_log.add_error(error_msg)
-            logger.error(error_msg)
-            return None
-
-    def _create_document_with_raw_text(self, docx_path: Path, processing_log: ProcessingLog) -> Optional[Document]:
-        """
-        Create a full document using raw text parsing for extremely problematic files.
-        
-        This method preserves the complete document structure by copying the original
-        document and only replacing the document.xml content with text extracted
-        using regex patterns, avoiding XML parsing entirely.
-        
-        Args:
-            docx_path: Path to the DOCX file
-            processing_log: Processing log to record activities
-            
-        Returns:
-            Document instance with full structure preserved
-        """
-        try:
-            from docx import Document
-            import zipfile
-            import tempfile
-            import shutil
-            import os
-            import re
-            
-            logger.info("Creating full document with raw text parsing")
-            processing_log.add_info("Raw text document creation: Preserving full document structure")
-            
-            # Copy the original document to preserve all structure
-            with tempfile.NamedTemporaryFile(suffix='.docx', delete=False) as temp_file:
-                temp_path = temp_file.name
-            
-            try:
-                # Copy the original document
-                shutil.copy2(docx_path, temp_path)
-                
-                # Load the document with copied structure
-                document = Document(temp_path)
-                
-                # Extract text from the original document
-                with zipfile.ZipFile(docx_path, 'r') as source_zip:
-                    # Read the XML as raw text
-                    xml_content = source_zip.read('word/document.xml').decode('utf-8', errors='ignore')
-                    
-                    # Extract text content using regex patterns
-                    # Pattern to match text within <w:t> tags
-                    text_pattern = r'<w:t[^>]*>(.*?)</w:t>'
-                    
-                    # Find all text matches
-                    text_matches = re.findall(text_pattern, xml_content, re.DOTALL)
-                    
-                    # Instead of clearing paragraphs, preserve the original structure
-                    # and just ensure the document is loaded properly for processing
-                    logger.info(f"Raw text document creation completed: {len(text_matches)} text elements found")
-                    processing_log.add_info(f"Raw text document creation: {len(text_matches)} text elements found")
-                    
-                    # The document now has the original structure preserved
-                    # The processors will work with the original XML structure
-                
-                return document
-                
-            finally:
-                # Clean up temp file
-                try:
-                    os.unlink(temp_path)
-                except:
-                    pass
-            
-        except Exception as e:
-            error_msg = f"Raw text document creation failed: {e}"
-            processing_log.add_error(error_msg)
-            logger.error(error_msg)
-            return None
-
-    def _populate_document_with_iterparse(self, document: Document, source_zip, processing_log: ProcessingLog) -> None:
-        """
-        Populate document content using etree.iterparse with huge_tree=True for streaming.
-        
-        This method uses the direct iterparse approach with explicit parser configuration
-        to handle large files without AttValue errors.
-        
-        Args:
-            document: Document to populate
-            source_zip: Source ZIP file
-            processing_log: Processing log
-        """
-        try:
-            from lxml import etree
-            import tempfile
-            import os
-            
-            logger.info("Using etree.iterparse with huge_tree=True for streaming")
-            processing_log.add_info("Iterparse streaming: Using huge_tree=True parser")
-            
-            # Extract document.xml to temporary file for direct parsing
-            with tempfile.NamedTemporaryFile(suffix='.xml', delete=False) as temp_xml:
-                temp_xml_path = temp_xml.name
-                temp_xml.write(source_zip.read('word/document.xml'))
-            
-            try:
-                # Configure parser with huge_tree=True and other optimizations
-                parser = etree.XMLParser(
-                    huge_tree=True,
-                    recover=True,
-                    remove_blank_text=True,
-                    resolve_entities=False
-                )
-                
-                # Use iterparse directly on the file for streaming
-                context = etree.iterparse(
-                    temp_xml_path,  # Direct file path
-                    events=('end',),
-                    tag='{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p',
-                    parser=parser
-                )
-                
-                paragraph_count = 0
-                max_paragraphs = 10000
-                
-                for event, elem in context:
-                    if elem.tag.endswith('p'):  # Paragraph element
-                        # Extract text from this paragraph
-                        text_parts = []
-                        for text_elem in elem.iterfind('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t'):
-                            if text_elem.text:
-                                text_parts.append(text_elem.text)
-                        
-                        # Combine text parts and add paragraph
-                        if text_parts and paragraph_count < max_paragraphs:
-                            paragraph_text = ' '.join(text_parts).strip()
-                            if paragraph_text:
-                                document.add_paragraph(paragraph_text)
-                                paragraph_count += 1
-                        
-                        # Clean up element to free memory
-                        elem.clear()
-                        
-                        # Stop if we've reached the limit
-                        if paragraph_count >= max_paragraphs:
-                            document.add_paragraph("... (content truncated due to size limits)")
-                            break
-                
-                logger.info(f"Iterparse streaming completed: {paragraph_count} paragraphs")
-                processing_log.add_info(f"Iterparse streaming: {paragraph_count} paragraphs processed")
-                
-            finally:
-                # Clean up temporary file
-                try:
-                    os.unlink(temp_xml_path)
-                except:
-                    pass
-                    
-        except Exception as e:
-            error_msg = f"Iterparse streaming failed: {e}"
-            processing_log.add_error(error_msg)
-            logger.error(error_msg)
-            
-            # Fallback to raw text parsing if iterparse fails
-            if "AttValue" in str(e) and "length too long" in str(e):
-                logger.warning(f"Iterparse failed with AttValue error, using raw text parsing: {e}")
-                processing_log.add_warning("Iterparse failed with AttValue error, switching to raw text parsing")
-                self._populate_document_with_raw_text(document, source_zip, processing_log)
-            else:
-                raise e
-    
-    def _populate_document_with_raw_text(self, document: Document, source_zip, processing_log: ProcessingLog) -> None:
-        """
-        Populate document content using raw text parsing for extremely problematic files.
-        
-        This method uses regex-based text extraction to avoid XML parsing entirely
-        when both normal and SAX parsers fail due to AttValue errors.
-        
-        Args:
-            document: Document to populate
-            source_zip: Source ZIP file
-            processing_log: Processing log
-        """
-        try:
-            import re
-            
-            logger.info("Using raw text parsing for extremely problematic file")
-            processing_log.add_info("Raw text parsing: Avoiding XML parsing entirely")
-            
-            # Read the XML as raw text
-            xml_content = source_zip.read('word/document.xml').decode('utf-8', errors='ignore')
-            
-            # Extract text content using regex patterns
-            # Pattern to match text within <w:t> tags
-            text_pattern = r'<w:t[^>]*>(.*?)</w:t>'
-            
-            # Find all text matches
-            text_matches = re.findall(text_pattern, xml_content, re.DOTALL)
-            
-            # Group text into paragraphs (simplified approach)
-            current_paragraph = ""
-            paragraph_count = 0
-            max_paragraphs = 10000
-            
-            for text_match in text_matches:
-                # Clean up the text
-                clean_text = text_match.strip()
-                if clean_text:
-                    current_paragraph += clean_text + " "
-                    
-                    # If we hit a paragraph break or reach limit, add paragraph
-                    if len(current_paragraph.strip()) > 200 or paragraph_count >= max_paragraphs:
-                        if current_paragraph.strip():
-                            document.add_paragraph(current_paragraph.strip())
-                            paragraph_count += 1
-                            current_paragraph = ""
-                        
-                        if paragraph_count >= max_paragraphs:
-                            document.add_paragraph("... (content truncated due to size limits)")
-                            break
-            
-            # Add any remaining text
-            if current_paragraph.strip() and paragraph_count < max_paragraphs:
-                document.add_paragraph(current_paragraph.strip())
-                paragraph_count += 1
-            
-            logger.info(f"Raw text parsing completed: {paragraph_count} paragraphs")
-            processing_log.add_info(f"Raw text parsing: {paragraph_count} paragraphs processed")
-            
-        except Exception as e:
-            error_msg = f"Raw text parsing failed: {e}"
-            processing_log.add_error(error_msg)
-            logger.error(error_msg)
-
-
-
-
-
-
     
     def _prepare_for_large_file(self):
         """
@@ -1189,8 +804,8 @@ class DocumentProcessor:
                             # Use the extracted pattern text for display and matching
                             display_text = extracted_pattern_text if extracted_pattern_text else matched_text
                             
-                            # Determine if this is a match based on whether replacement_text is not the default
-                            is_matched = replacement_text != self.config.default_mapping
+                            # Determine if this is a match based on whether a pattern was found (pattern_name is not 'Unknown')
+                            is_matched = pattern_name != 'Unknown'
                             matched_pattern = pattern_name if is_matched else 'Unknown'
                             
                             # Create unified detection format
@@ -1220,6 +835,10 @@ class DocumentProcessor:
                                 'confidence': confidence,
                                 'bounding_box': bbox
                             }
+                            
+                            # Add reconstruction reasoning if available from EnhancedImageMatch
+                            if hasattr(match_data, 'reconstruction_reasoning') and match_data.reconstruction_reasoning:
+                                unified_detection['reconstruction_reasoning'] = match_data.reconstruction_reasoning
                             
                             # Initialize all_detections if it doesn't exist
                             if 'all_detections' not in pipeline_results:
@@ -1380,180 +999,6 @@ class DocumentProcessor:
         self.image_processor = None
         
         logger.info("Document processor cleanup completed")
-
-    def _create_summary_document(self, docx_path: Path, processing_log: ProcessingLog) -> Optional[Document]:
-        """
-        Create a summary document for files that are too large to process fully.
-        
-        This creates a document with basic file information and a warning that
-        the file was too large for full processing.
-        
-        Args:
-            docx_path: Path to the DOCX file
-            processing_log: Processing log to record activities
-            
-        Returns:
-            Document instance with summary information
-        """
-        try:
-            from docx import Document
-            from docx.shared import Inches
-            from docx.enum.text import WD_ALIGN_PARAGRAPH
-            
-            logger.warning(f"Creating summary document for oversized file: {docx_path.name}")
-            processing_log.add_warning(f"File too large for full processing, creating summary")
-            
-            # Create a new document
-            document = Document()
-            
-            # Add title
-            title = document.add_heading("Document Processing Summary", 0)
-            title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            
-            # Add file information
-            file_size = docx_path.stat().st_size
-            size_mb = file_size / (1024 * 1024)
-            
-            document.add_paragraph(f"File Name: {docx_path.name}")
-            document.add_paragraph(f"File Size: {size_mb:.1f}MB")
-            document.add_paragraph(f"Processing Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            
-            # Add warning section
-            warning_heading = document.add_heading("Processing Status", level=1)
-            warning_para = document.add_paragraph()
-            warning_para.add_run("WARNING: ").bold = True
-            warning_para.add_run(f"This file ({size_mb:.1f}MB) exceeds the recommended processing size limit of {MAX_PROCESSING_SIZE_MB}MB.")
-            
-            document.add_paragraph("The file was not processed for the following reasons:")
-            reasons = document.add_paragraph()
-            reasons.add_run("• XML parsing limitations for very large files\n")
-            reasons.add_run("• Memory constraints during processing\n")
-            reasons.add_run("• Risk of 'AttValue length too long' errors\n")
-            reasons.add_run("• Performance degradation with files this large")
-            
-            # Add recommendations
-            rec_heading = document.add_heading("Recommendations", level=1)
-            document.add_paragraph("To process this file, consider:")
-            recommendations = document.add_paragraph()
-            recommendations.add_run("• Splitting the file into smaller sections\n")
-            recommendations.add_run("• Reducing image quality or removing images\n")
-            recommendations.add_run("• Using a different file format\n")
-            recommendations.add_run("• Processing in batches")
-            
-            # Add technical details
-            tech_heading = document.add_heading("Technical Details", level=1)
-            document.add_paragraph(f"Maximum recommended file size: {MAX_PROCESSING_SIZE_MB}MB")
-            document.add_paragraph(f"Current file size: {size_mb:.1f}MB")
-            document.add_paragraph(f"Size difference: {size_mb - MAX_PROCESSING_SIZE_MB:.1f}MB over limit")
-            
-            logger.info(f"Created summary document for oversized file: {docx_path.name}")
-            processing_log.add_info(f"Summary document created for {size_mb:.1f}MB file")
-            
-            return document
-            
-        except Exception as e:
-            error_msg = f"Failed to create summary document: {e}"
-            processing_log.add_error(error_msg)
-            logger.error(error_msg)
-            return None
-
-    def _is_summary_document(self, document) -> bool:
-        """
-        Check if the given document is a summary document rather than a fully processed document.
-        
-        Args:
-            document: Document object to check
-            
-        Returns:
-            True if this is a summary document, False otherwise
-        """
-        try:
-            if not document or not document.paragraphs:
-                return False
-            
-            # Check the first paragraph for summary document indicators
-            first_paragraph_text = document.paragraphs[0].text if document.paragraphs else ""
-            
-            # Summary documents have specific identifying text
-            summary_indicators = [
-                "Document Processing Summary",
-                "File too large for full processing",
-                "This file exceeds the recommended processing size"
-            ]
-            
-            return any(indicator in first_paragraph_text for indicator in summary_indicators)
-            
-        except Exception as e:
-            logger.debug(f"Error checking if document is summary: {e}")
-            return False
-
-    def _create_minimal_document_for_attvalue_error(self, docx_path: Path, processing_log: ProcessingLog, error_msg: str) -> Optional[Document]:
-        """
-        Create a minimal document when AttValue length errors occur.
-        
-        This method creates a document with basic file information and a clear
-        explanation that the file could not be processed due to extremely large
-        XML attributes.
-        
-        Args:
-            docx_path: Path to the DOCX file
-            processing_log: Processing log to record activities
-            error_msg: The specific AttValue error message
-            
-        Returns:
-            Document instance with error information
-        """
-        try:
-            from docx import Document
-            from docx.shared import Inches
-            from docx.enum.text import WD_ALIGN_PARAGRAPH
-            
-            logger.error(f"Creating minimal document due to AttValue error: {docx_path.name}")
-            processing_log.add_error(f"AttValue length error prevented full processing: {error_msg}")
-            
-            # Create a new document
-            document = Document()
-            
-            # Add title
-            title = document.add_heading("Document Processing Error - AttValue Length", 0)
-            title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            
-            # Add file information
-            document.add_paragraph(f"Original file: {docx_path.name}")
-            document.add_paragraph(f"File size: {docx_path.stat().st_size / (1024*1024):.1f}MB")
-            document.add_paragraph(f"Error occurred: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            
-            # Add error explanation
-            error_heading = document.add_heading("Processing Error", level=1)
-            document.add_paragraph("This document could not be fully processed due to an XML parsing error.")
-            document.add_paragraph("The file contains extremely large XML attributes that exceed the parser's limits.")
-            document.add_paragraph(f"Specific error: {error_msg}")
-            
-            # Add technical details
-            tech_heading = document.add_heading("Technical Details", level=1)
-            document.add_paragraph("• Error Type: AttValue length too long")
-            document.add_paragraph("• Cause: XML attributes in the document exceed maximum allowed size")
-            document.add_paragraph("• Impact: Full document processing was not possible")
-            document.add_paragraph("• Attempted: Both streaming parser and SAX parser failed")
-            
-            # Add recommendations
-            rec_heading = document.add_heading("Recommendations", level=1)
-            document.add_paragraph("To process this document:")
-            document.add_paragraph("• Try opening and resaving the document in Microsoft Word")
-            document.add_paragraph("• Remove any embedded large objects or images")
-            document.add_paragraph("• Split the document into smaller sections")
-            document.add_paragraph("• Use a different document format")
-            
-            logger.info(f"Created minimal document for AttValue error: {docx_path.name}")
-            processing_log.add_info(f"Minimal document created due to AttValue error")
-            
-            return document
-            
-        except Exception as e:
-            error_msg = f"Failed to create minimal document for AttValue error: {e}"
-            processing_log.add_error(error_msg)
-            logger.error(error_msg)
-            return None
 
 def create_document_processor(config) -> DocumentProcessor:
     """

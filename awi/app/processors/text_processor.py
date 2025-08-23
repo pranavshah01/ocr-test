@@ -31,6 +31,11 @@ from ..utils.pattern_matcher import PatternMatcher, create_pattern_matcher
 from ..utils.text_utils.text_docx_utils import (
     TextReconstructor, FontManager, TextReplacer, create_text_replacer
 )
+from ..utils.shared_constants import (
+    DEFAULT_MAPPING,
+    DEFAULT_SEPARATOR,
+    PROCESSING_MODES
+)
 
 logger = logging.getLogger(__name__)
 
@@ -94,416 +99,9 @@ class EnhancedMatch:
             'processor': self.processor
         }
 
-class TextReconstructor:
-    """Reconstructs text across multiple runs for pattern matching."""
-    
-    @staticmethod
-    def reconstruct_paragraph_text(paragraph: Paragraph) -> Tuple[str, List]:
-        """
-        Reconstruct full text from paragraph runs.
-        
-        Args:
-            paragraph: Paragraph to reconstruct
-            
-        Returns:
-            Tuple of (full_text, list_of_runs)
-        """
-        full_text = ""
-        runs = []
-        
-        for run in paragraph.runs:
-            full_text += run.text
-            runs.append(run)
-        
-        return full_text, runs
-    
-    @staticmethod
-    def find_text_in_runs(runs: List, search_text: str, start_pos: int = 0) -> Optional[Tuple[int, int, List]]:
-        """
-        Find text span across multiple runs.
-        
-        Args:
-            runs: List of runs to search
-            search_text: Text to find
-            start_pos: Starting position in reconstructed text
-            
-        Returns:
-            Tuple of (start_index, end_index, affected_runs) or None
-        """
-        full_text = "".join(run.text for run in runs)
-        
-        # Find the text in the reconstructed string
-        match_start = full_text.find(search_text, start_pos)
-        if match_start == -1:
-            return None
-        
-        match_end = match_start + len(search_text)
-        
-        # Find which runs contain the matched text
-        current_pos = 0
-        affected_runs = []
-        
-        for run in runs:
-            run_start = current_pos
-            run_end = current_pos + len(run.text)
-            
-            # Check if this run overlaps with the match
-            if run_start < match_end and run_end > match_start:
-                affected_runs.append(run)
-            
-            current_pos = run_end
-            
-            # Stop if we've passed the match
-            if current_pos > match_end:
-                break
-        
-        return match_start, match_end, affected_runs
 
-class FontManager:
-    """Manages font information and formatting preservation."""
-    
-    @staticmethod
-    def get_font_info(run) -> Dict[str, Any]:
-        """
-        Extract font information from a run, following the correct hierarchy:
-        1. Check the specific run that contains the matched text
-        2. If not found, check the parent paragraph's style
-        3. If not found, check the section's style
-        4. If not found, check document defaults
-        
-        Args:
-            run: Run to extract font info from
-            
-        Returns:
-            Dictionary with font information
-        """
-        try:
-            # Initialize font properties
-            font_family = None
-            font_size = None
-            color = '000000'  # Default black color
-            is_bold = False
-            is_italic = False
-            is_underline = False
-            
-            # STEP 1: Check the specific run that contains the matched text
-            if hasattr(run, 'font') and run.font:
-                # Get font family from run
-                if hasattr(run.font, 'name') and run.font.name:
-                    font_name = str(run.font.name)
-                    # Handle font names with version suffixes like "ACADEMY ENGRAVED LET PLAIN:1.0"
-                    if ':' in font_name:
-                        font_family = font_name.split(':')[0]
-                    else:
-                        font_family = font_name
-                elif hasattr(run.font, 'ascii') and run.font.ascii:
-                    font_family = str(run.font.ascii)
-                elif hasattr(run.font, 'east_asia') and run.font.east_asia:
-                    font_family = str(run.font.east_asia)
-                elif hasattr(run.font, 'h_ansi') and run.font.h_ansi:
-                    font_family = str(run.font.h_ansi)
-                elif hasattr(run.font, 'cs') and run.font.cs:
-                    font_family = str(run.font.cs)
-                
-                # Get font size from run
-                if hasattr(run.font, 'size') and run.font.size:
-                    # Convert EMUs to points (1 point = 12700 EMUs)
-                    if hasattr(run.font.size, 'pt'):
-                        font_size = str(run.font.size.pt)
-                    else:
-                        # If size is in EMUs, convert to points
-                        emu_size = float(run.font.size)
-                        font_size = str(emu_size / 12700.0)
-                elif hasattr(run.font, 'sz') and run.font.sz:
-                    # Convert half-points to points
-                    font_size = str(float(run.font.sz) / 2.0)
-                
 
-                
-                # Get font color from run
-                if hasattr(run.font, 'color') and run.font.color:
-                    if hasattr(run.font.color, 'rgb') and run.font.color.rgb:
-                        color = str(run.font.color.rgb)
-                    elif hasattr(run.font.color, 'theme_color') and run.font.color.theme_color:
-                        color = f"Theme: {run.font.color.theme_color}"
-                
-                # Get font styles from run
-                is_bold = bool(getattr(run.font, 'bold', False))
-                is_italic = bool(getattr(run.font, 'italic', False))
-                is_underline = bool(getattr(run.font, 'underline', False))
-            
-            # STEP 2: If run doesn't have font info, check run's XML directly
-            if (font_family is None or font_size is None) and hasattr(run, '_element') and run._element is not None:
-                try:
-                    # Look for rPr (run properties) in the run's XML
-                    r_pr = run._element.find('.//w:rPr', namespaces={'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'})
-                    if r_pr is not None:
-                        # Get font family from XML
-                        if font_family is None:
-                            r_fonts = r_pr.find('.//w:rFonts', namespaces={'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'})
-                            if r_fonts is not None:
-                                ascii_font = r_fonts.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}ascii')
-                                h_ansi_font = r_fonts.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}hAnsi')
-                                if ascii_font:
-                                    font_family = ascii_font
-                                elif h_ansi_font:
-                                    font_family = h_ansi_font
-                        
-                        # Get font size from XML
-                        if font_size is None:
-                            sz_element = r_pr.find('.//w:sz', namespaces={'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'})
-                            if sz_element is not None:
-                                sz_val = sz_element.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val')
-                                if sz_val:
-                                    font_size = str(float(sz_val) / 2.0)
-                except Exception as e:
-                    pass
-            
-            # STEP 3: If still not found, check parent paragraph's style
-            if (font_family is None or font_size is None) and hasattr(run, '_element') and run._element is not None:
-                try:
-                    # Traverse up to find paragraph element
-                    parent = run._element.getparent()
-                    while parent is not None and not parent.tag.endswith('p'):
-                        parent = parent.getparent()
-                    
-                    if parent is not None:
-                        # Check paragraph properties for font info
-                        p_pr = parent.find('.//w:pPr', namespaces={'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'})
-                        if p_pr is not None:
-                            r_pr = p_pr.find('.//w:rPr', namespaces={'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'})
-                            if r_pr is not None:
-                                # Get font family from paragraph style
-                                if font_family is None:
-                                    r_fonts = r_pr.find('.//w:rFonts', namespaces={'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'})
-                                    if r_fonts is not None:
-                                        ascii_font = r_fonts.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}ascii')
-                                        h_ansi_font = r_fonts.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}hAnsi')
-                                        if ascii_font:
-                                            font_family = ascii_font
-                                        elif h_ansi_font:
-                                            font_family = h_ansi_font
-                                
-                                # Get font size from paragraph style
-                                if font_size is None:
-                                    sz_element = r_pr.find('.//w:sz', namespaces={'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'})
-                                    if sz_element is not None:
-                                        sz_val = sz_element.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val')
-                                        if sz_val:
-                                            font_size = str(float(sz_val) / 2.0)
-                except Exception as e:
-                    pass
-            
-            # STEP 4: If still not found, check document defaults (Normal style, then docDefaults)
-            # Note: This step is handled by the calling code that has access to the document
-            
-            # Final fallbacks
-            if font_family is None:
-                font_family = 'Arial'
-            if font_size is None:
-                font_size = '12.0'
-            
-            font_info = {
-                'font_family': font_family,
-                'font_size': font_size,
-                'color': color,
-                'is_bold': is_bold,
-                'is_italic': is_italic,
-                'is_underline': is_underline
-            }
-            
-            return font_info
-            
-        except Exception as e:
-            # Return default values if extraction fails
-            return {
-                'font_family': 'Arial',
-                'font_size': '12.0',
-                'color': '000000',
-                'is_bold': False,
-                'is_italic': False,
-                'is_underline': False
-            }
-    
-    @staticmethod
-    def get_document_default_font_info(document) -> Dict[str, Any]:
-        """
-        Get default font information from document styles.
-        
-        Args:
-            document: DOCX document object
-            
-        Returns:
-            Dictionary with default font information
-        """
-        try:
-            # Try to get default font from document styles
-            if hasattr(document, 'styles') and document.styles:
-                # Look for Normal style
-                normal_style = document.styles.get('Normal', None)
-                if normal_style and hasattr(normal_style, 'font'):
-                    font = normal_style.font
-                    return {
-                        'font_family': str(font.name) if font.name else 'Arial',
-                        'font_size': str(font.size.pt) if font.size else '12.0',
-                        'color': str(font.color.rgb) if font.color and font.color.rgb else '000000',
-                        'is_bold': bool(getattr(font, 'bold', False)),
-                        'is_italic': bool(getattr(font, 'italic', False)),
-                        'is_underline': bool(getattr(font, 'underline', False))
-                    }
-                
-                # Try to get from document defaults
-                if hasattr(document, '_element') and document._element:
-                    # Look for docDefaults in styles
-                    styles_element = document._element.find('.//w:docDefaults', namespaces={'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'})
-                    if styles_element is not None:
-                        r_pr_default = styles_element.find('.//w:rPrDefault', namespaces={'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'})
-                        if r_pr_default is not None:
-                            r_pr = r_pr_default.find('.//w:rPr', namespaces={'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'})
-                            if r_pr is not None:
-                                # Check for theme fonts and font size
-                                ascii_theme = r_pr.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}asciiTheme')
-                                h_ansi_theme = r_pr.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}hAnsiTheme')
-                                
-                                # Get font size from sz element
-                                sz_element = r_pr.find('.//w:sz', namespaces={'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'})
-                                font_size = None  # Start with None to detect if we found a value
-                                if sz_element is not None:
-                                    sz_val = sz_element.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val')
-                                    if sz_val:
-                                        # Convert half-points to points
-                                        font_size = str(float(sz_val) / 2.0)
-                                
-                                # If we didn't find a font size in docDefaults, try to get it from Normal style
-                                if font_size is None and hasattr(document, 'styles'):
-                                    try:
-                                        normal_style = document.styles.get('Normal')
-                                        if normal_style and hasattr(normal_style, '_element'):
-                                            r_pr = normal_style._element.find('.//w:rPr', namespaces={'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'})
-                                            if r_pr is not None:
-                                                sz_element = r_pr.find('.//w:sz', namespaces={'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'})
-                                                if sz_element is not None:
-                                                    sz_val = sz_element.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val')
-                                                    if sz_val:
-                                                        font_size = str(float(sz_val) / 2.0)
-                                    except Exception as e:
-                                        pass
-                                
-                                # Final fallback
-                                if font_size is None:
-                                    font_size = '12.0'
-                                
-                                # Map theme fonts to actual fonts
-                                if ascii_theme == 'minorHAnsi' or h_ansi_theme == 'minorHAnsi':
-                                    return {
-                                        'font_family': 'Arial',
-                                        'font_size': font_size,
-                                        'color': '000000',
-                                        'is_bold': False,
-                                        'is_italic': False,
-                                        'is_underline': False
-                                    }
-                                elif ascii_theme == 'majorHAnsi' or h_ansi_theme == 'majorHAnsi':
-                                    return {
-                                        'font_family': 'Calibri',
-                                        'font_size': font_size,
-                                        'color': '000000',
-                                        'is_bold': False,
-                                        'is_italic': False,
-                                        'is_underline': False
-                                    }
-            
-            # Fallback to default values - try to get from document if available
-            if hasattr(document, '_element') and document._element:
-                try:
-                    # Try to get default font info from document
-                    default_font_info = FontManager.get_document_default_font_info(document)
-                    return default_font_info
-                except Exception as e:
-                    pass
-            
-            # Final fallback to reasonable defaults
-            return {
-                'font_family': 'Arial',
-                'font_size': '12.0',
-                'color': '000000',
-                'is_bold': False,
-                'is_italic': False,
-                'is_underline': False
-            }
-            
-        except Exception as e:
-            # Return default values if extraction fails
-            return {
-                'font_family': 'Arial',
-                'font_size': '12.0',
-                'color': '000000',
-                'is_bold': False,
-                'is_italic': False,
-                'is_underline': False
-            }
-    
-    @staticmethod
-    def get_best_font_info_from_runs(runs, document=None) -> Dict[str, Any]:
-        """
-        Get the best font information from a list of runs.
-        
-        Args:
-            runs: List of runs to analyze
-            document: Optional document for fallback font info
-            
-        Returns:
-            Dictionary with the best font information found
-        """
-        try:
-            if not runs:
-                return FontManager.get_default_font_info()
-            
-            # Find the best run with explicit font properties
-            best_font_info = None
-            best_score = 0
-            
-            for run in runs:
-                run_font_info = FontManager.get_font_info(run)
-                
-                # Score this run's font info (higher score = better)
-                score = 0
-                if run_font_info.get('font_family') and run_font_info.get('font_family') != 'Arial':
-                    score += 2  # Explicit font family
-                if run_font_info.get('font_size') and run_font_info.get('font_size') != '12.0':
-                    score += 2  # Explicit font size
-                if run_font_info.get('font_family') == 'Arial' and run_font_info.get('font_size') == '12.0':
-                    score = 0  # Default values, lowest priority
-                
-                if score > best_score:
-                    best_score = score
-                    best_font_info = run_font_info
-            
-            # Use the best font info found, or the first run's info if all are defaults
-            if best_font_info and best_score > 0:
-                return best_font_info
-            else:
-                return FontManager.get_font_info(runs[0])
-                
-        except Exception as e:
-            return FontManager.get_default_font_info()
-    
-    @staticmethod
-    def get_default_font_info() -> Dict[str, Any]:
-        """
-        Get default font information.
-        
-        Returns:
-            Dictionary with default font information
-        """
-        return {
-            'font_family': 'Arial',
-            'font_size': '12.0',
-            'color': '000000',
-            'is_bold': False,
-            'is_italic': False,
-            'is_underline': False
-        }
+
 
 
 
@@ -520,7 +118,7 @@ class TextProcessor(BaseProcessor):
     """
     
     def __init__(self, patterns: Dict[str, Any] = None, mappings: Dict[str, Any] = None, 
-                 mode: str = "append", separator: str = ";", default_mapping: str = "4022-NA"):
+                 mode: str = PROCESSING_MODES['APPEND'], separator: str = DEFAULT_SEPARATOR, default_mapping: str = DEFAULT_MAPPING):
         """
         Initialize the text processor with patterns, mappings, and processing mode.
         
@@ -815,7 +413,7 @@ class TextProcessor(BaseProcessor):
                         # In replace mode, skip if no mapping found
                         logger.debug(f"REPLACE MODE: Skipping '{matched_text}' - no mapping found")
                         continue
-                    elif self.mode == "append":
+                    elif self.mode == PROCESSING_MODES['APPEND']:
                         # In append mode, use default mapping
                         replacement_text = self.default_mapping
                         logger.info(f"APPEND MODE: Using default mapping '{self.default_mapping}' for '{matched_text}'")
@@ -1144,7 +742,7 @@ class TextProcessor(BaseProcessor):
             logger.error(f"Error during Text Processor cleanup: {e}")
 
 def create_text_processor(patterns: Dict[str, Any] = None, mappings: Dict[str, Any] = None, 
-                         mode: str = "append", separator: str = ";", default_mapping: str = "4022-NA") -> TextProcessor:
+                         mode: str = PROCESSING_MODES['APPEND'], separator: str = DEFAULT_SEPARATOR, default_mapping: str = DEFAULT_MAPPING) -> TextProcessor:
     """
     Factory function to create a configured TextProcessor instance.
     

@@ -134,11 +134,11 @@ class ReportGenerator:
         """Generate JSON report for individual document."""
         try:
             # Extract document properties
-            doc_properties = extract_document_properties(result.input_path)
+            doc_properties = extract_document_properties(result.input_path) if result.input_path else {}
             
             # Calculate file sizes
             try:
-                input_file_size_mb = result.input_path.stat().st_size / (1024 * 1024)
+                input_file_size_mb = result.input_path.stat().st_size / (1024 * 1024) if result.input_path and result.input_path.exists() else 0.0
             except Exception:
                 input_file_size_mb = 0.0
             
@@ -286,7 +286,7 @@ class ReportGenerator:
                 
                 if review_needed:
                     files_requiring_review.append({
-                        'file_name': result.input_path.name if hasattr(result, 'input_path') else result.file_path.name,
+                        'file_name': result.input_path.name if hasattr(result, 'input_path') and result.input_path else (result.file_path.name if hasattr(result, 'file_path') and result.file_path else "Unknown"),
                         'reasons': review_reasons,
                         'total_matches': result.total_matches if hasattr(result, 'total_matches') else result.matches_found,
                         'processing_time': result.processing_time,
@@ -966,8 +966,78 @@ class ReportGenerator:
                     matched_texts.add(getattr(match, 'original_text', ''))
                     matched_locations.add(getattr(match, 'location', ''))
             
-            # Build rows from all_detections to ensure 1:1 XML↔detection
+            # Build rows from all_matches first (prioritize image processor data), then all_detections
             all_items = []
+            seen_keys = set()  # Initialize seen_keys here
+            
+            # Create a mapping of reconstruction reasoning from detailed_matches
+            reconstruction_reasoning_map = {}
+            if isinstance(matches, list):
+                for match in matches:
+                    if isinstance(match, dict) and 'reconstruction_reasoning' in match:
+                        # Create multiple keys for better matching
+                        matched_text = match.get('matched_text', match.get('original_text', ''))
+                        location = match.get('location', '')
+                        processor = match.get('processor', '')
+                        
+                        # Create keys with different combinations
+                        keys = [
+                            (matched_text, location, processor),
+                            (matched_text, location, ''),
+                            (matched_text, '', processor),
+                            (matched_text, '', '')
+                        ]
+                        
+                        for key in keys:
+                            reconstruction_reasoning_map[key] = match['reconstruction_reasoning']
+            
+            # First, process all_matches (image processor data)
+            if isinstance(matches, list):
+                for match in matches:
+                    if isinstance(match, dict):
+                        # Skip entries with "Unknown" text or processor
+                        if (match.get('matched_text', '') == 'Unknown' or 
+                            match.get('processor', '') == 'Unknown' or
+                            match.get('original_text', '') == 'Unknown'):
+                            continue
+                        
+                        # Create key for deduplication
+                        key = (
+                            match.get('matched_text', match.get('original_text', '')),
+                            match.get('replacement_text', ''),
+                            match.get('location', ''),
+                            match.get('processor', ''),
+                            match.get('start_pos', None),
+                            match.get('end_pos', None)
+                        )
+                        if key in seen_keys:
+                            continue
+                        seen_keys.add(key)
+                        
+                        # Add reconstruction reasoning if available
+                        matched_text = match.get('matched_text', match.get('original_text', ''))
+                        location = match.get('location', '')
+                        processor = match.get('processor', '')
+                        
+                        # Try multiple key combinations for reconstruction reasoning
+                        reasoning_keys = [
+                            (matched_text, location, processor),
+                            (matched_text, location, ''),
+                            (matched_text, '', processor),
+                            (matched_text, '', '')
+                        ]
+                        
+                        for reasoning_key in reasoning_keys:
+                            if reasoning_key in reconstruction_reasoning_map:
+                                match['reconstruction_reasoning'] = reconstruction_reasoning_map[reasoning_key]
+                                break
+                        
+                        # Determine if this is a match (image processor data is always matched)
+                        is_matched = True  # Image processor data is always matched
+                        all_items.append({
+                            'type': 'matched',
+                            'data': match
+                        })
             
             # Preferred composite key for dedupe across processors: (matched_text, location, processor, start_pos, end_pos)
             seen_keys = set()
@@ -980,8 +1050,10 @@ class ReportGenerator:
                     data.get('original_text', '') == 'Unknown'):
                     continue
                 
+                # Use a more specific key that includes the replacement text to avoid deduplicating different mappings
                 key = (
-                    data.get('matched_text', ''),
+                    data.get('matched_text', data.get('original_text', '')),
+                    data.get('replacement_text', ''),
                     data.get('location', ''),
                     data.get('processor', ''),
                     data.get('start_pos', None),
@@ -990,6 +1062,30 @@ class ReportGenerator:
                 if key in seen_keys:
                     continue
                 seen_keys.add(key)
+                
+                # Add reconstruction reasoning if available from detailed_matches
+                matched_text = data.get('matched_text', data.get('original_text', ''))
+                location = data.get('location', '')
+                processor = data.get('processor', '')
+                replacement_text = data.get('replacement_text', '')
+                
+                # Debug: Log the data being processed
+                if '77-531-116BLK-245' in str(data):
+                    logger.debug(f"Processing data with 77-531-116BLK-245: {data}")
+                
+                # Try multiple key combinations
+                reasoning_keys = [
+                    (matched_text, location, processor),
+                    (matched_text, location, ''),
+                    (matched_text, '', processor),
+                    (matched_text, '', '')
+                ]
+                
+                for reasoning_key in reasoning_keys:
+                    if reasoning_key in reconstruction_reasoning_map:
+                        data['reconstruction_reasoning'] = reconstruction_reasoning_map[reasoning_key]
+                        break
+                
                 is_matched = data.get('is_matched', False)
                 all_items.append({
                     'type': 'matched' if is_matched else 'non_matched',
@@ -1003,7 +1099,10 @@ class ReportGenerator:
                 logger.warning(f"Error sorting all items: {e}")
             
             if not all_items:
+                logger.warning(f"No items found for HTML table. matches count: {len(matches) if isinstance(matches, list) else 0}, all_detections count: {len(all_detections) if isinstance(all_detections, list) else 0}")
                 return "<p>No matches or detections found.</p>"
+            
+            logger.info(f"Generated {len(all_items)} items for HTML table")
             
             # Count matched vs non-matched
             matched_count = len([item for item in all_items if item['type'] == 'matched'])
@@ -1059,6 +1158,7 @@ class ReportGenerator:
                             <th>Derived Font</th>
                             <th>Derived Font Size</th>
                             <th>Reasoning</th>
+                            <th>Image Reconstruction</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -1153,6 +1253,11 @@ class ReportGenerator:
                     if isinstance(font_reasoning, dict):
                         font_reasoning = self._format_font_reasoning(font_reasoning)
                     
+                    # Extract reconstruction reasoning for image processor
+                    reconstruction_reasoning = data.get('reconstruction_reasoning', 'N/A') if isinstance(data, dict) else getattr(data, 'reconstruction_reasoning', 'N/A')
+                    if isinstance(reconstruction_reasoning, dict):
+                        reconstruction_reasoning = self._format_reconstruction_reasoning(reconstruction_reasoning)
+                    
                     # If replacement_text equals the default mapping, consider it not a concrete mapping
                     # But if is_matched is True, show as Y
                     if is_matched:
@@ -1164,7 +1269,7 @@ class ReportGenerator:
                 
                 else:  # non_matched
                     # Extract detection information
-                    pattern = data.get('pattern_name', 'Unknown') if isinstance(data, dict) else getattr(data, 'pattern_name', 'Unknown')
+                    pattern = data.get('pattern_name', data.get('pattern', 'Unknown')) if isinstance(data, dict) else getattr(data, 'pattern_name', getattr(data, 'pattern', 'Unknown'))
                     actual_pattern = data.get('actual_pattern', pattern) if isinstance(data, dict) else getattr(data, 'actual_pattern', pattern)
                     original_text = data.get('matched_text', 'Unknown') if isinstance(data, dict) else getattr(data, 'matched_text', 'Unknown')
                     location = data.get('location', 'Unknown') if isinstance(data, dict) else getattr(data, 'location', 'Unknown')
@@ -1218,6 +1323,11 @@ class ReportGenerator:
                     if isinstance(font_reasoning, dict):
                         font_reasoning = self._format_font_reasoning(font_reasoning)
                     
+                    # Extract reconstruction reasoning for image processor
+                    reconstruction_reasoning = data.get('reconstruction_reasoning', 'N/A') if isinstance(data, dict) else getattr(data, 'reconstruction_reasoning', 'N/A')
+                    if isinstance(reconstruction_reasoning, dict):
+                        reconstruction_reasoning = self._format_reconstruction_reasoning(reconstruction_reasoning)
+                    
                     match_status = "N"
                 
                 # Add row styling for non-matched items
@@ -1238,6 +1348,7 @@ class ReportGenerator:
                             <td>{derived_font_family}</td>
                             <td>{derived_font_size}</td>
                             <td class="reasoning-cell" title="{font_reasoning}">{font_reasoning}</td>
+                            <td class="reasoning-cell" title="{reconstruction_reasoning}">{reconstruction_reasoning}</td>
                         </tr>
                 """
             
@@ -3157,7 +3268,7 @@ class ReportGenerator:
         # Get file sizes
         input_size = 0
         output_size = 0
-        if hasattr(result, 'input_path') and result.input_path.exists():
+        if hasattr(result, 'input_path') and result.input_path and result.input_path.exists():
             input_size = result.input_path.stat().st_size / (1024 * 1024)
         if hasattr(result, 'output_path') and result.output_path and result.output_path.exists():
             output_size = result.output_path.stat().st_size / (1024 * 1024)
@@ -3915,6 +4026,59 @@ class ReportGenerator:
 """
         return html
 
+    def _format_reconstruction_reasoning(self, reasoning: Dict[str, Any]) -> str:
+        """
+        Format reconstruction reasoning dictionary into a concise summary.
+        
+        Args:
+            reasoning: Reconstruction reasoning dictionary from image processor
+            
+        Returns:
+            Formatted string with key reconstruction information
+        """
+        try:
+            if not isinstance(reasoning, dict):
+                return str(reasoning)
+            
+            parts = []
+            
+            # Image dimensions
+            img_dims = reasoning.get('image_dimensions', {})
+            if img_dims:
+                width = img_dims.get('width', 0)
+                height = img_dims.get('height', 0)
+                text_width = img_dims.get('text_area_width', 0)
+                text_height = img_dims.get('text_area_height', 0)
+                parts.append(f"Img: {width}x{height}, Text: {text_width:.0f}x{text_height:.0f}")
+            
+            # Font logic
+            font_logic = reasoning.get('font_logic', {})
+            if font_logic:
+                font_size = font_logic.get('font_size', 0)
+                font_reason = font_logic.get('reasoning', '')
+                parts.append(f"Font: {font_size}pt ({font_reason})")
+            
+            # Line reasoning
+            line_reasoning = reasoning.get('line_reasoning', {})
+            if line_reasoning:
+                num_lines = line_reasoning.get('num_lines', 1)
+                text_length = line_reasoning.get('text_length', 0)
+                line_reason = line_reasoning.get('reasoning', '')
+                parts.append(f"Lines: {num_lines} ({line_reason})")
+            
+            # Reconstruction dimensions
+            recon_dims = reasoning.get('reconstruction_dimensions', {})
+            if recon_dims:
+                recon_width = recon_dims.get('width', 0)
+                recon_height = recon_dims.get('height', 0)
+                parts.append(f"Recon: {recon_width:.0f}x{recon_height:.0f}")
+            
+            return " | ".join(parts) if parts else "N/A"
+            
+        except Exception as e:
+            logger.error(f"Error formatting reconstruction reasoning: {e}")
+            return "Error formatting reasoning"
+    
     def _format_font_reasoning(self, reasoning: Dict[str, Any]) -> str:
         """
         Format font reasoning dictionary into a concise calculation summary.

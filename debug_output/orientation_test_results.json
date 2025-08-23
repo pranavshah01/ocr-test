@@ -1,0 +1,72 @@
+[
+  {
+    "image": "image34.jpeg",
+    "best_angle": 0,
+    "ocr_regions": 0,
+    "pattern_matches": 0,
+    "detected_77_parts": [],
+    "all_detected_text": [],
+    "orientation_scores": {
+      "0": 0,
+      "90": 0,
+      "180": 0,
+      "270": 0
+    }
+  },
+  {
+    "image": "image22.jpeg",
+    "best_angle": 0,
+    "ocr_regions": 0,
+    "pattern_matches": 0,
+    "detected_77_parts": [],
+    "all_detected_text": [],
+    "orientation_scores": {
+      "0": 0,
+      "90": 0,
+      "180": 0,
+      "270": 0
+    }
+  },
+  {
+    "image": "image18.jpeg",
+    "best_angle": 0,
+    "ocr_regions": 0,
+    "pattern_matches": 0,
+    "detected_77_parts": [],
+    "all_detected_text": [],
+    "orientation_scores": {
+      "0": 0,
+      "90": 0,
+      "180": 0,
+      "270": 0
+    }
+  },
+  {
+    "image": "image38.jpeg",
+    "best_angle": 0,
+    "ocr_regions": 0,
+    "pattern_matches": 0,
+    "detected_77_parts": [],
+    "all_detected_text": [],
+    "orientation_scores": {
+      "0": 0,
+      "90": 0,
+      "180": 0,
+      "270": 0
+    }
+  },
+  {
+    "image": "image55.jpeg",
+    "best_angle": 0,
+    "ocr_regions": 0,
+    "pattern_matches": 0,
+    "detected_77_parts": [],
+    "all_detected_text": [],
+    "orientation_scores": {
+      "0": 0,
+      "90": 0,
+      "180": 0,
+      "270": 0
+    }
+  }
+]

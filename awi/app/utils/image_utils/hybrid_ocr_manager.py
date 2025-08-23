@@ -101,9 +101,12 @@ class HybridOCRManager:
             
             # Execute OCR engines in parallel
             easyocr_results, tesseract_results = self.execute_ocr_parallel(image)
+            logger.debug(f"EasyOCR Results Count: {len(easyocr_results)}")
+            logger.debug(f"Tesseract Results Count: {len(tesseract_results)}")
             
             # Merge results to maximize text detection coverage
             hybrid_results = self.merge_ocr_results(easyocr_results, tesseract_results)
+            logger.debug(f"Merged Results Count: {len(hybrid_results)}")
             
             processing_time = time.time() - start_time
             

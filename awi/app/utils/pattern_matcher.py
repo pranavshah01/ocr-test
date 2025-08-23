@@ -207,17 +207,21 @@ class PatternMatcher:
         """
         all_matches = []
         
+        logger.debug(f"PatternMatcher processing text: '{text}' (length: {len(text)})")
         logger.debug(f"Searching text: '{text}' with {len(self.compiled_patterns)} patterns")
         
         for pattern_name, compiled_pattern in self.compiled_patterns.items():
+            logger.debug(f"Testing pattern '{pattern_name}' against text '{text}'")
             try:
                 for match in compiled_pattern.finditer(text):
                     matched_text = match.group()
                     start_pos = match.start()
                     end_pos = match.end()
+                    logger.debug(f"Raw match found: '{matched_text}' at {start_pos}-{end_pos}")
                     
                     # Extract only the pattern part from the matched text
                     extracted_pattern = self._extract_pattern_part(matched_text, pattern_name)
+                    logger.debug(f"Extracted pattern: '{extracted_pattern}' from '{matched_text}'")
                     if extracted_pattern:
                         matched_text = extracted_pattern
                         # Adjust positions to reflect the extracted pattern
@@ -225,9 +229,12 @@ class PatternMatcher:
                         if pattern_start != -1:
                             start_pos = match.start() + pattern_start
                             end_pos = start_pos + len(extracted_pattern)
+                    else:
+                        logger.debug(f"No pattern extracted, using original: '{matched_text}'")
                     
                     # Check if we have a mapping for this text
                     replacement = self.get_replacement(matched_text)
+                    logger.debug(f"Replacement for '{matched_text}': '{replacement}'")
                     if replacement:
                         # Get context
                         preceding_context = self.get_match_context(text, start_pos, context_chars, before=True)

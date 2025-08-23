@@ -1,0 +1,82 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OCR Analysis Report - image18.jpeg</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .header { background-color: #f0f0f0; padding: 15px; border-radius: 5px; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { color: green; }
+        .warning { color: orange; }
+        .error { color: red; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .bbox { font-family: monospace; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>OCR Analysis Report</h1>
+        <p><strong>Image:</strong> image18.jpeg</p>
+        <p><strong>Generated:</strong> 2025-08-12T03:25:53.689529</p>
+        <p><strong>OCR Results:</strong> 1 text regions detected</p>
+        <p><strong>Pattern Matches:</strong> 0 matches found</p>
+    </div>
+    
+    <div class="section">
+        <h2>Summary</h2>
+        <p class="success">
+            OCR Detection: 1 text regions found
+        </p>
+        <p class="warning">
+            Pattern Matching: 0 matches found
+        </p>
+    </div>
+    
+    <div class="section">
+        <h2>OCR Detection Results</h2>
+        <table><tr><th>Text</th><th>Confidence</th><th>Bounding Box</th><th>Area</th></tr>
+            <tr>
+                <td>23/0482014</td>
+                <td class="success">0.858</td>
+                <td class="bbox">(510, 396, 106, 26)</td>
+                <td>2756</td>
+            </tr>
+            </table>
+    </div>
+    
+    <div class="section">
+        <h2>Pattern Matches</h2>
+        <p class='warning'>No pattern matches found.</p>
+    </div>
+    
+    <div class="section">
+        <h2>Processing Information</h2>
+        <pre>{
+  "image_quality": {
+    "dimensions": "649x486",
+    "brightness": 167.6,
+    "contrast": 26.1,
+    "sharpness": 148.1,
+    "noise": 5878.411,
+    "edge_density": 0.03,
+    "quality_assessment": "Issues: Low contrast"
+  },
+  "ocr_engines_tested": [
+    "easyocr",
+    "tesseract",
+    "hybrid"
+  ],
+  "best_ocr_result_count": 1,
+  "preprocessing_attempted": true
+}</pre>
+    </div>
+    
+    <div class="section">
+        <h2>Recommendations</h2>
+        <ul><li>⚠️ <strong>OCR Working but No Pattern Matches:</strong></li><li>🔍 <strong>Possible Causes:</strong></li><li>   • OCR text doesn't match expected patterns</li><li>   • Pattern definitions need adjustment</li><li>   • OCR confidence too low</li><li>   • Text formatting issues in OCR output</li><li>🛠️ <strong>Recommended Actions:</strong></li><li>   • Review OCR text output for accuracy</li><li>   • Adjust pattern matching rules</li><li>   • Lower OCR confidence threshold</li><li>   • Check mapping file for missing entries</li></ul>
+    </div>
+</body>
+</html>

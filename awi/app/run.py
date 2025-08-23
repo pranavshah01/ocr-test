@@ -409,14 +409,25 @@ def main():
                 # Add individual results as DocumentInfo objects
                 for result in results:
                     from app.core.models import DocumentInfo
+                    # Handle cases where input_path might be None
+                    file_path = getattr(result, 'input_path', None)
+                    file_size = 0
+                    file_extension = ""
+                    if file_path and hasattr(file_path, 'exists') and file_path.exists():
+                        try:
+                            file_size = file_path.stat().st_size
+                            file_extension = file_path.suffix
+                        except Exception:
+                            pass
+                    
                     doc_info = DocumentInfo(
-                        file_path=result.input_path,
-                        file_size=result.input_path.stat().st_size if result.input_path.exists() else 0,
-                        file_extension=result.input_path.suffix,
+                        file_path=file_path,
+                        file_size=file_size,
+                        file_extension=file_extension,
                         processing_status="success" if result.success else "error",
-                        processing_time=result.processing_time,
-                        matches_found=result.total_matches,
-                        error_message=result.error_message
+                        processing_time=getattr(result, 'processing_time', 0.0),
+                        matches_found=getattr(result, 'total_matches', 0),
+                        error_message=getattr(result, 'error_message', "")
                     )
                     batch_result.add_document_result(doc_info)
                 

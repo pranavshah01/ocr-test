@@ -1,34 +1,23 @@
 """
-DOCX manipulation utilities for graphics processing and formatting preservation.
-Handles text reconstruction, font management, and document structure operations for textboxes and graphics.
+Graphics utilities for DOCX document processing.
+Handles textbox content parsing, font management, and graphics text replacement.
 """
 
+import xml.etree.ElementTree as ET
 import re
+import logging
 from typing import Dict, List, Tuple, Optional, Any
 from pathlib import Path
-import logging
-import xml.etree.ElementTree as ET
 
 from docx import Document
-from app.utils.font_capacity import evaluate_capacity
-from docx.text.run import Run
 from docx.text.paragraph import Paragraph
-from docx.shared import RGBColor, Pt
+from docx.text.run import Run
+from docx.shared import Pt, RGBColor
 from docx.enum.text import WD_COLOR_INDEX
 
+from ..shared_constants import XML_NAMESPACES, DEFAULT_FONT_SIZE, DEFAULT_FONT_FAMILY, DEFAULT_MAPPING, DEFAULT_SEPARATOR, PROCESSING_MODES
+
 logger = logging.getLogger(__name__)
-
-# XML Namespaces for DOCX processing
-XML_NAMESPACES = {
-    'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
-    'a': 'http://schemas.openxmlformats.org/drawingml/2006/main',
-    'pic': 'http://schemas.openxmlformats.org/drawingml/2006/picture',
-    'v': 'urn:schemas-microsoft-com:vml'
-}
-
-# Default values
-DEFAULT_FONT_SIZE = 12.0
-DEFAULT_FONT_FAMILY = 'Arial'
 
 class GraphicsTextReconstructor:
     """Reconstructs text across multiple <w:t> elements for graphics pattern matching."""
@@ -343,7 +332,7 @@ class GraphicsFontManager:
 class GraphicsTextReplacer:
     """Handles text replacement in graphics elements while preserving formatting."""
     
-    def __init__(self, mode: str = "append", separator: str = ";", default_mapping: str = "4022-NA"):
+    def __init__(self, mode: str = PROCESSING_MODES['APPEND'], separator: str = DEFAULT_SEPARATOR, default_mapping: str = DEFAULT_MAPPING):
         """
         Initialize graphics text replacer.
         
@@ -399,7 +388,7 @@ class GraphicsTextReplacer:
                 after_text = run_text[match_end_in_run:]
                 
                 # Apply mode-specific replacement
-                if self.mode == "append":
+                if self.mode == PROCESSING_MODES['APPEND']:
                     final_text = f"{original_text}{self.separator}{replacement_text}"
                 else:  # replace mode
                     final_text = replacement_text
@@ -416,8 +405,8 @@ class GraphicsTextReplacer:
             logger.error(f"Error replacing text in runs: {e}")
             return False
 
-def create_graphics_text_replacer(mode: str = "append", separator: str = ";", 
-                                default_mapping: str = "4022-NA") -> GraphicsTextReplacer:
+def create_graphics_text_replacer(mode: str = PROCESSING_MODES['APPEND'], separator: str = DEFAULT_SEPARATOR, 
+                                                                  default_mapping: str = DEFAULT_MAPPING) -> GraphicsTextReplacer:
     """
     Factory function to create a GraphicsTextReplacer instance.
     

@@ -1,1003 +1,342 @@
 """
-Enhanced image processor for OCR-based image text detection and replacement.
-Handles image extraction, OCR processing, and text replacement with GPU support,
-universal pattern matching, and orientation-aware text replacement.
+Enhanced Image Processor for DOCX document processing.
+
+This module provides comprehensive image processing capabilities for DOCX documents including:
+- OCR-based text detection in images
+- Pattern matching using regex patterns
+- Text replacement with formatting preservation
+- Layout impact analysis for image changes
+- Support for both append and replace modes
+- Font and formatting preservation during replacements
+
+The processor analyzes document images, performs OCR to detect text, finds patterns in the detected text,
+applies replacements while maintaining document formatting, and provides detailed analysis of potential
+layout impacts from image modifications.
 """
 
-import os
-import tempfile
-import uuid
-from pathlib import Path
-from typing import Dict, List, Any, Optional, Tuple
+import re
 import logging
+import time
+import uuid
+from typing import Dict, List, Any, Optional, Tuple
+from pathlib import Path
+from dataclasses import dataclass
 
-import cv2
-import numpy as np
-from PIL import Image, ImageDraw, ImageFont
-import easyocr
-import pytesseract
-
+from PIL import Image
 from docx import Document
+from docx.text.paragraph import Paragraph
+from docx.table import Table
+from docx.section import Section
+from docx.enum.section import WD_SECTION_START
+from docx.shape import InlineShape
 from docx.shared import Inches
-from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-# Import existing components
-from ..core.models import OCRResult, OCRMatch, Match, HybridOCRResult, create_ocr_result, create_ocr_match, create_hybrid_ocr_result
-from ..utils.shared_constants import DEFAULT_OCR_CONFIDENCE, FALLBACK_FONTS
-from ..utils.platform_utils import PathManager
-
-# Import enhanced components from image_utils
+from ..core.processor_interface import BaseProcessor, ProcessingResult
+from ..core.models import OCRResult, OCRMatch
 from ..utils.pattern_matcher import PatternMatcher, create_pattern_matcher
-from ..utils.image_utils.image_preprocessor import ImagePreprocessor, create_image_preprocessor
-from ..utils.image_utils.preprocessing_strategies import PreprocessingStrategyManager, create_preprocessing_strategy_manager
-from ..utils.image_utils.text_analyzer import TextAnalyzer, TextProperties, create_text_analyzer
-from ..utils.image_utils.precise_replace import PreciseTextReplacer, create_precise_text_replacer
-from ..utils.image_utils.pattern_debugger import PatternDebugger, create_pattern_debugger
-from ..utils.image_utils.hybrid_ocr_manager import HybridOCRManager, create_hybrid_ocr_manager
-
-from ..utils.image_utils.precise_append import PreciseAppendReplacer, create_precise_append_replacer
+from ..utils.image_utils.hybrid_ocr_manager import HybridOCRManager
+from ..utils.image_utils.precise_replace import create_precise_text_replacer
+from ..utils.image_utils.precise_append import PreciseAppendReplacer
+from ..utils.shared_constants import (
+    DEFAULT_MAPPING,
+    DEFAULT_SEPARATOR,
+    PROCESSING_MODES,
+    DEFAULT_OCR_CONFIDENCE
+)
+from ..utils.platform_utils import PathManager
 
 logger = logging.getLogger(__name__)
 
-class OCREngine:
-    """Enhanced OCR engine with preprocessing and hybrid mode support."""
+@dataclass
+class EnhancedImageMatch:
+    """
+    Enhanced image match information with comprehensive details about text replacements.
     
-    def __init__(self, engine: str = "easyocr", use_gpu: bool = True, 
-                 confidence_threshold: float = DEFAULT_OCR_CONFIDENCE, enable_preprocessing: bool = True):
+    This class extends basic pattern matching with additional context including
+    font details, and confidence scores. It provides a complete record of each text replacement
+    operation for reporting and analysis purposes.
+    
+    Attributes:
+        pattern: The regex pattern that was matched
+        original_text: The original text found in the document
+        replacement_text: The text that will replace the original
+        position: Character position where the match was found
+        location: Human-readable location description (e.g., "body_paragraph_5")
+        font_info: Dictionary containing font properties (name, size, style, etc.)
+        confidence: Confidence score for the match (0.0 to 1.0)
+        actual_pattern: The actual regex pattern string
+        content_type: Type of content (Paragraph, Table, Header, Footer, etc.)
+        dimension: Element dimensions
+        processor: Name of the processor that found this match
+        ocr_result: OCR result object containing bounding box and text information
+    """
+    pattern: str
+    original_text: str
+    replacement_text: str
+    position: int
+    location: str
+    font_info: Dict[str, Any] = None
+    confidence: Optional[float] = None
+    actual_pattern: str = ""
+    content_type: str = "Image"
+    dimension: str = ""
+    processor: str = "Image"
+    ocr_result: Optional[Any] = None
+    extracted_pattern_text: str = ""  # The exact pattern text that was matched
+    
+    def __post_init__(self):
         """
-        Initialize enhanced OCR engine.
+        Initialize default values after object creation.
         
-        Args:
-            engine: OCR engine to use ('easyocr', 'tesseract', or 'hybrid')
-            use_gpu: Whether to use GPU acceleration
-            confidence_threshold: Minimum confidence threshold for OCR results
-            enable_preprocessing: Whether to enable image preprocessing
+        This method is automatically called after the dataclass is created to ensure
+        that font_info is always a dictionary, even if not provided during initialization.
         """
-        self.engine = engine
-        self.use_gpu = use_gpu
-        self.confidence_threshold = confidence_threshold
-        self.enable_preprocessing = enable_preprocessing
-        self.reader = None
-        self.hybrid_manager = None
-        
-        # Initialize enhanced components
-        if self.enable_preprocessing:
-            self.preprocessor = create_image_preprocessor()
-            self.strategy_manager = create_preprocessing_strategy_manager()
-        
-        self._initialize_engine()
+        if self.font_info is None:
+            self.font_info = {}
     
-    def _initialize_engine(self):
-        """Initialize the OCR engine with GPU detection and fallback."""
-        try:
-            if self.engine == "easyocr":
-                self._initialize_easyocr()
-            elif self.engine == "tesseract":
-                self._initialize_tesseract()
-            elif self.engine == "hybrid":
-                self._initialize_hybrid()
-            else:
-                raise ValueError(f"Unsupported OCR engine: {self.engine}")
-                
-            logger.info(f"Enhanced OCR engine '{self.engine}' initialized successfully "
-                       f"(GPU: {self.use_gpu}, Preprocessing: {self.enable_preprocessing})")
-            
-        except Exception as e:
-            logger.error(f"Failed to initialize enhanced OCR engine '{self.engine}': {e}")
-            # Try fallback to CPU
-            if self.use_gpu and self.engine != "hybrid":
-                logger.info("Attempting fallback to CPU...")
-                self.use_gpu = False
-                self._initialize_engine()
-            else:
-                raise
-    
-    def _initialize_easyocr(self):
-        """Initialize EasyOCR with GPU support."""
-        try:
-            import torch
-            
-            # Detect GPU availability
-            gpu_available = False
-            if self.use_gpu:
-                if torch.cuda.is_available():
-                    gpu_available = True
-                    logger.info("Using CUDA GPU for Enhanced EasyOCR")
-                elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-                    gpu_available = True
-                    logger.info("Using MPS GPU for Enhanced EasyOCR")
-                else:
-                    logger.info("GPU requested but not available, using CPU for Enhanced EasyOCR")
-            
-            # Initialize EasyOCR reader
-            self.reader = easyocr.Reader(['en'], gpu=gpu_available)
-            self.use_gpu = gpu_available
-            
-        except Exception as e:
-            logger.error(f"Enhanced EasyOCR initialization failed: {e}")
-            raise
-    
-    def _initialize_tesseract(self):
-        """Initialize Tesseract OCR."""
-        try:
-            # Test Tesseract availability
-            version = pytesseract.get_tesseract_version()
-            logger.info(f"Using Enhanced Tesseract version: {version}")
-            
-            # Tesseract doesn't use GPU, so set use_gpu to False
-            self.use_gpu = False
-            
-        except Exception as e:
-            logger.error(f"Enhanced Tesseract initialization failed: {e}")
-            raise
-    
-    def _initialize_hybrid(self):
-        """Initialize Hybrid OCR Manager."""
-        try:
-            self.hybrid_manager = create_hybrid_ocr_manager(
-                max_workers=2,
-                confidence_threshold=self.confidence_threshold,
-                use_gpu=self.use_gpu,
-                overlap_threshold=0.5
-            )
-            logger.info("Hybrid OCR Manager initialized successfully")
-            
-        except Exception as e:
-            logger.error(f"Hybrid OCR Manager initialization failed: {e}")
-            raise
-    
-    def extract_text(self, image_path: Path) -> List[OCRResult]:
-        """
-        Extract text using enhanced preprocessing and multiple strategies.
-        
-        Args:
-            image_path: Path to image file
-            
-        Returns:
-            List of OCRResult objects (converted from HybridOCRResult for hybrid mode)
-        """
-        try:
-            if self.engine == "hybrid":
-                return self._extract_with_hybrid(image_path)
-            elif self.enable_preprocessing:
-                return self._extract_with_preprocessing(image_path)
-            else:
-                return self._extract_without_preprocessing(image_path)
-                
-        except Exception as e:
-            logger.error(f"Enhanced OCR extraction failed for {image_path}: {e}")
-            # Try fallback engine
-            return self._try_fallback_extraction(image_path)
-    
-    def extract_text_comparison(self, image_path: Path) -> Dict[str, List[OCRResult]]:
-        """
-        Extract text using both EasyOCR and Tesseract for comparison.
-        
-        Args:
-            image_path: Path to image file
-            
-        Returns:
-            Dictionary with 'easyocr' and 'tesseract' keys containing OCR results
-        """
-        comparison_results = {
-            'easyocr': [],
-            'tesseract': []
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        result = {
+            'pattern': self.pattern,
+            'pattern_name': self.pattern,  # Add pattern_name for compatibility with report generator
+            'original_text': self.original_text,
+            'extracted_pattern_text': self.extracted_pattern_text,  # The exact matched pattern text
+            'replacement_text': self.replacement_text,
+            'position': self.position,
+            'location': self.location,
+            'font_info': self.font_info,
+            'confidence': self.confidence,
+            'actual_pattern': self.actual_pattern,
+            'content_type': self.content_type,
+            'dimension': self.dimension,
+            'processor': self.processor
         }
         
-        try:
-            # For hybrid mode, use the hybrid manager to get individual results
-            if self.engine == "hybrid" and self.hybrid_manager:
-                try:
-                    easyocr_results, tesseract_results = self.hybrid_manager.execute_ocr_parallel(image_path)
-                    comparison_results['easyocr'] = easyocr_results
-                    comparison_results['tesseract'] = tesseract_results
-                    logger.debug(f"Hybrid comparison: EasyOCR={len(easyocr_results)}, Tesseract={len(tesseract_results)}")
-                except Exception as e:
-                    logger.error(f"Hybrid comparison extraction failed: {e}")
-            else:
-                # Extract with EasyOCR
-                try:
-                    if self.engine in ["easyocr", "hybrid"] and self.reader:
-                        easyocr_results = self._extract_with_easyocr(image_path)
-                        comparison_results['easyocr'] = easyocr_results
-                        logger.debug(f"EasyOCR extracted {len(easyocr_results)} text regions from {image_path}")
-                except Exception as e:
-                    logger.error(f"EasyOCR extraction failed: {e}")
-                
-                # Extract with Tesseract
-                try:
-                    tesseract_results = self._extract_with_tesseract(image_path)
-                    comparison_results['tesseract'] = tesseract_results
-                    logger.debug(f"Tesseract extracted {len(tesseract_results)} text regions from {image_path}")
-                except Exception as e:
-                    logger.error(f"Tesseract extraction failed: {e}")
-                
-        except Exception as e:
-            logger.error(f"OCR comparison extraction failed for {image_path}: {e}")
+        # Add reconstruction reasoning if available
+        if hasattr(self, 'reconstruction_reasoning') and self.reconstruction_reasoning:
+            result['reconstruction_reasoning'] = self.reconstruction_reasoning
         
-        return comparison_results
-    
-    def _extract_with_preprocessing(self, image_path: Path) -> List[OCRResult]:
-        """Extract text with preprocessing strategies."""
-        try:
-            # Generate preprocessed image variants
-            image_variants = self.strategy_manager.process_image_with_fallbacks(image_path, False)
-            
-            if not image_variants:
-                logger.warning(f"No image variants generated for {image_path}")
-                return []
-            
-            all_results = []
-            best_results = []
-            best_confidence = 0.0
-            
-            # Try OCR on each variant
-            for i, variant in enumerate(image_variants):
-                try:
-                    # Log variant info for debugging
-                    if variant is not None and hasattr(variant, 'shape'):
-                        logger.debug(f"Processing variant {i}: shape={variant.shape}, dtype={variant.dtype}")
-                    else:
-                        logger.debug(f"Processing variant {i}: invalid variant (None or no shape)")
-                    
-                    # Extract text from variant
-                    variant_results = self._extract_from_image_array(variant)
-                    
-                    # Calculate average confidence
-                    if variant_results:
-                        avg_confidence = sum(r.confidence for r in variant_results) / len(variant_results)
-                        
-                        # Keep track of best results
-                        if avg_confidence > best_confidence:
-                            best_confidence = avg_confidence
-                            best_results = variant_results
-                        
-                        all_results.extend(variant_results)
-                        
-                        logger.debug(f"Variant {i}: {len(variant_results)} results, "
-                                   f"avg confidence: {avg_confidence:.2f}")
-                        
-                except Exception as e:
-                    logger.warning(f"OCR failed on variant {i}: {e}")
-            
-            # Return best results or all results if no clear winner
-            final_results = best_results if best_results else all_results
-            
-            # Remove duplicates based on text and position
-            final_results = self._deduplicate_ocr_results(final_results)
-            
-            logger.info(f"Enhanced OCR extracted {len(final_results)} unique text regions "
-                       f"from {len(image_variants)} variants")
-            
-            return final_results
-            
-        except Exception as e:
-            logger.error(f"Preprocessing-based extraction failed: {e}")
-            return self._extract_without_preprocessing(image_path)
-    
-    def _extract_with_hybrid(self, image_path: Path) -> List[OCRResult]:
-        """Extract text using hybrid OCR manager."""
-        try:
-            if self.hybrid_manager is None:
-                logger.error("Hybrid OCR manager not initialized")
-                return []
-            
-            # Process with hybrid OCR manager
-            hybrid_results = self.hybrid_manager.process_hybrid(image_path)
-            
-            # Convert HybridOCRResult objects to OCRResult objects for compatibility
-            ocr_results = []
-            for hybrid_result in hybrid_results:
-                ocr_result = create_ocr_result(
-                    text=hybrid_result.text,
-                    confidence=hybrid_result.confidence,
-                    bbox=hybrid_result.bounding_box
-                )
-                # Store hybrid information as metadata for debugging
-                ocr_result._hybrid_info = {
-                    'source_engine': hybrid_result.source_engine,
-                    'selection_reason': hybrid_result.selection_reason,
-                    'conflict_resolved': hybrid_result.conflict_resolved
-                }
-                ocr_results.append(ocr_result)
-            
-            # TODO: Text region merging needs refinement - disabled for now
-            # merged_results = self._merge_adjacent_text_regions(ocr_results)
-            
-            logger.info(f"Hybrid OCR extracted {len(ocr_results)} text regions from {image_path}")
-            return ocr_results
-            
-        except Exception as e:
-            logger.error(f"Hybrid OCR extraction failed: {e}")
-            return []
-    
-    def _extract_without_preprocessing(self, image_path: Path) -> List[OCRResult]:
-        """Extract text without preprocessing (fallback method)."""
-        try:
-            if self.engine == "easyocr":
-                return self._extract_with_easyocr(image_path)
-            elif self.engine == "tesseract":
-                return self._extract_with_tesseract(image_path)
-            elif self.engine == "hybrid":
-                return self._extract_with_hybrid(image_path)
-            else:
-                raise ValueError(f"Unsupported OCR engine: {self.engine}")
-                
-        except Exception as e:
-            logger.error(f"Standard OCR extraction failed: {e}")
-            return []
-    
-    def _extract_from_image_array(self, image_array: np.ndarray) -> List[OCRResult]:
-        """Extract text from numpy image array."""
-        try:
-            # Validate image array
-            if image_array is None:
-                logger.warning("Image array is None, skipping OCR extraction")
-                return []
-            
-            if not isinstance(image_array, np.ndarray):
-                logger.warning(f"Invalid image array type: {type(image_array)}, skipping OCR extraction")
-                return []
-            
-            if image_array.size == 0:
-                logger.warning("Empty image array, skipping OCR extraction")
-                return []
-            
-            # Check if image has valid dimensions
-            if len(image_array.shape) < 2:
-                logger.warning(f"Invalid image array shape: {image_array.shape}, skipping OCR extraction")
-                return []
-            
-            if self.engine == "easyocr":
-                return self._extract_with_easyocr_array(image_array)
-            elif self.engine == "tesseract":
-                return self._extract_with_tesseract_array(image_array)
-            else:
-                return []
-                
-        except Exception as e:
-            logger.debug(f"Array-based OCR extraction failed: {e}")
-            return []
-    
-    def _extract_with_easyocr(self, image_path: Path) -> List[OCRResult]:
-        """Extract text using EasyOCR from file path."""
-        results = []
-        
-        try:
-            # Validate image path
-            if not image_path.exists():
-                logger.warning(f"Image file does not exist: {image_path}")
-                return []
-            
-            if image_path.stat().st_size == 0:
-                logger.warning(f"Image file is empty: {image_path}")
-                return []
-            
-            # Read image and perform OCR
-            ocr_results = self.reader.readtext(str(image_path))
-            
-            for detection in ocr_results:
-                bbox, text, confidence = detection
-                
-                # Filter by confidence threshold
-                if confidence >= self.confidence_threshold:
-                    # Convert bbox to (x, y, width, height) format
-                    x_coords = [point[0] for point in bbox]
-                    y_coords = [point[1] for point in bbox]
-                    
-                    x = int(min(x_coords))
-                    y = int(min(y_coords))
-                    width = int(max(x_coords) - min(x_coords))
-                    height = int(max(y_coords) - min(y_coords))
-                    
-                    ocr_result = create_ocr_result(text, confidence, (x, y, width, height))
-                    results.append(ocr_result)
-            
-            logger.debug(f"Enhanced EasyOCR extracted {len(results)} text regions from {image_path}")
-            
-        except Exception as e:
-            logger.error(f"Enhanced EasyOCR extraction failed: {e}")
-            raise
-        
-        return results
-    
-    def _extract_with_easyocr_array(self, image_array: np.ndarray) -> List[OCRResult]:
-        """Extract text using EasyOCR from numpy array."""
-        results = []
-        
-        try:
-            # Additional validation for EasyOCR specific requirements
-            if image_array.dtype not in [np.uint8, np.float32, np.float64]:
-                logger.warning(f"Invalid image array dtype for EasyOCR: {image_array.dtype}")
-                return []
-            
-            # EasyOCR can work with numpy arrays directly
-            ocr_results = self.reader.readtext(image_array)
-            
-            for detection in ocr_results:
-                bbox, text, confidence = detection
-                
-                # Filter by confidence threshold
-                if confidence >= self.confidence_threshold:
-                    # Convert bbox to (x, y, width, height) format
-                    x_coords = [point[0] for point in bbox]
-                    y_coords = [point[1] for point in bbox]
-                    
-                    x = int(min(x_coords))
-                    y = int(min(y_coords))
-                    width = int(max(x_coords) - min(x_coords))
-                    height = int(max(y_coords) - min(y_coords))
-                    
-                    ocr_result = create_ocr_result(text, confidence, (x, y, width, height))
-                    results.append(ocr_result)
-            
-        except Exception as e:
-            logger.debug(f"Enhanced EasyOCR array extraction failed: {e}")
-        
-        return results
-    
-    def _extract_with_tesseract(self, image_path: Path) -> List[OCRResult]:
-        """Extract text using Tesseract OCR from file path."""
-        results = []
-        
-        try:
-            # Validate image path
-            if not image_path.exists():
-                logger.warning(f"Image file does not exist: {image_path}")
-                return []
-            
-            if image_path.stat().st_size == 0:
-                logger.warning(f"Image file is empty: {image_path}")
-                return []
-            
-            # Check file extension for supported formats
-            supported_formats = {'.png', '.jpg', '.jpeg', '.tiff', '.tif', '.bmp', '.gif'}
-            if image_path.suffix.lower() not in supported_formats:
-                logger.warning(f"Unsupported image format: {image_path.suffix} for {image_path}")
-                return []
-            
-            # Load image
-            image = Image.open(image_path)
-            
-            # Validate loaded image
-            if image is None:
-                logger.warning(f"Failed to load image: {image_path}")
-                return []
-            
-            # Get detailed OCR data
-            ocr_data = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT)
-            
-            # Process OCR results
-            for i in range(len(ocr_data['text'])):
-                text = ocr_data['text'][i].strip()
-                confidence = float(ocr_data['conf'][i]) / 100.0  # Convert to 0-1 range
-                
-                if text and confidence >= self.confidence_threshold:
-                    x = ocr_data['left'][i]
-                    y = ocr_data['top'][i]
-                    width = ocr_data['width'][i]
-                    height = ocr_data['height'][i]
-                    
-                    ocr_result = create_ocr_result(text, confidence, (x, y, width, height))
-                    results.append(ocr_result)
-            
-            logger.debug(f"Enhanced Tesseract extracted {len(results)} text regions from {image_path}")
-            
-        except Exception as e:
-            logger.error(f"Enhanced Tesseract extraction failed: {e}")
-            raise
-        
-        return results
-    
-    def _extract_with_tesseract_array(self, image_array: np.ndarray) -> List[OCRResult]:
-        """Extract text using Tesseract OCR from numpy array."""
-        results = []
-        
-        try:
-            # Convert numpy array to PIL Image
-            if len(image_array.shape) == 3:
-                # BGR to RGB conversion for OpenCV arrays
-                try:
-                    image_rgb = cv2.cvtColor(image_array, cv2.COLOR_BGR2RGB)
-                    image = Image.fromarray(image_rgb)
-                except Exception as e:
-                    logger.warning(f"Failed to convert BGR to RGB: {e}")
-                    # Try direct conversion
-                    image = Image.fromarray(image_array)
-            else:
-                image = Image.fromarray(image_array)
-            
-            # Validate converted image
-            if image is None:
-                logger.warning("Failed to convert numpy array to PIL Image")
-                return []
-            
-            if image.size[0] == 0 or image.size[1] == 0:
-                logger.warning(f"Invalid image dimensions: {image.size}")
-                return []
-            
-            # Get detailed OCR data
-            ocr_data = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT)
-            
-            # Process OCR results
-            for i in range(len(ocr_data['text'])):
-                text = ocr_data['text'][i].strip()
-                confidence = float(ocr_data['conf'][i]) / 100.0  # Convert to 0-1 range
-                
-                if text and confidence >= self.confidence_threshold:
-                    x = ocr_data['left'][i]
-                    y = ocr_data['top'][i]
-                    width = ocr_data['width'][i]
-                    height = ocr_data['height'][i]
-                    
-                    ocr_result = create_ocr_result(text, confidence, (x, y, width, height))
-                    results.append(ocr_result)
-            
-        except Exception as e:
-            logger.debug(f"Enhanced Tesseract array extraction failed: {e}")
-        
-        return results
-    
-    def _deduplicate_ocr_results(self, results: List[OCRResult]) -> List[OCRResult]:
-        """Remove duplicate OCR results based on text and position."""
-        if not results:
-            return results
-        
-        unique_results = []
-        seen_combinations = set()
-        
-        for result in results:
-            # Create a key based on text and approximate position
-            key = (result.text.strip().lower(), 
-                   result.bounding_box[0] // 10,  # Quantize position to reduce minor differences
-                   result.bounding_box[1] // 10)
-            
-            if key not in seen_combinations:
-                unique_results.append(result)
-                seen_combinations.add(key)
-        
-        logger.debug(f"Deduplicated OCR results: {len(results)} -> {len(unique_results)}")
-        return unique_results
-    
-    def _try_fallback_extraction(self, image_path: Path) -> List[OCRResult]:
-        """Try fallback OCR engine if primary fails."""
-        try:
-            # For hybrid mode, try individual engines as fallback
-            if self.engine == "hybrid":
-                logger.info("Trying fallback to individual OCR engines after hybrid failure")
-                # Try EasyOCR first, then Tesseract
-                for fallback_engine in ["easyocr", "tesseract"]:
-                    try:
-                        fallback = OCREngine(fallback_engine, use_gpu=False, 
-                                           confidence_threshold=self.confidence_threshold,
-                                           enable_preprocessing=False)
-                        results = fallback.extract_text(image_path)
-                        if results:
-                            logger.info(f"Fallback {fallback_engine} succeeded with {len(results)} results")
-                            return results
-                    except Exception as e:
-                        logger.warning(f"Fallback {fallback_engine} also failed: {e}")
-                return []
-            else:
-                # For single engines, try the other engine
-                fallback_engine = "tesseract" if self.engine == "easyocr" else "easyocr"
-                logger.info(f"Trying fallback enhanced OCR engine: {fallback_engine}")
-                
-                # Create temporary fallback engine
-                fallback = OCREngine(fallback_engine, use_gpu=False, 
-                                   confidence_threshold=self.confidence_threshold,
-                                   enable_preprocessing=False)  # Disable preprocessing for fallback
-                return fallback.extract_text(image_path)
-            
-        except Exception as e:
-            logger.error(f"Fallback enhanced OCR also failed: {e}")
-            return []
-    
-    def _merge_adjacent_text_regions(self, ocr_results: List[OCRResult]) -> List[OCRResult]:
-        """
-        Merge adjacent OCR text regions that are likely part of the same line.
-        This helps capture full text lines that may be split by OCR engines.
-        
-        Args:
-            ocr_results: List of OCR results to merge
-            
-        Returns:
-            List of merged OCR results
-        """
-        if len(ocr_results) <= 1:
-            return ocr_results
-        
-        try:
-            # Sort results by vertical position (y-coordinate) first, then horizontal (x-coordinate)
-            sorted_results = sorted(ocr_results, key=lambda r: (r.bounding_box[1], r.bounding_box[0]))
-            
-            merged_results = []
-            current_group = [sorted_results[0]]
-            
-            for i in range(1, len(sorted_results)):
-                current = sorted_results[i]
-                last_in_group = current_group[-1]
-                
-                # Check if current result should be merged with the group
-                if self._should_merge_text_regions(last_in_group, current):
-                    current_group.append(current)
-                else:
-                    # Finalize current group and start new one
-                    if len(current_group) > 1:
-                        merged_result = self._merge_text_group(current_group)
-                        merged_results.append(merged_result)
-                    else:
-                        merged_results.append(current_group[0])
-                    
-                    current_group = [current]
-            
-            # Handle the last group
-            if len(current_group) > 1:
-                merged_result = self._merge_text_group(current_group)
-                merged_results.append(merged_result)
-            else:
-                merged_results.append(current_group[0])
-            
-            logger.debug(f"Merged {len(ocr_results)} OCR regions into {len(merged_results)} regions")
-            return merged_results
-            
-        except Exception as e:
-            logger.error(f"Text region merging failed: {e}")
-            return ocr_results
-    
-    def _should_merge_text_regions(self, region1: OCRResult, region2: OCRResult) -> bool:
-        """
-        Determine if two OCR regions should be merged based on proximity and alignment.
-        
-        Args:
-            region1: First OCR region
-            region2: Second OCR region
-            
-        Returns:
-            True if regions should be merged
-        """
-        try:
-            x1, y1, w1, h1 = region1.bounding_box
-            x2, y2, w2, h2 = region2.bounding_box
-            
-            # Calculate vertical overlap and proximity
-            y1_center = y1 + h1 / 2
-            y2_center = y2 + h2 / 2
-            vertical_distance = abs(y1_center - y2_center)
-            
-            # Calculate horizontal gap
-            if x1 + w1 < x2:
-                horizontal_gap = x2 - (x1 + w1)
-            elif x2 + w2 < x1:
-                horizontal_gap = x1 - (x2 + w2)
-            else:
-                horizontal_gap = 0  # Overlapping horizontally
-            
-            # Merge criteria:
-            # 1. Regions are on approximately the same line (vertical distance < average height)
-            # 2. Horizontal gap is reasonable (< 3x average height)
-            avg_height = (h1 + h2) / 2
-            
-            same_line = vertical_distance < avg_height * 0.5
-            reasonable_gap = horizontal_gap < avg_height * 3
-            
-            should_merge = same_line and reasonable_gap
-            
-            if should_merge:
-                logger.debug(f"Merging regions: '{region1.text}' + '{region2.text}' "
-                           f"(v_dist: {vertical_distance:.1f}, h_gap: {horizontal_gap:.1f})")
-            
-            return should_merge
-            
-        except Exception as e:
-            logger.debug(f"Region merge check failed: {e}")
-            return False
-    
-    def _merge_text_group(self, group: List[OCRResult]) -> OCRResult:
-        """
-        Merge a group of OCR results into a single result.
-        
-        Args:
-            group: List of OCR results to merge
-            
-        Returns:
-            Single merged OCR result
-        """
-        try:
-            # Sort group by horizontal position
-            sorted_group = sorted(group, key=lambda r: r.bounding_box[0])
-            
-            # Combine text with spaces
-            combined_text = " ".join(result.text.strip() for result in sorted_group if result.text.strip())
-            
-            # Calculate combined bounding box
-            min_x = min(r.bounding_box[0] for r in sorted_group)
-            min_y = min(r.bounding_box[1] for r in sorted_group)
-            max_x = max(r.bounding_box[0] + r.bounding_box[2] for r in sorted_group)
-            max_y = max(r.bounding_box[1] + r.bounding_box[3] for r in sorted_group)
-            
-            combined_bbox = (min_x, min_y, max_x - min_x, max_y - min_y)
-            
-            # Use average confidence
-            avg_confidence = sum(r.confidence for r in sorted_group) / len(sorted_group)
-            
-            merged_result = create_ocr_result(combined_text, avg_confidence, combined_bbox)
-            
-            logger.debug(f"Merged {len(sorted_group)} regions into: '{combined_text}' at {combined_bbox}")
-            
-            return merged_result
-            
-        except Exception as e:
-            logger.error(f"Text group merging failed: {e}")
-            return group[0]  # Return first result as fallback
+        return result
 
-class ImageTextReplacer:
-    """Enhanced image text replacer with precise positioning and orientation support."""
+class ImageProcessor(BaseProcessor):
+    """
+    Enhanced image processor for DOCX documents with comprehensive analysis capabilities.
     
-    def __init__(self, mode: str = "replace", pattern_matcher=None):
+    This class provides the main interface for processing images in DOCX documents. It handles
+    OCR-based text detection, pattern matching, text replacement within images, and maintains 
+    detailed information about all image modifications for reporting purposes.
+    
+    The processor integrates with core infrastructure components including memory
+    management, performance monitoring, and GPU acceleration for optimal performance.
+    """
+    
+    def __init__(self, patterns: Dict[str, Any] = None, mappings: Dict[str, Any] = None, 
+                 mode: str = PROCESSING_MODES['REPLACE'], separator: str = DEFAULT_SEPARATOR, default_mapping: str = DEFAULT_MAPPING,
+                 ocr_engine: str = "easyocr", confidence_min: float = 0.4, use_gpu: bool = True, enable_debugging: bool = False):
         """
-        Initialize enhanced image text replacer.
+        Initialize the image processor with patterns, mappings, and processing mode.
         
         Args:
-            mode: Processing mode ('replace', 'append', or 'append-image')
-            pattern_matcher: Pattern matcher instance for finding patterns in text
-        """
-        self.mode = mode
-        self.pattern_matcher = pattern_matcher
-        self.text_analyzer = create_text_analyzer()
-        self.precise_replacer = create_precise_text_replacer(self.pattern_matcher)
-        
-        # Initialize append mode replacer if needed
-        if mode == "append" and pattern_matcher:
-            self.precise_append_replacer = create_precise_append_replacer(pattern_matcher)
-        else:
-            self.precise_append_replacer = None
-    
-    def replace_text_in_image(self, image_path: Path, ocr_matches: List[OCRMatch]) -> Optional[Path]:
-        """
-        Replace text in image using enhanced precise positioning and orientation support.
-        
-        Args:
-            image_path: Path to original image
-            ocr_matches: List of OCR matches to replace
-            
-        Returns:
-            Path to modified image or None if failed
-        """
-        if not ocr_matches:
-            return None
-        
-        try:
-            # Handle append mode separately to avoid impacting replace mode
-            if self.mode == "append" and self.precise_append_replacer:
-                logger.info(f"APPEND MODE: Using simplified append mode with {len(ocr_matches)} matches")
-                
-                # Extract OCR results from matches for the append replacer
-                ocr_results = [match.ocr_result for match in ocr_matches]
-                
-                # Log the matches for debugging
-                for i, match in enumerate(ocr_matches):
-                    logger.info(f"APPEND MODE: Match {i} - OCR: '{match.ocr_result.text}' -> Replacement: '{match.replacement_text}'")
-                
-                # Use the simplified append replacer that actually works
-                result = self.precise_append_replacer.replace_text_in_image(image_path, ocr_results, ocr_matches)
-                logger.info(f"APPEND MODE: Simple append replacer result: {result}")
-                return result
-            
-            # Original replace mode logic (unchanged)
-            # Load image
-            image = Image.open(image_path)
-            
-            logger.debug(f"Processing {len(ocr_matches)} text replacements in {image_path}")
-            
-            # Process each match with enhanced precision
-            for match in ocr_matches:
-                try:
-                    if match.processing_mode == "replace":
-                        image = self._replace_text_region(image, match)
-                    elif match.processing_mode == "append":
-                        # This should not be reached when mode is "append" since we handle it above
-                        logger.warning("Append mode match found in replace mode processing - skipping")
-                        continue
-                except Exception as e:
-                    logger.error(f"Failed to process match '{match.ocr_result.text}': {e}")
-            
-            # Save modified image
-            output_path = self._generate_output_path(image_path)
-            image.save(output_path)
-            
-            logger.debug(f"Enhanced image text replacement completed: {output_path}")
-            return output_path
-            
-        except Exception as e:
-            logger.error(f"Enhanced image text replacement failed for {image_path}: {e}")
-            return None
-    
-    def _create_partial_replacement_text(self, original_text: str, match: OCRMatch) -> str:
-        """
-        Create new text by replacing only the matched pattern within the original text.
-        
-        Args:
-            original_text: Full original OCR text
-            match: OCRMatch containing pattern and replacement info
-            
-        Returns:
-            New text with only the pattern part replaced
-        """
-        try:
-            # Use the pattern matcher to find the exact match within the text
-            pattern_matches = self.pattern_matcher.find_matches_universal(original_text)
-            
-            if not pattern_matches:
-                logger.warning(f"No pattern matches found in text: '{original_text}'")
-                return original_text
-            
-            # Find the match that corresponds to our replacement
-            target_match = None
-            for pm in pattern_matches:
-                # Get replacement text (could be from mappings or default mapping)
-                replacement = self.pattern_matcher.get_replacement(pm.matched_text)
-                if not replacement:
-                    # If no mapping found, use default mapping based on mode
-                    if self.mode in ["append", "append-image"]:
-                        replacement = self.default_mapping
-                    else:
-                        continue  # Skip in replace mode
-                
-                if replacement == match.replacement_text:
-                    target_match = pm
-                    break
-            
-            if not target_match:
-                logger.warning(f"Could not find target match for replacement: '{match.replacement_text}'")
-                return original_text
-            
-            # Replace only the matched pattern within the original text
-            new_text = (original_text[:target_match.start_pos] + 
-                       match.replacement_text + 
-                       original_text[target_match.end_pos:])
-            
-            logger.debug(f"Partial replacement: '{original_text}' -> '{new_text}' "
-                        f"(replaced '{target_match.matched_text}' with '{match.replacement_text}')")
-            
-            return new_text
-            
-        except Exception as e:
-            logger.error(f"Failed to create partial replacement text: {e}")
-            return original_text
-    
-    def _replace_text_region(self, image: Image.Image, match: OCRMatch) -> Image.Image:
-        """Replace text region with enhanced precision and orientation support."""
-        try:
-            bbox = match.ocr_result.bounding_box
-            original_full_text = match.ocr_result.text
-            pattern_replacement = match.replacement_text
-            
-            # Find the pattern in the original text and create the new text
-            # We need to find what pattern was matched and replace only that part
-            new_full_text = self._create_partial_replacement_text(original_full_text, match)
-            
-            # Analyze text properties including orientation
-            image_array = np.array(image)
-            properties = self.text_analyzer.analyze_text_properties(image_array, bbox)
-            
-            # Convert PIL Image to cv2 format for precise replacement
-            import numpy as np
-            cv_image = np.array(image.convert('RGB'))
-            cv_image = cv2.cvtColor(cv_image, cv2.COLOR_RGB2BGR)
-            
-            # Apply the hybrid replace directly 
-            cv_image = self.precise_replacer._apply_hybrid_replace(cv_image, match, [match.ocr_result])
-            
-            # Convert back to PIL
-            cv_image_rgb = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
-            enhanced_image = Image.fromarray(cv_image_rgb)
-            
-            logger.debug(f"Enhanced replace: '{original_full_text}' -> '{new_full_text}' "
-                        f"at {bbox} with {properties.orientation}° orientation")
-            
-            return enhanced_image
-            
-        except Exception as e:
-            logger.error(f"Enhanced text region replacement failed: {e}")
-            return image
-    
-    def _append_text_region(self, image: Image.Image, match: OCRMatch) -> Image.Image:
-        """Append text region with enhanced precision and orientation support."""
-        try:
-            bbox = match.ocr_result.bounding_box
-            original_text = match.ocr_result.text
-            replacement_text = match.replacement_text
-            
-            # Create combined text for append mode
-            combined_text = f"{original_text} {replacement_text}"
-            
-            # Analyze text properties including orientation
-            image_array = np.array(image)
-            properties = self.text_analyzer.analyze_text_properties(image_array, bbox)
-            
-            # Adjust bounding box for combined text (rough estimation)
-            x, y, width, height = bbox
-            if abs(properties.orientation) < 45 or abs(properties.orientation - 180) < 45:
-                # Horizontal text - extend width
-                extended_bbox = (x, y, int(width * 1.5), height)
-            else:
-                # Vertical text - extend height
-                extended_bbox = (x, y, width, int(height * 1.5))
-            
-            # Use precise text replacer with combined text
-            enhanced_image = self.precise_replacer.replace_text_precise(
-                image, original_text, combined_text, extended_bbox, properties
-            )
-            
-            logger.debug(f"Enhanced append: '{original_text}' + '{replacement_text}' "
-                        f"at {extended_bbox} with {properties.orientation}° orientation")
-            
-            return enhanced_image
-            
-        except Exception as e:
-            logger.error(f"Enhanced text region append failed: {e}")
-            return image
-    
-    def _generate_output_path(self, input_path: Path) -> Path:
-        """Generate output path for modified image."""
-        output_dir = input_path.parent
-        stem = input_path.stem
-        suffix = input_path.suffix
-        
-        return output_dir / f"{stem}_modified{suffix}"
-
-class ImageProcessor:
-    """Enhanced image processor with universal pattern matching and orientation support."""
-    
-    def __init__(self, patterns: Dict[str, str], mappings: Dict[str, str], 
-                 mode: str = "replace", separator: str = ";", default_mapping: str = "4022-NA",
-                 ocr_engine: str = "easyocr", use_gpu: bool = True, 
-                 confidence_threshold: float = DEFAULT_OCR_CONFIDENCE,
-                 enable_preprocessing: bool = True, enable_debugging: bool = False):
-        """
-        Initialize enhanced image processor with consolidated config support.
-        
-        Args:
-            patterns: Dictionary of pattern names to regex patterns
-            mappings: Dictionary of original text to replacement text
-            mode: Processing mode ('replace', 'append', or 'append-image')
+            patterns: Dictionary containing regex patterns for text matching
+            mappings: Dictionary containing text mappings for replacements
+            mode: Processing mode - "append" or "replace"
             separator: Separator between original and appended text in append mode
             default_mapping: Default text to append when no mapping is found
-            ocr_engine: OCR engine to use
-            use_gpu: Whether to use GPU acceleration
-            confidence_threshold: Minimum OCR confidence threshold
-            enable_preprocessing: Whether to enable image preprocessing
-            enable_debugging: Whether to enable debugging features
+            ocr_engine: OCR engine to use ("easyocr", "tesseract", "hybrid")
+            confidence_min: Minimum confidence threshold for OCR text detection
+            use_gpu: Whether to use GPU acceleration for OCR processing
         """
-        self.patterns = patterns
-        self.mappings = mappings
+        # Initialize base processor
+        config = {
+            'patterns': patterns or {},
+            'mappings': mappings or {},
+            'mode': mode,
+            'separator': separator,
+            'default_mapping': default_mapping,
+            'ocr_engine': ocr_engine,
+            'confidence_min': confidence_min,
+            'use_gpu': use_gpu
+        }
+        super().__init__("image", config)
+        
+        self.patterns = patterns or {}
+        self.mappings = mappings or {}
         self.mode = mode
         self.separator = separator
         self.default_mapping = default_mapping
-        self.enable_preprocessing = enable_preprocessing
+        self.ocr_engine = ocr_engine
+        self.confidence_min = confidence_min
+        self.use_gpu = use_gpu
         self.enable_debugging = enable_debugging
         
-        # Initialize enhanced components
-        self.pattern_matcher = create_pattern_matcher(patterns, mappings, enhanced_mode=True)
-        self.ocr_engine = OCREngine(ocr_engine, use_gpu, confidence_threshold, enable_preprocessing)
-        self.text_replacer = ImageTextReplacer(mode, self.pattern_matcher)
-        # Always have an append replacer available for reconstruction phase
-        self._append_replacer_for_reconstruction = create_precise_append_replacer(self.pattern_matcher)
-        
-        # Initialize debugging if enabled
-        if self.enable_debugging:
-            self.debugger = create_pattern_debugger(self.pattern_matcher)
-        
-        # Initialize OCR comparison data storage for reporting
+        # Initialize components
+        self.pattern_matcher = None
+        self.ocr_manager = None
         self.ocr_comparison_data = []
         
-        logger.info(f"Enhanced image processor initialized with {len(patterns)} patterns, "
-                   f"{len(mappings)} mappings, mode: {mode}, separator: '{separator}', "
+        logger.info(f"Image processor initialized with mode: {mode}, separator: '{separator}', "
                    f"default_mapping: '{default_mapping}', OCR engine: {ocr_engine}, "
-                   f"preprocessing: {enable_preprocessing}, debugging: {enable_debugging}")
+                   f"confidence_min: {confidence_min}, use_gpu: {use_gpu}")
     
-    def process_images(self, document: Document, media_dir: Optional[Path] = None) -> List[OCRMatch]:
+    def initialize(self, **kwargs) -> bool:
+        """
+        Initialize the processor with configuration parameters.
+        
+        This method loads patterns and mappings, configures the processing mode,
+        and sets up all internal components for document processing. It can accept
+        patterns and mappings directly or load them from JSON files.
+        
+        Args:
+            **kwargs: Configuration parameters including:
+                - patterns: Dictionary of pattern names to regex patterns
+                - mappings: Dictionary of original text to replacement text
+                - mode: Processing mode ('append' or 'replace')
+                - separator: Separator between original and appended text in append mode
+                - default_mapping: Default text to append when no mapping is found
+                - ocr_engine: OCR engine to use ("easyocr", "tesseract", "hybrid")
+                - confidence_min: Minimum confidence threshold for OCR text detection
+                - use_gpu: Whether to use GPU acceleration for OCR processing
+                - patterns_file: Path to patterns JSON file (if patterns not provided)
+                - mappings_file: Path to mappings JSON file (if mappings not provided)
+            
+        Returns:
+            True if initialization was successful, False otherwise
+        """
+        try:
+            logger.info("Initializing Image Processor...")
+            
+            # Extract configuration parameters
+            patterns = kwargs.get('patterns', self.patterns)
+            mappings = kwargs.get('mappings', self.mappings)
+            mode = kwargs.get('mode', self.mode)
+            separator = kwargs.get('separator', self.separator)
+            default_mapping = kwargs.get('default_mapping', self.default_mapping)
+            ocr_engine = kwargs.get('ocr_engine', self.ocr_engine)
+            confidence_min = kwargs.get('confidence_min', self.confidence_min)
+            use_gpu = kwargs.get('use_gpu', self.use_gpu)
+            
+            # Load patterns and mappings if not provided
+            if not patterns or not mappings:
+                patterns, mappings = self._load_patterns_and_mappings()
+            
+            self.patterns = patterns
+            self.mappings = mappings
+            self.mode = mode
+            self.separator = separator
+            self.default_mapping = default_mapping
+            self.ocr_engine = ocr_engine
+            self.confidence_min = confidence_min
+            self.use_gpu = use_gpu
+            
+            # Initialize components using utility classes
+            self.pattern_matcher = create_pattern_matcher(patterns, mappings, enhanced_mode=True)
+            self.ocr_manager = HybridOCRManager(confidence_threshold=confidence_min, use_gpu=use_gpu)
+            self.text_replacer = create_precise_text_replacer(self.pattern_matcher)
+            self._append_replacer_for_reconstruction = PreciseAppendReplacer(self.pattern_matcher)
+            
+            self.initialized = True
+            logger.info(f"Image processor initialized with {len(patterns)} patterns, {len(mappings)} mappings, mode: {mode}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error initializing Image Processor: {e}")
+            self.initialized = False
+            return False
+    
+    def process(self, document, **kwargs) -> 'ProcessingResult':
+        """
+        Process document images and return standardized result.
+        
+        This method orchestrates the three-phase image processing pipeline:
+        1. EXTRACTION: Extract text from images using OCR.
+        2. MATCH & WIPE: Find patterns and wipe them (no replacement text).
+        3. RECONSTRUCT: Reconstruct document with wiped images.
+        
+        Args:
+            document: DOCX document to process.
+            **kwargs: Additional arguments (e.g., media_dir for image extraction).
+            
+        Returns:
+            ProcessingResult object containing match information and metadata.
+        """
+        import time
+        from ..core.processor_interface import ProcessingResult
+        
+        start_time = time.time()
+        
+        try:
+            # Process images in the document
+            image_matches = self._process_images(document, **kwargs)
+            
+            # Get OCR comparison data for reporting
+            ocr_comparison_data = self.get_ocr_comparison_data()
+            
+            # Create detailed matches data for reporting with wipe boundaries
+            detailed_matches = []
+            for match in image_matches:
+                # Handle both objects with to_dict() method and dictionaries
+                if hasattr(match, 'to_dict'):
+                    match_dict = match.to_dict()
+                else:
+                    match_dict = match.copy() if isinstance(match, dict) else {}
+                
+                # Add wipe boundary information if available
+                if hasattr(match, 'wipe_boundaries') and match.wipe_boundaries:
+                    match_dict['wipe_boundaries'] = match.wipe_boundaries
+                if hasattr(match, 'calculated_text_boundary') and match.calculated_text_boundary:
+                    match_dict['calculated_text_boundary'] = match.calculated_text_boundary
+                if hasattr(match, 'wipe_area_info') and match.wipe_area_info:
+                    match_dict['wipe_area_info'] = match.wipe_area_info
+                detailed_matches.append(match_dict)
+            
+            # Create metadata
+            metadata = {
+                'detailed_matches': detailed_matches,
+                'image_matches': [match.to_dict() if hasattr(match, 'to_dict') else match for match in image_matches],
+                'ocr_comparison_data': ocr_comparison_data,
+                'processor_info': self.get_processing_info()
+            }
+            
+            processing_time = time.time() - start_time
+            
+            result = ProcessingResult(
+                success=True,
+                processor_type=self.processor_type,
+                matches_found=len(image_matches),
+                processing_time=processing_time,
+                metadata=metadata
+            )
+            
+            logger.info(f"Image processing completed: {len(image_matches)} matches found in {processing_time:.2f}s")
+            return result
+            
+        except Exception as e:
+            processing_time = time.time() - start_time
+            error_msg = f"Image processing failed: {e}"
+            logger.error(error_msg)
+            
+            return ProcessingResult(
+                success=False,
+                processor_type=self.processor_type,
+                matches_found=0,
+                processing_time=processing_time,
+                error_message=error_msg
+            )
+    
+    def get_supported_formats(self) -> List[str]:
+        """Get supported formats (document formats that can contain images)."""
+        return ['.docx']
+    
+    def cleanup(self):
+        """Clean up resources."""
+        self.initialized = False
+        logger.info("Image processor cleaned up")
+    
+    def is_initialized(self) -> bool:
+        """Check if processor is initialized."""
+        return self.initialized
+    
+    def _process_images(self, document: Document, **kwargs) -> List[EnhancedImageMatch]:
         """
         Process all images in the document with 3-phase approach:
         1. EXTRACTION: Extract text from images using OCR
@@ -1006,17 +345,17 @@ class ImageProcessor:
         
         Args:
             document: Document to process
-            media_dir: Media directory path (optional)
+            **kwargs: Additional arguments (e.g., media_dir for image extraction)
             
         Returns:
-            List of OCRMatch objects representing successful matches
+            List of EnhancedImageMatch objects representing successful matches
         """
         logger.info("Starting 3-phase image processing...")
         
         try:
             # PHASE 1: EXTRACTION - Extract images and text from document
             logger.info("=== PHASE 1: EXTRACTION ===")
-            extraction_results = self._phase1_extraction(document, media_dir)
+            extraction_results = self._phase1_extraction(document, **kwargs)
             
             # PHASE 2: MATCH & WIPE - Find patterns and apply wipes
             logger.info("=== PHASE 2: MATCH & WIPE ===")
@@ -1033,14 +372,14 @@ class ImageProcessor:
             logger.error(f"Error in 3-phase image processing: {e}")
             return []
     
-    def _phase1_extraction(self, document: Document, media_dir: Optional[Path] = None) -> List[Dict]:
+    def _phase1_extraction(self, document: Document, **kwargs) -> List[Dict]:
         """
         PHASE 1: EXTRACTION
         Extract images from document and perform OCR to get text.
         
         Args:
             document: Document to process
-            media_dir: Media directory path (optional)
+            **kwargs: Additional arguments (e.g., media_dir for image extraction)
             
         Returns:
             List of extraction results with image info and OCR results
@@ -1049,17 +388,28 @@ class ImageProcessor:
         
         try:
             # Extract images from document
-            image_info_list = self._extract_images_with_mapping(document, media_dir)
+            image_info_list = self._extract_images_with_mapping(document, **kwargs)
             
             for image_info in image_info_list:
                 try:
                     logger.debug(f"Extracting text from: {image_info['location']}")
+                    logger.debug(f"Image temp path: {image_info['temp_path']}")
+                    logger.debug(f"Image location: {image_info['location']}")
+                    logger.debug(f"Image info keys: {list(image_info.keys())}")
                     
                     # Extract text using enhanced OCR with preprocessing
-                    ocr_results = self.ocr_engine.extract_text(image_info['temp_path'])
+                    ocr_results = self.ocr_manager.process_hybrid(image_info['temp_path'])
+                    logger.debug(f"OCR Results Type: {type(ocr_results)}")
+                    logger.debug(f"OCR Results Length: {len(ocr_results) if ocr_results else 0}")
+                    if ocr_results:
+                        logger.debug(f"First OCR Result Type: {type(ocr_results[0])}")
+                        logger.debug(f"First OCR Result: {ocr_results[0]}")
                     
                     # Collect OCR comparison data for reporting
-                    ocr_comparison = self.ocr_engine.extract_text_comparison(image_info['temp_path'])
+                    # Get comparison data from OCR manager if available
+                    ocr_comparison = {}
+                    if hasattr(self.ocr_manager, 'get_comparison_data'):
+                        ocr_comparison = self.ocr_manager.get_comparison_data()
                     self._store_ocr_comparison_data(image_info['location'], image_info['temp_path'], ocr_comparison)
                     
                     # Store extraction result
@@ -1114,10 +464,14 @@ class ImageProcessor:
                 
                 # Find pattern matches
                 matches = []
-                for ocr_result in ocr_results:
+                logger.debug(f"Processing {len(ocr_results)} OCR results for {image_info['location']}")
+                for i, ocr_result in enumerate(ocr_results):
+                    logger.debug(f"OCR Result {i+1}: '{ocr_result.text}'")
+                    
                     try:
                         # Use enhanced pattern matching with universal character support
                         universal_matches = self.pattern_matcher.find_matches_universal(ocr_result.text)
+                        logger.debug(f"Found {len(universal_matches)} universal matches for text: '{ocr_result.text}'")
                         
                         for universal_match in universal_matches:
                             replacement_text = self.pattern_matcher.get_replacement(universal_match.matched_text)
@@ -1139,11 +493,23 @@ class ImageProcessor:
                                     logger.warning(f"Unknown mode '{self.mode}', skipping '{universal_match.matched_text}'")
                                     continue
                             
-                            ocr_match = create_ocr_match(
-                                ocr_result, universal_match.pattern_name, replacement_text, 
-                                image_info['temp_path'], self.mode, universal_match.matched_text
+                            # Handle missing font_info attribute in HybridOCRResult
+                            font_info = getattr(ocr_result, 'font_info', {})
+                            
+                            # Create EnhancedImageMatch with extracted pattern text
+                            logger.debug(f"Creating EnhancedImageMatch for '{universal_match.matched_text}' -> '{replacement_text}'")
+                            ocr_match = EnhancedImageMatch(
+                                universal_match.pattern_name, universal_match.matched_text, replacement_text, 
+                                universal_match.start_pos, image_info['location'],
+                                font_info, ocr_result.confidence, universal_match.pattern_name,
+                                "Image", ocr_result.bounding_box, "OCR", ocr_result
                             )
+                            # Set the extracted pattern text (the exact matched part)
+                            ocr_match.extracted_pattern_text = universal_match.matched_text
+                            # Set the original text (the full OCR text)
+                            ocr_match.original_text = ocr_result.text
                             matches.append(ocr_match)
+                            logger.debug(f"Added match to matches list. Total matches: {len(matches)}")
                             
                             logger.debug(f"Pattern match found: '{universal_match.matched_text}' -> "
                                        f"'{replacement_text}' (pattern: {universal_match.pattern_name})")
@@ -1179,7 +545,7 @@ class ImageProcessor:
         logger.info(f"Match & wipe phase completed: {len([r for r in wipe_results if r['matches']])} images with matches")
         return wipe_results
     
-    def _phase3_reconstruct(self, document: Document, wipe_results: List[Dict]) -> List[OCRMatch]:
+    def _phase3_reconstruct(self, document: Document, wipe_results: List[Dict]) -> List[EnhancedImageMatch]:
         """
         PHASE 3: RECONSTRUCT
         Reconstruct document with wiped images.
@@ -1189,7 +555,7 @@ class ImageProcessor:
             wipe_results: Results from match & wipe phase
             
         Returns:
-            List of final OCRMatch objects
+            List of final EnhancedImageMatch objects
         """
         final_matches = []
         
@@ -1204,12 +570,27 @@ class ImageProcessor:
                 if wiped_image_path and matches:
                     # RECONSTRUCTION-ONLY: Render appended text inside the original wiped bboxes
                     try:
-                        ocr_results_for_image = [m.ocr_result for m in matches]
+                        # Get OCR results from matches, handling both EnhancedImageMatch and regular objects
+                        ocr_results_for_image = []
+                        for m in matches:
+                            if hasattr(m, 'ocr_result') and m.ocr_result:
+                                ocr_results_for_image.append(m.ocr_result)
+                            else:
+                                # Create OCR result from match data if not available
+                                from ..core.models import OCRResult
+                                ocr_result = OCRResult(
+                                    text=m.original_text,
+                                    confidence=getattr(m, 'confidence', 0.0),
+                                    bounding_box=getattr(m, 'bounding_box', (0, 0, 0, 0))
+                                )
+                                ocr_results_for_image.append(ocr_result)
+                        
                         reconstructed_path = self._append_replacer_for_reconstruction.replace_text_in_image(
                             Path(wiped_image_path), ocr_results_for_image, matches
                         )
                         image_to_insert = reconstructed_path or wiped_image_path
-                    except Exception:
+                    except Exception as e:
+                        logger.error(f"Error in reconstruction for {image_info['location']}: {e}")
                         image_to_insert = wiped_image_path
 
                     # Replace the image in the document with reconstructed version
@@ -1233,13 +614,13 @@ class ImageProcessor:
         logger.info(f"Reconstruction phase completed: {len(final_matches)} total matches")
         return final_matches
     
-    def _apply_wipes_to_image(self, image_path: Path, matches: List[OCRMatch]) -> Optional[Path]:
+    def _apply_wipes_to_image(self, image_path: Path, matches: List[EnhancedImageMatch]) -> Optional[Path]:
         """
         Apply wipes to image (clear pattern areas without replacement text).
         
         Args:
             image_path: Path to original image
-            matches: List of OCRMatch objects with pattern information
+            matches: List of EnhancedImageMatch objects with pattern information
             
         Returns:
             Path to wiped image, or None if failed
@@ -1254,7 +635,7 @@ class ImageProcessor:
                     # Apply wipe to the image
                     image = self._apply_single_wipe(image, match)
                 except Exception as e:
-                    logger.error(f"Failed to apply wipe for match '{match.ocr_result.text}': {e}")
+                    logger.error(f"Failed to apply wipe for match '{match.original_text}': {e}")
             
             # Save wiped image
             output_path = self._generate_output_path(image_path)
@@ -1267,20 +648,110 @@ class ImageProcessor:
             logger.error(f"Failed to apply wipes to image {image_path}: {e}")
             return None
     
-    def _apply_single_wipe(self, image: Image.Image, match: OCRMatch) -> Image.Image:
+    def _calculate_reconstruction_reasoning(self, image: Image.Image, match: EnhancedImageMatch) -> Dict[str, Any]:
+        """
+        Calculate reasoning for image reconstruction including dimensions, font size logic, and line reasoning.
+        
+        Args:
+            image: PIL Image to analyze
+            match: EnhancedImageMatch containing pattern information
+            
+        Returns:
+            Dictionary containing reasoning information
+        """
+        try:
+            # Get image dimensions
+            img_width, img_height = image.size
+            
+            # Calculate text area dimensions based on bounding box
+            bbox = getattr(match, 'bounding_box', (0, 0, 0, 0))
+            if len(bbox) >= 4:
+                text_width = bbox[2] - bbox[0]
+                text_height = bbox[3] - bbox[1]
+            else:
+                # Estimate text area if no bounding box
+                text_width = img_width * 0.3  # Assume 30% of image width
+                text_height = img_height * 0.1  # Assume 10% of image height
+            
+            # Font size logic based on text area
+            if text_height < 20:
+                font_size = 12
+                font_reasoning = "Small text area - using 12pt font"
+            elif text_height < 40:
+                font_size = 16
+                font_reasoning = "Medium text area - using 16pt font"
+            else:
+                font_size = 20
+                font_reasoning = "Large text area - using 20pt font"
+            
+            # 1 line vs 2 line reasoning
+            text_length = len(match.replacement_text)
+            if text_length <= 15:
+                line_reasoning = "Single line - text length <= 15 characters"
+                num_lines = 1
+            elif text_length <= 30:
+                line_reasoning = "Single line - text length <= 30 characters"
+                num_lines = 1
+            else:
+                line_reasoning = "Two lines - text length > 30 characters"
+                num_lines = 2
+            
+            # Image reconstruction dimensions
+            reconstruction_width = max(text_width + 20, 100)  # Add padding
+            reconstruction_height = text_height * num_lines + 20  # Add padding for multiple lines
+            
+            reasoning = {
+                'image_dimensions': {
+                    'width': img_width,
+                    'height': img_height,
+                    'text_area_width': text_width,
+                    'text_area_height': text_height
+                },
+                'font_logic': {
+                    'font_size': font_size,
+                    'reasoning': font_reasoning
+                },
+                'line_reasoning': {
+                    'num_lines': num_lines,
+                    'text_length': text_length,
+                    'reasoning': line_reasoning
+                },
+                'reconstruction_dimensions': {
+                    'width': reconstruction_width,
+                    'height': reconstruction_height
+                }
+            }
+            
+            logger.debug(f"Reconstruction reasoning: {reasoning}")
+            return reasoning
+            
+        except Exception as e:
+            logger.error(f"Error calculating reconstruction reasoning: {e}")
+            return {
+                'image_dimensions': {'width': 0, 'height': 0, 'text_area_width': 0, 'text_area_height': 0},
+                'font_logic': {'font_size': 12, 'reasoning': 'Default due to error'},
+                'line_reasoning': {'num_lines': 1, 'text_length': 0, 'reasoning': 'Default due to error'},
+                'reconstruction_dimensions': {'width': 100, 'height': 50}
+            }
+    
+    def _apply_single_wipe(self, image: Image.Image, match: EnhancedImageMatch) -> Image.Image:
         """
         Apply a single wipe to an image (clear pattern area without replacement text).
         
         Args:
             image: PIL Image to modify
-            match: OCRMatch containing pattern information
+            match: EnhancedImageMatch containing pattern information
             
         Returns:
             Modified PIL Image with pattern area wiped
         """
         try:
-            bbox = match.ocr_result.bounding_box
-            original_full_text = match.ocr_result.text
+            # Calculate reconstruction reasoning
+            reasoning = self._calculate_reconstruction_reasoning(image, match)
+            
+            # Get bounding box from match or use default
+            bbox = getattr(match, 'bounding_box', (0, 0, 0, 0))
+            original_full_text = match.original_text
             
             # Find the pattern in the original text
             pattern_matches = self.pattern_matcher.find_matches_universal(original_full_text)
@@ -1310,17 +781,38 @@ class ImageProcessor:
                 return image
             
             # Convert PIL Image to cv2 format for precise wiping
+            import numpy as np
+            import cv2
             cv_image = np.array(image.convert('RGB'))
             cv_image = cv2.cvtColor(cv_image, cv2.COLOR_RGB2BGR)
             
             # Apply wipe using precise replacer (wipe only, no replacement text)
-            cv_image = self.text_replacer.precise_replacer._apply_hybrid_replace(cv_image, match, [match.ocr_result])
+            # Create OCR result object from EnhancedImageMatch data
+            from ..core.models import OCRResult
+            ocr_result = OCRResult(
+                text=match.original_text,
+                confidence=match.confidence or 0.0,
+                bounding_box=bbox
+            )
+            
+            # Apply wipe using text replacer
+            if hasattr(self, 'text_replacer') and self.text_replacer:
+                cv_image = self.text_replacer._apply_hybrid_replace(cv_image, match, [ocr_result])
+            else:
+                # Fallback: simple rectangle wipe
+                if len(bbox) >= 4:
+                    x1, y1, x2, y2 = bbox
+                    cv2.rectangle(cv_image, (int(x1), int(y1)), (int(x2), int(y2)), (255, 255, 255), -1)
             
             # Convert back to PIL
             cv_image_rgb = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
             wiped_image = Image.fromarray(cv_image_rgb)
             
+            # Store reasoning in match for reporting
+            match.reconstruction_reasoning = reasoning
+            
             logger.debug(f"Applied wipe: '{target_match.matched_text}' in '{original_full_text}' at {bbox}")
+            logger.debug(f"Reconstruction reasoning: {reasoning}")
             
             return wiped_image
             
@@ -1328,7 +820,7 @@ class ImageProcessor:
             logger.error(f"Failed to apply single wipe: {e}")
             return image
     
-    def _extract_images_with_mapping(self, document: Document, media_dir: Optional[Path] = None) -> List[Dict]:
+    def _extract_images_with_mapping(self, document: Document, **kwargs) -> List[Dict]:
         """Extract images from DOCX document with mapping information for replacement."""
         image_info_list = []
         
@@ -1491,13 +983,13 @@ class ImageProcessor:
         """Get information about the enhanced image processor configuration."""
         base_info = {
             'mode': self.mode,
-            'ocr_engine': self.ocr_engine.engine,
-            'use_gpu': self.ocr_engine.use_gpu,
-            'confidence_threshold': self.ocr_engine.confidence_threshold,
+            'ocr_engine': self.ocr_engine,
+            'use_gpu': self.use_gpu,
+            'confidence_threshold': self.confidence_min,
             'patterns_count': len(self.patterns),
             'mappings_count': len(self.mappings),
-            'preprocessing_enabled': self.enable_preprocessing,
-            'debugging_enabled': self.enable_debugging
+            'preprocessing_enabled': True, # Preprocessing is handled by HybridOCRManager
+            'debugging_enabled': self.enable_debugging # This attribute is not in the new_code, but the original had it. Assuming it's meant to be here.
         }
         
         # Add enhanced pattern matcher info
@@ -1544,8 +1036,7 @@ class ProcessorImageWrapper:
                  enable_preprocessing: bool = True, enable_debugging: bool = False):
         """Initialize the wrapper with ImageProcessor."""
         self.image_processor = ImageProcessor(patterns, mappings, mode, separator, default_mapping,
-                                            ocr_engine, use_gpu, confidence_threshold, 
-                                            enable_preprocessing, enable_debugging)
+                                            ocr_engine, confidence_threshold, use_gpu)
         self.processor_type = "image"
         self.config = {
             'mode': mode,
@@ -1562,10 +1053,12 @@ class ProcessorImageWrapper:
     def initialize(self, **kwargs) -> bool:
         """Initialize the image processor."""
         try:
-            # The ImageProcessor is ready to use after construction
-            self.initialized = True
-            logger.info("Image processor wrapper initialized successfully")
-            return True
+            # Initialize the underlying ImageProcessor
+            success = self.image_processor.initialize(**kwargs)
+            if success:
+                self.initialized = True
+                logger.info("Image processor wrapper initialized successfully")
+                return success
         except Exception as e:
             logger.error(f"Failed to initialize image processor wrapper: {e}")
             return False
@@ -1579,7 +1072,8 @@ class ProcessorImageWrapper:
         
         try:
             # Process images in the document
-            image_matches = self.image_processor.process_images(document)
+            result = self.image_processor.process(document)
+            image_matches = result.metadata.get('detailed_matches', []) if result.success else []
             
             # Get OCR comparison data for reporting
             ocr_comparison_data = self.image_processor.get_ocr_comparison_data()
@@ -1587,7 +1081,12 @@ class ProcessorImageWrapper:
             # Create detailed matches data for reporting with wipe boundaries
             detailed_matches = []
             for match in image_matches:
-                match_dict = match.to_dict()
+                # Handle both objects with to_dict() method and dictionaries
+                if hasattr(match, 'to_dict'):
+                    match_dict = match.to_dict()
+                else:
+                    match_dict = match.copy() if isinstance(match, dict) else {}
+                
                 # Add wipe boundary information if available
                 if hasattr(match, 'wipe_boundaries') and match.wipe_boundaries:
                     match_dict['wipe_boundaries'] = match.wipe_boundaries
@@ -1600,7 +1099,7 @@ class ProcessorImageWrapper:
             # Create metadata
             metadata = {
                 'detailed_matches': detailed_matches,
-                'image_matches': [match.to_dict() for match in image_matches],
+                'image_matches': [match.to_dict() if hasattr(match, 'to_dict') else match for match in image_matches],
                 'ocr_comparison_data': ocr_comparison_data,
                 'processor_info': self.image_processor.get_processing_info()
             }
@@ -1646,7 +1145,7 @@ class ProcessorImageWrapper:
 
 
 def create_image_processor(patterns: Dict[str, str], mappings: Dict[str, str], 
-                          mode: str = "replace", separator: str = ";", default_mapping: str = "4022-NA",
+                          mode: str = PROCESSING_MODES['REPLACE'], separator: str = DEFAULT_SEPARATOR, default_mapping: str = DEFAULT_MAPPING,
                           ocr_engine: str = "easyocr", use_gpu: bool = True, 
                           confidence_threshold: float = DEFAULT_OCR_CONFIDENCE,
                           enable_preprocessing: bool = True, enable_debugging: bool = False) -> ProcessorImageWrapper:

@@ -15,7 +15,7 @@ from docx.text.paragraph import Paragraph
 from docx.shared import RGBColor, Pt
 from docx.enum.text import WD_COLOR_INDEX
 
-from ..shared_constants import XML_NAMESPACES, DEFAULT_FONT_SIZE, DEFAULT_FONT_FAMILY
+from ..shared_constants import XML_NAMESPACES, DEFAULT_FONT_SIZE, DEFAULT_FONT_FAMILY, DEFAULT_MAPPING, DEFAULT_SEPARATOR, PROCESSING_MODES
 
 logger = logging.getLogger(__name__)
 
@@ -295,7 +295,7 @@ class FontManager:
 class TextReplacer:
     """Handles text replacement while preserving formatting."""
     
-    def __init__(self, mode: str = "append", separator: str = ";", default_mapping: str = "4022-NA"):
+    def __init__(self, mode: str = PROCESSING_MODES['APPEND'], separator: str = DEFAULT_SEPARATOR, default_mapping: str = DEFAULT_MAPPING):
         """
         Initialize text replacer.
         
@@ -341,7 +341,7 @@ class TextReplacer:
                 return False
             
             # Determine replacement text based on mode
-            if self.mode == "append":
+            if self.mode == PROCESSING_MODES['APPEND']:
                 # Check if the replacement text already exists after the original text
                 # This prevents duplicate appending when the same text appears in multiple cells
                 expected_append = f"{original_text}{self.separator}{replacement_text}"
@@ -393,7 +393,7 @@ class TextReplacer:
             logger.error(f"Failed to replace text: {e}")
             return False
 
-def create_text_replacer(mode: str = "append", separator: str = ";", default_mapping: str = "4022-NA") -> TextReplacer:
+def create_text_replacer(mode: str = PROCESSING_MODES['APPEND'], separator: str = DEFAULT_SEPARATOR, default_mapping: str = DEFAULT_MAPPING) -> TextReplacer:
     """
     Factory function to create a TextReplacer instance.
     
