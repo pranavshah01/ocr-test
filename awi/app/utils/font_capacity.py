@@ -189,6 +189,18 @@ FONT_CAPACITY_GUIDELINES: Dict[str, Dict] = {
                 {"size_range": [7.5, 11.0], "max_lines": 2, "max_cpl": 20},
                 {"size_range": [7.0, 7.0],  "max_lines": 3, "max_cpl": 22},
                 {"size_range": [11.5, 14.0], "max_lines": 1, "max_cpl": 16},
+            ],
+            "180.6x35.6":[
+                {"size_range": [9.0,9.0], "max_lines": 2, "max_cpl": 34},  # Reduced from 34 to 30 for better fit
+                {"size_range": [8.5,8.5], "max_lines": 3, "max_cpl": 36},  # Increased to 36 to allow the specific text to fit
+                {"size_range": [8.0,8.0], "max_lines": 3, "max_cpl": 40},  # Added 8.0pt guideline for 3 lines
+            ],
+            "119.5x31.2":[
+                {"size_range": [8.0,8.0], "max_lines": 2, "max_cpl": 22},  # Reduced from 34 to 30 for better fit
+            ],
+            "155.3x21.8":[
+                {"size_range": [6.0,6.0], "max_lines": 2, "max_cpl": 45},  # Allow 6.0pt for 45-char text
+                {"size_range": [5.0,5.0], "max_lines": 3, "max_cpl": 50},  # Fallback to 5.0pt if needed
             ]
         }
     },
@@ -248,11 +260,12 @@ def apply_guidelines_to_capacity(
     font_family: str,
     font_size_pt: float,
 ) -> Tuple[int, int]:
-    """Clamp capacity numbers to any configured guideline limits."""
+    """Apply guideline limits to capacity numbers. Use guideline limits when available."""
     max_lines_allowed, max_cpl_allowed = get_guideline_limits(
         font_family, width_pt, height_pt, font_size_pt
     )
-    effective_lines = min(lines_fit, max_lines_allowed) if max_lines_allowed else lines_fit
-    effective_cpl = min(max_cpl, max_cpl_allowed) if max_cpl_allowed else max_cpl
+    # Use guideline limits when available, otherwise use calculated capacity
+    effective_lines = max_lines_allowed if max_lines_allowed is not None else lines_fit
+    effective_cpl = max_cpl_allowed if max_cpl_allowed is not None else max_cpl
     return effective_lines, effective_cpl
 

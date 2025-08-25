@@ -359,10 +359,13 @@ class DocumentProcessor:
             Document instance or None if parsing failed
         """
         try:
+            import zipfile
             from lxml import etree
-            from app.utils.shared_constants import LXML_ATTRIBUTE_VALUE_LIMIT, LXML_TEXT_VALUE_LIMIT
             
-            # Parser optimized for large file size range
+            logger.info(f"Using enhanced parser for large file: {docx_path.name}")
+            processing_log.add_info("Enhanced parser: Starting with huge_tree=True")
+            
+            # Create parser with huge_tree=True for large files
             parser = etree.XMLParser(
                 huge_tree=True,
                 recover=True,
@@ -372,25 +375,67 @@ class DocumentProcessor:
                 dtd_validation=False,
                 load_dtd=False,
                 no_network=True,
-                collect_ids=False,  # Performance boost
-                remove_blank_text=False,  # Preserve whitespace
-                remove_comments=False     # Preserve comments
+                collect_ids=False,
+                remove_blank_text=False,
+                remove_comments=False
             )
             
-            from docx.opc.package import OpcPackage
-            package = OpcPackage.open(docx_path, parser=parser)
-            
-            if package.main_document_part is None:
-                error_msg = f"Main document part not found in: {docx_path}"
-                processing_log.add_error(error_msg)
-                logger.error(error_msg)
-                return None
-            
-            from docx.document import Document as DocxDocument
-            document = DocxDocument(package.main_document_part._element, package.main_document_part)
-            
-            logger.info(f"Successfully loaded large document with enhanced parser: {docx_path.name}")
-            return document
+            # Extract and parse the document.xml directly
+            with zipfile.ZipFile(docx_path, 'r') as zip_file:
+                # Get the document.xml content
+                doc_xml_content = zip_file.read('word/document.xml')
+                
+                # Parse with lxml parser
+                root = etree.fromstring(doc_xml_content, parser=parser)
+                
+                # Pre-process to skip large attributes (>1,000,000 chars)
+                self._skip_large_attributes(root)
+                
+                # Convert back to string and create Document
+                processed_xml = etree.tostring(root, encoding='unicode')
+                
+                # Create a temporary file with processed XML
+                import tempfile
+                import os
+                
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.xml', delete=False) as temp_xml:
+                    temp_xml.write(processed_xml)
+                    temp_xml_path = temp_xml.name
+                
+                try:
+                    # Create a new DOCX with the processed XML
+                    with tempfile.NamedTemporaryFile(suffix='.docx', delete=False) as temp_docx:
+                        temp_docx_path = temp_docx.name
+                    
+                    # Copy the original DOCX structure but replace document.xml
+                    with zipfile.ZipFile(docx_path, 'r') as source_zip:
+                        with zipfile.ZipFile(temp_docx_path, 'w') as target_zip:
+                            for item in source_zip.infolist():
+                                if item.filename == 'word/document.xml':
+                                    # Use our processed XML
+                                    target_zip.writestr(item, processed_xml)
+                                else:
+                                    # Copy other files as-is
+                                    target_zip.writestr(item, source_zip.read(item.filename))
+                    
+                    # Load the processed document
+                    document = Document(temp_docx_path)
+                    
+                    # Clean up temporary files
+                    os.unlink(temp_xml_path)
+                    os.unlink(temp_docx_path)
+                    
+                    logger.info(f"Successfully loaded large document with enhanced parser: {docx_path.name}")
+                    processing_log.add_info("Enhanced parser: Successfully processed large attributes")
+                    return document
+                    
+                except Exception as e:
+                    # Clean up on error
+                    if os.path.exists(temp_xml_path):
+                        os.unlink(temp_xml_path)
+                    if os.path.exists(temp_docx_path):
+                        os.unlink(temp_docx_path)
+                    raise e
             
         except ImportError:
             error_msg = "lxml not available for enhanced parsing"
@@ -425,6 +470,24 @@ class DocumentProcessor:
             logger.error(error_msg)
             return None
     
+    def _skip_large_attributes(self, element):
+        """
+        Recursively process XML elements and skip attributes with more than 1,000,000 characters.
+        
+        Args:
+            element: lxml element to process
+        """
+        # Check and skip large attributes
+        for attr_name, attr_value in element.attrib.items():
+            if len(attr_value) > 1000000:  # 1,000,000 character limit
+                logger.warning(f"Skipping large attribute '{attr_name}' with {len(attr_value)} characters")
+                # Replace with a placeholder
+                element.attrib[attr_name] = f"[LARGE_ATTRIBUTE_{len(attr_value)}_CHARS]"
+        
+        # Process child elements recursively
+        for child in element:
+            self._skip_large_attributes(child)
+    
     def _load_with_extreme_parser(self, docx_path: Path, processing_log: ProcessingLog) -> Optional[Document]:
         """
         Extreme parser for handling very large files and attvalue errors.
@@ -440,6 +503,7 @@ class DocumentProcessor:
             Document instance or None if parsing failed
         """
         try:
+            import zipfile
             from lxml import etree
             
             logger.info(f"Using extreme parser for problematic large file: {docx_path.name}")
@@ -462,24 +526,62 @@ class DocumentProcessor:
                 compact=False      # Don't compact whitespace
             )
             
-            from docx.opc.package import OpcPackage
-            
-            # Open package with extreme parser
-            package = OpcPackage.open(docx_path, parser=parser)
-            
-            if package.main_document_part is None:
-                error_msg = f"Main document part not found in problematic file: {docx_path}"
-                processing_log.add_error(error_msg)
-                logger.error(error_msg)
-                return None
-            
-            # Create document with extreme element handling
-            from docx.document import Document as DocxDocument
-            document = DocxDocument(package.main_document_part._element, package.main_document_part)
-            
-            logger.info(f"Successfully loaded problematic large document with extreme parser: {docx_path.name}")
-            processing_log.add_info("Extreme parser: Successfully loaded problematic document")
-            return document
+            # Extract and parse the document.xml directly with extreme settings
+            with zipfile.ZipFile(docx_path, 'r') as zip_file:
+                # Get the document.xml content
+                doc_xml_content = zip_file.read('word/document.xml')
+                
+                # Parse with extreme parser
+                root = etree.fromstring(doc_xml_content, parser=parser)
+                
+                # Pre-process to skip large attributes (>1,000,000 chars) with more aggressive limits
+                self._skip_large_attributes_extreme(root)
+                
+                # Convert back to string and create Document
+                processed_xml = etree.tostring(root, encoding='unicode')
+                
+                # Create a temporary file with processed XML
+                import tempfile
+                import os
+                
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.xml', delete=False) as temp_xml:
+                    temp_xml.write(processed_xml)
+                    temp_xml_path = temp_xml.name
+                
+                try:
+                    # Create a new DOCX with the processed XML
+                    with tempfile.NamedTemporaryFile(suffix='.docx', delete=False) as temp_docx:
+                        temp_docx_path = temp_docx.name
+                    
+                    # Copy the original DOCX structure but replace document.xml
+                    with zipfile.ZipFile(docx_path, 'r') as source_zip:
+                        with zipfile.ZipFile(temp_docx_path, 'w') as target_zip:
+                            for item in source_zip.infolist():
+                                if item.filename == 'word/document.xml':
+                                    # Use our processed XML
+                                    target_zip.writestr(item, processed_xml)
+                                else:
+                                    # Copy other files as-is
+                                    target_zip.writestr(item, source_zip.read(item.filename))
+                    
+                    # Load the processed document
+                    document = Document(temp_docx_path)
+                    
+                    # Clean up temporary files
+                    os.unlink(temp_xml_path)
+                    os.unlink(temp_docx_path)
+                    
+                    logger.info(f"Successfully loaded problematic large document with extreme parser: {docx_path.name}")
+                    processing_log.add_info("Extreme parser: Successfully processed problematic document")
+                    return document
+                    
+                except Exception as e:
+                    # Clean up on error
+                    if os.path.exists(temp_xml_path):
+                        os.unlink(temp_xml_path)
+                    if os.path.exists(temp_docx_path):
+                        os.unlink(temp_docx_path)
+                    raise e
             
         except ImportError as e:
             error_msg = f"Required dependencies not available for extreme parser: {e}"
@@ -507,6 +609,44 @@ class DocumentProcessor:
             logger.error(error_msg)
             return None
     
+    def _skip_large_attributes_extreme(self, element):
+        """
+        Recursively process XML elements and skip attributes with more than 1,000,000 characters.
+        More aggressive version for extreme parser.
+        
+        Args:
+            element: lxml element to process
+        """
+        # Check and skip large attributes
+        for attr_name, attr_value in element.attrib.items():
+            if len(attr_value) > 1000000:  # 1,000,000 character limit
+                logger.warning(f"Extreme parser: Skipping large attribute '{attr_name}' with {len(attr_value)} characters")
+                # Replace with a placeholder
+                element.attrib[attr_name] = f"[LARGE_ATTRIBUTE_{len(attr_value)}_CHARS]"
+        
+        # Process child elements recursively
+        for child in element:
+            self._skip_large_attributes_extreme(child)
+    
+    def _skip_large_attributes_custom(self, element):
+        """
+        Recursively process XML elements and skip attributes with more than 1,000,000 characters.
+        Custom version for very large files.
+        
+        Args:
+            element: lxml element to process
+        """
+        # Check and skip large attributes
+        for attr_name, attr_value in element.attrib.items():
+            if len(attr_value) > 1000000:  # 1,000,000 character limit
+                logger.warning(f"Custom parser: Skipping large attribute '{attr_name}' with {len(attr_value)} characters")
+                # Replace with a placeholder
+                element.attrib[attr_name] = f"[LARGE_ATTRIBUTE_{len(attr_value)}_CHARS]"
+        
+        # Process child elements recursively
+        for child in element:
+            self._skip_large_attributes_custom(child)
+    
     def _load_with_custom_parser(self, docx_path: Path, processing_log: ProcessingLog) -> Optional[Document]:
         """
         Custom parser specifically designed for very large files (>200MB).
@@ -524,7 +664,6 @@ class DocumentProcessor:
         try:
             import zipfile
             from lxml import etree
-            from app.utils.shared_constants import LXML_ATTRIBUTE_VALUE_LIMIT, LXML_TEXT_VALUE_LIMIT
             
             logger.info(f"Using custom parser for very large file: {docx_path.name}")
             processing_log.add_info("Custom parser: Starting chunked processing")
@@ -544,30 +683,62 @@ class DocumentProcessor:
                 remove_comments=False     # Preserve comments
             )
             
-            # Use streaming approach for very large files
-            from docx.opc.package import OpcPackage
-            
-            # Open package with custom parser
-            package = OpcPackage.open(docx_path, parser=parser)
-            
-            if package.main_document_part is None:
-                error_msg = f"Main document part not found in very large file: {docx_path}"
-                processing_log.add_error(error_msg)
-                logger.error(error_msg)
-                return None
-            
-            # Create document with custom element handling
-            from docx.document import Document as DocxDocument
-            document = DocxDocument(package.main_document_part._element, package.main_document_part)
-            
-            # Validate document structure
-            if not hasattr(document, 'paragraphs') or len(document.paragraphs) == 0:
-                logger.warning(f"Very large document has no paragraphs: {docx_path.name}")
-                processing_log.add_warning("Very large document appears to have no text content")
-            
-            logger.info(f"Successfully loaded very large document with custom parser: {docx_path.name}")
-            processing_log.add_info("Custom parser: Successfully loaded very large document")
-            return document
+            # Extract and parse the document.xml directly with custom settings
+            with zipfile.ZipFile(docx_path, 'r') as zip_file:
+                # Get the document.xml content
+                doc_xml_content = zip_file.read('word/document.xml')
+                
+                # Parse with custom parser
+                root = etree.fromstring(doc_xml_content, parser=parser)
+                
+                # Pre-process to skip large attributes (>1,000,000 chars)
+                self._skip_large_attributes_custom(root)
+                
+                # Convert back to string and create Document
+                processed_xml = etree.tostring(root, encoding='unicode')
+                
+                # Create a temporary file with processed XML
+                import tempfile
+                import os
+                
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.xml', delete=False) as temp_xml:
+                    temp_xml.write(processed_xml)
+                    temp_xml_path = temp_xml.name
+                
+                try:
+                    # Create a new DOCX with the processed XML
+                    with tempfile.NamedTemporaryFile(suffix='.docx', delete=False) as temp_docx:
+                        temp_docx_path = temp_docx.name
+                    
+                    # Copy the original DOCX structure but replace document.xml
+                    with zipfile.ZipFile(docx_path, 'r') as source_zip:
+                        with zipfile.ZipFile(temp_docx_path, 'w') as target_zip:
+                            for item in source_zip.infolist():
+                                if item.filename == 'word/document.xml':
+                                    # Use our processed XML
+                                    target_zip.writestr(item, processed_xml)
+                                else:
+                                    # Copy other files as-is
+                                    target_zip.writestr(item, source_zip.read(item.filename))
+                    
+                    # Load the processed document
+                    document = Document(temp_docx_path)
+                    
+                    # Clean up temporary files
+                    os.unlink(temp_xml_path)
+                    os.unlink(temp_docx_path)
+                    
+                    logger.info(f"Successfully loaded very large document with custom parser: {docx_path.name}")
+                    processing_log.add_info("Custom parser: Successfully processed very large file")
+                    return document
+                    
+                except Exception as e:
+                    # Clean up on error
+                    if os.path.exists(temp_xml_path):
+                        os.unlink(temp_xml_path)
+                    if os.path.exists(temp_docx_path):
+                        os.unlink(temp_docx_path)
+                    raise e
             
         except ImportError as e:
             error_msg = f"Required dependencies not available for custom parser: {e}"

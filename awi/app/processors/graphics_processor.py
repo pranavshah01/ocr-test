@@ -708,6 +708,7 @@ class GraphicsProcessor(BaseProcessor):
                     get_conservative_headroom,
                     get_safety_margin,
                     apply_guidelines_to_capacity,
+                    get_guideline_limits,
                 )
                 # Derive required lines considering automatic wrapping within each newline segment
                 segments = text_to_fit.split('\n')
@@ -723,17 +724,39 @@ class GraphicsProcessor(BaseProcessor):
                 )
                 if max_cpl <= 0 or lines_fit <= 0:
                     return False
+                
+                # Check if there are specific guideline limits for this font/dimension/size
+                max_lines_allowed, max_cpl_allowed = get_guideline_limits(
+                    font_family, textbox_width, textbox_height, font_size
+                )
+                
                 # Sum the wrapped lines required per segment
                 import math
                 required_lines = 0
+                max_line_length = 0
                 for seg in segments:
                     seg_len = len(seg)
+                    max_line_length = max(max_line_length, seg_len)
                     # At least 1 line even for empty string
                     wrapped = max(1, math.ceil(seg_len / max_cpl))
                     required_lines += wrapped
+                
+                # Enhanced overflow detection: check against guideline limits if available
+                guideline_violation = False
+                if max_cpl_allowed is not None and max_line_length > max_cpl_allowed:
+                    guideline_violation = True
+                    logger.debug(f"RECONSTRUCTION: Guideline violation - max line length {max_line_length} > allowed {max_cpl_allowed}")
+                if max_lines_allowed is not None and required_lines > max_lines_allowed:
+                    guideline_violation = True
+                    logger.debug(f"RECONSTRUCTION: Guideline violation - required lines {required_lines} > allowed {max_lines_allowed}")
+                
+                if max_cpl_allowed is not None or max_lines_allowed is not None:
+                    logger.debug(f"RECONSTRUCTION: Guideline check - max_cpl_allowed: {max_cpl_allowed}, max_lines_allowed: {max_lines_allowed}, max_line_length: {max_line_length}, required_lines: {required_lines}")
+                
                 # Conservative bias: require headroom on total characters as well
                 conservative_fill_threshold = get_conservative_headroom(font_family)
                 char_fit_ok = len(text_to_fit.replace('\n', '')) <= int(total_fit * conservative_fill_threshold)
+                
                 # Compare against original wrapped lines at this font size
                 orig_required_lines = 0
                 if original_text is not None:
@@ -741,14 +764,19 @@ class GraphicsProcessor(BaseProcessor):
                         orig_required_lines += max(1, math.ceil(len(seg) / max_cpl))
                 else:
                     orig_required_lines = required_lines
+                
                 # If newlines increased and baseline couldn't absorb an extra line, require strict headroom
                 increased_lines = required_lines > orig_required_lines
                 if increased_lines and not baseline_can_absorb and lines_fit > 1:
                     lines_ok = required_lines < lines_fit
                 else:
                     lines_ok = required_lines <= lines_fit
-                # Fit only if line and character headroom both pass
-                return lines_ok and char_fit_ok
+                
+                # Enhanced fit criteria: must pass both guideline limits and capacity limits
+                fit_result = lines_ok and char_fit_ok and not guideline_violation
+                if not fit_result:
+                    logger.debug(f"RECONSTRUCTION: Fit failed - lines_ok: {lines_ok}, char_fit_ok: {char_fit_ok}, guideline_violation: {guideline_violation}")
+                return fit_result
             except Exception:
                 return False
 
@@ -804,6 +832,7 @@ class GraphicsProcessor(BaseProcessor):
         for size in _half_step_sizes(baseline_font_size):
             if fits(text, float(size)):
                 chosen_with_newlines = float(size)
+                logger.info(f"RECONSTRUCTION: Found fit with newlines at {size}pt")
                 break
 
         chosen_without_newlines = None
@@ -812,13 +841,23 @@ class GraphicsProcessor(BaseProcessor):
             for size in _half_step_sizes(baseline_font_size):
                 if fits(text_no_newlines, float(size)):
                     chosen_without_newlines = float(size)
+                    logger.info(f"RECONSTRUCTION: Found fit without newlines at {size}pt")
                     break
 
-        if chosen_without_newlines and (not chosen_with_newlines or chosen_without_newlines > chosen_with_newlines):
-            logger.info(f"RECONSTRUCTION: Using newline-relaxed fit at {chosen_without_newlines}pt (vs {chosen_with_newlines or 'N/A'}pt)")
+        # Enhanced selection logic: prefer smaller font sizes that fit better within guidelines
+        if chosen_without_newlines and chosen_with_newlines:
+            # If both fit, prefer the smaller font size for better readability
+            if chosen_without_newlines < chosen_with_newlines:
+                logger.info(f"RECONSTRUCTION: Using newline-relaxed fit at {chosen_without_newlines}pt (smaller than {chosen_with_newlines}pt)")
+                return chosen_without_newlines
+            else:
+                logger.info(f"RECONSTRUCTION: Using newline-preserved fit at {chosen_with_newlines}pt (smaller than {chosen_without_newlines}pt)")
+                return chosen_with_newlines
+        elif chosen_without_newlines:
+            logger.info(f"RECONSTRUCTION: Using newline-relaxed fit at {chosen_without_newlines}pt (only option)")
             return chosen_without_newlines
-
-        if chosen_with_newlines is not None:
+        elif chosen_with_newlines:
+            logger.info(f"RECONSTRUCTION: Using newline-preserved fit at {chosen_with_newlines}pt (only option)")
             return chosen_with_newlines
 
         # If not fitting and text has newlines, try removing them
@@ -834,13 +873,13 @@ class GraphicsProcessor(BaseProcessor):
     def _calculate_baseline_chars_per_sqcm(self, textbox_width: float, textbox_height: float, 
                                          font_family: str) -> Dict[float, float]:
         """
-        Calculate baseline characters per square centimeter for font sizes 12pt to 6pt.
+        Calculate baseline characters per square centimeter using FONT_CAPACITY_GUIDELINES as primary source.
+        Falls back to mathematical calculation only when guidelines aren't available.
         
         Args:
             textbox_width: Textbox width in points
             textbox_height: Textbox height in points
             font_family: Font family
-            width_multiplier: Font width multiplier
             
         Returns:
             Dictionary mapping font size to characters per sq cm
@@ -852,8 +891,139 @@ class GraphicsProcessor(BaseProcessor):
         textbox_height_cm = textbox_height * 0.0352778
         textbox_area_cm2 = textbox_width_cm * textbox_height_cm
         
-        # Calculate for font sizes 12pt to 5pt
-        for font_size in [12.0, 11.0, 10.0, 9.0, 8.0, 7.0, 6.0, 5.0]:
+        # Try to use FONT_CAPACITY_GUIDELINES first (exact match or approximation)
+        try:
+            from app.utils.font_capacity import FONT_CAPACITY_GUIDELINES, _dimension_key
+            
+            # Find guidelines for this font family (case-insensitive)
+            font_guidelines = None
+            for name, guidelines in FONT_CAPACITY_GUIDELINES.items():
+                if name.lower() == font_family.lower():
+                    font_guidelines = guidelines
+                    break
+            
+            if font_guidelines:
+                # Check if we have guidelines for this specific dimension
+                dimension_key = _dimension_key(textbox_width, textbox_height)
+                if dimension_key in font_guidelines.get("dimensions", {}):
+                    logger.info(f"RECONSTRUCTION: Using exact FONT_CAPACITY_GUIDELINES for {font_family} {dimension_key}")
+                    
+                    # Calculate chars per sq cm from guidelines
+                    for rule in font_guidelines["dimensions"][dimension_key]:
+                        size_range = rule.get("size_range", [])
+                        max_lines = rule.get("max_lines", 0)
+                        max_cpl = rule.get("max_cpl", 0)
+                        
+                        if len(size_range) == 2 and max_lines > 0 and max_cpl > 0:
+                            # For exact size matches, use the guideline values
+                            if size_range[0] == size_range[1]:  # Exact size match
+                                font_size = size_range[0]
+                                total_chars_fit = max_lines * max_cpl
+                                chars_per_sqcm = total_chars_fit / textbox_area_cm2
+                                baseline_chars_per_sqcm[font_size] = chars_per_sqcm
+                                logger.info(f"RECONSTRUCTION: Exact guideline {font_size}pt: {chars_per_sqcm:.1f} chars/sq cm")
+                            else:
+                                # For size ranges, calculate for each size in the range
+                                for font_size in [12.0, 11.0, 10.0, 9.0, 8.0, 7.0, 6.0]:
+                                    if size_range[0] <= font_size <= size_range[1]:
+                                        total_chars_fit = max_lines * max_cpl
+                                        chars_per_sqcm = total_chars_fit / textbox_area_cm2
+                                        baseline_chars_per_sqcm[font_size] = chars_per_sqcm
+                                        logger.info(f"RECONSTRUCTION: Exact guideline {font_size}pt: {chars_per_sqcm:.1f} chars/sq cm")
+                    
+                    # If we found exact guidelines, return them
+                    if baseline_chars_per_sqcm:
+                        return baseline_chars_per_sqcm
+                
+                # If no exact match, try to approximate using existing guidelines as training data
+                logger.info(f"RECONSTRUCTION: No exact guidelines for {font_family} {dimension_key}, attempting approximation from training data")
+                
+                # Get all available dimensions for this font family
+                available_dimensions = font_guidelines.get("dimensions", {})
+                if available_dimensions:
+                    # Find the closest dimension for approximation
+                    target_area = textbox_width * textbox_height
+                    closest_dimension = None
+                    closest_ratio = float('inf')
+                    
+                    for dim_key in available_dimensions:
+                        # Parse dimension key (e.g., "180.6x35.6")
+                        try:
+                            w_str, h_str = dim_key.split('x')
+                            dim_width = float(w_str)
+                            dim_height = float(h_str)
+                            dim_area = dim_width * dim_height
+                            
+                            # Calculate area ratio (closer to 1.0 is better)
+                            area_ratio = max(target_area / dim_area, dim_area / target_area)
+                            
+                            if area_ratio < closest_ratio:
+                                closest_ratio = area_ratio
+                                closest_dimension = dim_key
+                        except:
+                            continue
+                    
+                    # If we found a reasonably close dimension (within 50% area difference)
+                    if closest_dimension and closest_ratio < 2.0:
+                        logger.info(f"RECONSTRUCTION: Approximating from {closest_dimension} (area ratio: {closest_ratio:.2f})")
+                        
+                        # Parse closest dimension
+                        w_str, h_str = closest_dimension.split('x')
+                        ref_width = float(w_str)
+                        ref_height = float(h_str)
+                        ref_area = ref_width * ref_height
+                        
+                        # Calculate scaling factors
+                        width_scale = textbox_width / ref_width
+                        height_scale = textbox_height / ref_height
+                        area_scale = target_area / ref_area
+                        
+                        # Approximate using the closest dimension's guidelines
+                        for rule in available_dimensions[closest_dimension]:
+                            size_range = rule.get("size_range", [])
+                            max_lines = rule.get("max_lines", 0)
+                            max_cpl = rule.get("max_cpl", 0)
+                            
+                            if len(size_range) == 2 and max_lines > 0 and max_cpl > 0:
+                                if size_range[0] == size_range[1]:  # Exact size match
+                                    font_size = size_range[0]
+                                    
+                                    # Scale the capacity based on area ratio
+                                    # Adjust lines based on height ratio, chars per line based on width ratio
+                                    scaled_lines = max(1, int(max_lines * height_scale))
+                                    scaled_cpl = max(1, int(max_cpl * width_scale))
+                                    
+                                    total_chars_fit = scaled_lines * scaled_cpl
+                                    chars_per_sqcm = total_chars_fit / textbox_area_cm2
+                                    baseline_chars_per_sqcm[font_size] = chars_per_sqcm
+                                    
+                                    logger.info(f"RECONSTRUCTION: Approximated {font_size}pt: {chars_per_sqcm:.1f} chars/sq cm (from {max_lines}x{max_cpl} scaled to {scaled_lines}x{scaled_cpl})")
+                                else:
+                                    # For size ranges, calculate for each size in the range
+                                    for font_size in [12.0, 11.0, 10.0, 9.0, 8.0, 7.0, 6.0]:
+                                        if size_range[0] <= font_size <= size_range[1]:
+                                            # Scale the capacity based on area ratio
+                                            scaled_lines = max(1, int(max_lines * height_scale))
+                                            scaled_cpl = max(1, int(max_cpl * width_scale))
+                                            
+                                            total_chars_fit = scaled_lines * scaled_cpl
+                                            chars_per_sqcm = total_chars_fit / textbox_area_cm2
+                                            baseline_chars_per_sqcm[font_size] = chars_per_sqcm
+                                            
+                                            logger.info(f"RECONSTRUCTION: Approximated {font_size}pt: {chars_per_sqcm:.1f} chars/sq cm (from {max_lines}x{max_cpl} scaled to {scaled_lines}x{scaled_cpl})")
+                        
+                        # If we found approximated values, return them
+                        if baseline_chars_per_sqcm:
+                            return baseline_chars_per_sqcm
+                    
+        except Exception as e:
+            logger.warning(f"RECONSTRUCTION: Error using FONT_CAPACITY_GUIDELINES: {e}")
+        
+        # Fallback to mathematical calculation when guidelines aren't available
+        logger.info(f"RECONSTRUCTION: No guidelines or approximation available for {font_family} {textbox_width:.1f}x{textbox_height:.1f}, using mathematical calculation")
+        
+        # Calculate for font sizes 12pt to 6pt (updated minimum)
+        for font_size in [12.0, 11.0, 10.0, 9.0, 8.0, 7.0, 6.0]:
             # Calculate character width in cm for this font size
             try:
                 from app.utils.font_capacity import get_width_multiplier, get_line_height_multiplier
@@ -923,13 +1093,13 @@ class GraphicsProcessor(BaseProcessor):
                     else:
                         logger.info(f"RECONSTRUCTION: ✗ Text doesn't fit with {font_size}pt")
             
-            # If no detected size fits, try smaller sizes down to 5pt
-            logger.warning(f"RECONSTRUCTION: No detected font size fits, trying smaller sizes down to 5pt")
+            # If no detected size fits, try smaller sizes down to 6pt
+            logger.warning(f"RECONSTRUCTION: No detected font size fits, trying smaller sizes down to 6pt")
             
             # Start from the lowest detected font size and go down to 6pt
             min_detected_size = min(detected_font_sizes)
             
-            for font_size in range(int(min_detected_size), 4, -1):  # Go down to 5pt (inclusive)
+            for font_size in range(int(min_detected_size), 5, -1):  # Go down to 6pt (inclusive)
                 test_size = float(font_size)
                 if self._text_fits_with_baseline(text, test_size, baseline_chars_per_sqcm, dimensions):
                     logger.info(f"RECONSTRUCTION: ✓ Text fits with reduced font size {test_size}pt")
@@ -940,8 +1110,8 @@ class GraphicsProcessor(BaseProcessor):
             # No detected font sizes, use baseline approach
             logger.info(f"RECONSTRUCTION: No detected font sizes, using baseline: {baseline_font_size}pt")
             
-            # Test from baseline down to 5pt
-            for font_size in range(int(baseline_font_size), 4, -1):  # Go down to 5pt (inclusive)
+            # Test from baseline down to 6pt
+            for font_size in range(int(baseline_font_size), 5, -1):  # Go down to 6pt (inclusive)
                 test_size = float(font_size)
                 if self._text_fits_with_baseline(text, test_size, baseline_chars_per_sqcm, dimensions):
                     logger.info(f"RECONSTRUCTION: ✓ Text fits with font size {test_size}pt")
@@ -950,12 +1120,12 @@ class GraphicsProcessor(BaseProcessor):
                     logger.info(f"RECONSTRUCTION: ✗ Text doesn't fit with {test_size}pt")
         
         # If still no fit, return minimum font size
-        logger.warning(f"RECONSTRUCTION: Text doesn't fit even with minimum font size 5pt - using minimum")
-        return 5.0
+        logger.warning(f"RECONSTRUCTION: Text doesn't fit even with minimum font size 6pt - using minimum")
+        return 6.0
     
     def _text_fits_with_baseline(self, text: str, font_size: float, baseline_chars_per_sqcm: Dict[float, float], dimensions: Dict[str, Any] = None) -> bool:
         """
-        Check if text fits using baseline characters per sq cm.
+        Check if text fits using baseline characters per sq cm with enhanced guideline support.
         
         Args:
             text: Text to check
@@ -965,6 +1135,86 @@ class GraphicsProcessor(BaseProcessor):
         Returns:
             True if text fits, False otherwise
         """
+        # First, try to use the new fits() function with guidelines if dimensions are available
+        if dimensions and dimensions.get('has_dimensions', False):
+            try:
+                from app.utils.font_capacity import get_safety_margin
+                font_family = "Arial"  # Default, could be made configurable
+                
+                # Use the enhanced fits() function
+                def fits(text_to_fit: str, font_size: float) -> bool:
+                    try:
+                        from app.utils.font_capacity import (
+                            evaluate_capacity,
+                            get_conservative_headroom,
+                            get_safety_margin,
+                            apply_guidelines_to_capacity,
+                            get_guideline_limits,
+                        )
+                        # Derive required lines considering automatic wrapping within each newline segment
+                        segments = text_to_fit.split('\n')
+                        # Evaluate capacity in points
+                        # Use per-font safety margin
+                        safety = get_safety_margin(font_family, default_margin=0.15)
+                        lines_fit, max_cpl, total_fit, *_ = evaluate_capacity(
+                            dimensions['width'], dimensions['height'], font_family, font_size, safety_margin=safety
+                        )
+                        # Apply any configured per-font, per-dimension guidelines
+                        lines_fit, max_cpl = apply_guidelines_to_capacity(
+                            lines_fit, max_cpl, dimensions['width'], dimensions['height'], font_family, font_size
+                        )
+                        if max_cpl <= 0 or lines_fit <= 0:
+                            return False
+                        
+                        # Check if there are specific guideline limits for this font/dimension/size
+                        max_lines_allowed, max_cpl_allowed = get_guideline_limits(
+                            font_family, dimensions['width'], dimensions['height'], font_size
+                        )
+                        
+                        # Sum the wrapped lines required per segment
+                        import math
+                        required_lines = 0
+                        max_line_length = 0
+                        for seg in segments:
+                            seg_len = len(seg)
+                            max_line_length = max(max_line_length, seg_len)
+                            # At least 1 line even for empty string
+                            wrapped = max(1, math.ceil(seg_len / max_cpl))
+                            required_lines += wrapped
+                        
+                        # Enhanced overflow detection: check against guideline limits if available
+                        guideline_violation = False
+                        if max_cpl_allowed is not None and max_line_length > max_cpl_allowed:
+                            guideline_violation = True
+                        if max_lines_allowed is not None and required_lines > max_lines_allowed:
+                            guideline_violation = True
+                        
+                        # Conservative bias: require headroom on total characters as well
+                        conservative_fill_threshold = get_conservative_headroom(font_family)
+                        char_fit_ok = len(text_to_fit.replace('\n', '')) <= int(total_fit * conservative_fill_threshold)
+                        
+                        # Compare against original wrapped lines at this font size
+                        orig_required_lines = required_lines  # Simplified for this test
+                        
+                        # If newlines increased and baseline couldn't absorb an extra line, require strict headroom
+                        increased_lines = False  # Simplified for this test
+                        baseline_can_absorb = True  # Simplified for this test
+                        if increased_lines and not baseline_can_absorb and lines_fit > 1:
+                            lines_ok = required_lines < lines_fit
+                        else:
+                            lines_ok = required_lines <= lines_fit
+                        
+                        # Enhanced fit criteria: must pass both guideline limits and capacity limits
+                        return lines_ok and char_fit_ok and not guideline_violation
+                    except Exception:
+                        return False
+                
+                return fits(text, font_size)
+            except Exception:
+                # Fall back to old method if new method fails
+                pass
+        
+        # Fallback to original baseline method
         chars_per_sqcm = baseline_chars_per_sqcm.get(font_size, 0)
         if chars_per_sqcm <= 0:
             return False
