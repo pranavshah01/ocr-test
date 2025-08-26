@@ -398,7 +398,8 @@ class DocumentProcessor:
                 import tempfile
                 import os
                 
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.xml', delete=False) as temp_xml:
+                # Ensure UTF-8 encoding when writing temp XML
+                with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', suffix='.xml', delete=False) as temp_xml:
                     temp_xml.write(processed_xml)
                     temp_xml_path = temp_xml.name
                 
@@ -412,8 +413,8 @@ class DocumentProcessor:
                         with zipfile.ZipFile(temp_docx_path, 'w') as target_zip:
                             for item in source_zip.infolist():
                                 if item.filename == 'word/document.xml':
-                                    # Use our processed XML
-                                    target_zip.writestr(item, processed_xml)
+                                    # Use our processed XML (UTF-8 bytes)
+                                    target_zip.writestr(item, processed_xml.encode('utf-8'))
                                 else:
                                     # Copy other files as-is
                                     target_zip.writestr(item, source_zip.read(item.filename))
@@ -544,7 +545,8 @@ class DocumentProcessor:
                 import tempfile
                 import os
                 
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.xml', delete=False) as temp_xml:
+                # Ensure UTF-8 encoding when writing temp XML (extreme parser)
+                with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', suffix='.xml', delete=False) as temp_xml:
                     temp_xml.write(processed_xml)
                     temp_xml_path = temp_xml.name
                 
@@ -558,8 +560,8 @@ class DocumentProcessor:
                         with zipfile.ZipFile(temp_docx_path, 'w') as target_zip:
                             for item in source_zip.infolist():
                                 if item.filename == 'word/document.xml':
-                                    # Use our processed XML
-                                    target_zip.writestr(item, processed_xml)
+                                    # Use our processed XML (UTF-8 bytes)
+                                    target_zip.writestr(item, processed_xml.encode('utf-8'))
                                 else:
                                     # Copy other files as-is
                                     target_zip.writestr(item, source_zip.read(item.filename))
@@ -701,7 +703,8 @@ class DocumentProcessor:
                 import tempfile
                 import os
                 
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.xml', delete=False) as temp_xml:
+                # Ensure UTF-8 encoding when writing temp XML (custom parser)
+                with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', suffix='.xml', delete=False) as temp_xml:
                     temp_xml.write(processed_xml)
                     temp_xml_path = temp_xml.name
                 
@@ -715,8 +718,8 @@ class DocumentProcessor:
                         with zipfile.ZipFile(temp_docx_path, 'w') as target_zip:
                             for item in source_zip.infolist():
                                 if item.filename == 'word/document.xml':
-                                    # Use our processed XML
-                                    target_zip.writestr(item, processed_xml)
+                                    # Use our processed XML (UTF-8 bytes)
+                                    target_zip.writestr(item, processed_xml.encode('utf-8'))
                                 else:
                                     # Copy other files as-is
                                     target_zip.writestr(item, source_zip.read(item.filename))
