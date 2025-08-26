@@ -237,6 +237,9 @@ class GraphicsFontManager:
                     parent = parent.getparent()
                 
                 if parent is not None:
+                    # Ensure paragraph-level size exists (w:pPr/w:rPr/w:szCs)
+                    GraphicsFontManager._ensure_paragraph_level_size(parent, target_size)
+                    
                     r_pr = parent.find('.//w:rPr', namespaces=XML_NAMESPACES)
                     if r_pr is None:
                         # BUG FIX: Create w:rPr element if it doesn't exist
@@ -244,6 +247,8 @@ class GraphicsFontManager:
                         from lxml import etree
                         r_pr = etree.SubElement(parent, '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}rPr')
                         logger.debug(f"Created missing w:rPr element for text run to enable font size normalization")
+                    # Ensure rPr precedes w:t inside the run
+                    GraphicsFontManager._ensure_rpr_before_text(parent, r_pr)
                     
                     # Update or create sz element
                     sz_element = r_pr.find('.//w:sz', namespaces=XML_NAMESPACES)
@@ -286,6 +291,9 @@ class GraphicsFontManager:
                     parent = parent.getparent()
                 
                 if parent is not None:
+                    # Ensure paragraph-level size exists (w:pPr/w:rPr/w:szCs)
+                    GraphicsFontManager._ensure_paragraph_level_size(parent, target_size)
+                    
                     r_pr = parent.find('.//w:rPr', namespaces=XML_NAMESPACES)
                     if r_pr is None:
                         # BUG FIX: Create w:rPr element if it doesn't exist
@@ -293,6 +301,8 @@ class GraphicsFontManager:
                         from lxml import etree
                         r_pr = etree.SubElement(parent, '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}rPr')
                         logger.debug(f"Created missing w:rPr element for text run to enable font family and size normalization")
+                    # Ensure rPr precedes w:t inside the run
+                    GraphicsFontManager._ensure_rpr_before_text(parent, r_pr)
                     
                     # Update font family
                     r_fonts = r_pr.find('.//w:rFonts', namespaces=XML_NAMESPACES)
@@ -328,6 +338,53 @@ class GraphicsFontManager:
         
         except Exception as e:
             logger.error(f"Error normalizing font sizes and family: {e}")
+
+    @staticmethod
+    def _ensure_paragraph_level_size(run_element: ET.Element, target_size: float) -> None:
+        """Ensure ancestor w:p has w:pPr/w:rPr with w:szCs=target size (half-points)."""
+        try:
+            # Find ancestor paragraph element
+            p = run_element.getparent()
+            while p is not None and not p.tag.endswith('}p'):
+                p = p.getparent()
+            if p is None:
+                return
+            # Ensure w:pPr exists
+            p_pr = p.find('.//w:pPr', namespaces=XML_NAMESPACES)
+            if p_pr is None:
+                from lxml import etree
+                p_pr = etree.SubElement(p, '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}pPr')
+            # Ensure w:rPr under w:pPr exists
+            from lxml import etree
+            p_rpr = p_pr.find('.//w:rPr', namespaces=XML_NAMESPACES)
+            if p_rpr is None:
+                p_rpr = etree.SubElement(p_pr, '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}rPr')
+            # Ensure w:szCs exists and set value
+            szcs = p_rpr.find('.//w:szCs', namespaces=XML_NAMESPACES)
+            if szcs is None:
+                szcs = etree.SubElement(p_rpr, '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}szCs')
+            szcs.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val', str(int(target_size * 2)))
+        except Exception as e:
+            logger.debug(f"Failed to ensure paragraph-level size: {e}")
+
+    @staticmethod
+    def _ensure_rpr_before_text(run_element: ET.Element, r_pr: ET.Element) -> None:
+        """Ensure w:rPr comes before the first w:t within the w:r element."""
+        try:
+            # Find first w:t in run
+            t_elem = None
+            for child in list(run_element):
+                if child.tag.endswith('}t'):
+                    t_elem = child
+                    break
+            if t_elem is None:
+                return
+            # If r_pr is after t_elem, move it before
+            if run_element.index(r_pr) > run_element.index(t_elem):
+                run_element.remove(r_pr)
+                run_element.insert(run_element.index(t_elem), r_pr)
+        except Exception as e:
+            logger.debug(f"Failed to order rPr before text: {e}")
 
 class GraphicsTextReplacer:
     """Handles text replacement in graphics elements while preserving formatting."""

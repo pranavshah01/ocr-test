@@ -20,6 +20,47 @@ from ...utils.shared_constants import DEFAULT_OCR_CONFIDENCE
 
 logger = logging.getLogger(__name__)
 
+def _image_debug_info(image: Union[np.ndarray, Path]) -> str:
+    """Return a concise string describing the input image for debugging/logging."""
+    try:
+        if isinstance(image, Path):
+            exists = image.exists()
+            suffix = image.suffix
+            size = image.stat().st_size if exists else None
+            return (f"type=Path path='{str(image)}' exists={exists} suffix='{suffix}' "
+                    f"size_bytes={size}")
+        else:
+            if image is None:
+                return "type=numpy.ndarray value=None"
+            shape = getattr(image, 'shape', None)
+            dtype = getattr(image, 'dtype', None)
+            ndim = getattr(image, 'ndim', None)
+            size = getattr(image, 'size', None)
+            return (f"type=np.ndarray shape={shape} dtype={dtype} ndim={ndim} "
+                    f"size={size}")
+    except Exception as e:
+        return f"<failed to get image debug info: {e}>"
+
+def _validate_image_input(image: Union[np.ndarray, Path]) -> Tuple[bool, str]:
+    """Validate the provided image input and return (is_valid, reason)."""
+    try:
+        if isinstance(image, Path):
+            if not image.exists():
+                return False, f"image path does not exist: {str(image)}"
+            if image.is_dir():
+                return False, f"image path points to a directory: {str(image)}"
+            return True, "ok"
+        # numpy array path
+        if image is None:
+            return False, "image is None"
+        if not hasattr(image, 'shape'):
+            return False, "numpy image missing shape attribute"
+        if getattr(image, 'size', 0) == 0:
+            return False, "numpy image has zero size"
+        return True, "ok"
+    except Exception as e:
+        return False, f"validation error: {e}"
+
 class HybridOCRManager:
     """
     Hybrid OCR Engine Manager that combines EasyOCR and Tesseract results
@@ -98,6 +139,10 @@ class HybridOCRManager:
         """
         try:
             start_time = time.time()
+            logger.debug(f"Hybrid process_hybrid input: {_image_debug_info(image)}")
+            valid, reason = _validate_image_input(image)
+            if not valid:
+                raise ValueError(f"invalid image input: {reason} | {_image_debug_info(image)}")
             
             # Execute OCR engines in parallel
             easyocr_results, tesseract_results = self.execute_ocr_parallel(image)
@@ -117,7 +162,7 @@ class HybridOCRManager:
             return hybrid_results
             
         except Exception as e:
-            logger.error(f"Hybrid OCR processing failed: {e}")
+            logger.error(f"Hybrid OCR processing failed: {e} | {_image_debug_info(image)}")
             return []
     
     def execute_ocr_parallel(self, image: Union[np.ndarray, Path]) -> Tuple[List[OCRResult], List[OCRResult]]:
@@ -158,10 +203,10 @@ class HybridOCRManager:
                             tesseract_results = results
                             logger.debug(f"Tesseract completed: {len(results)} detections")
                     except Exception as e:
-                        logger.error(f"Hybrid {engine_name} execution failed: {e}")
+                        logger.error(f"Hybrid {engine_name} execution failed: {e} | {_image_debug_info(image)}")
             
         except Exception as e:
-            logger.error(f"Parallel OCR execution failed: {e}")
+            logger.error(f"Parallel OCR execution failed: {e} | {_image_debug_info(image)}")
         
         return easyocr_results, tesseract_results
     
@@ -200,7 +245,10 @@ class HybridOCRManager:
                 logger.error("EasyOCR reader still not available")
                 return results
             
-            # Handle different image input types
+            # Validate input and handle different image input types
+            valid, reason = _validate_image_input(image)
+            if not valid:
+                raise ValueError(f"invalid image input: {reason}")
             if isinstance(image, Path):
                 ocr_detections = self.easyocr_reader.readtext(str(image))
             else:
@@ -227,7 +275,7 @@ class HybridOCRManager:
             logger.debug(f"Hybrid EasyOCR extracted {len(results)} text regions")
             
         except Exception as e:
-            logger.error(f"Hybrid EasyOCR execution failed: {e}")
+            logger.error(f"Hybrid EasyOCR execution failed: {e} | {_image_debug_info(image)}")
         
         return results
     
@@ -248,7 +296,10 @@ class HybridOCRManager:
                 logger.warning("Tesseract not initialized")
                 return results
             
-            # Handle different image input types
+            # Validate input and handle different image input types
+            valid, reason = _validate_image_input(image)
+            if not valid:
+                raise ValueError(f"invalid image input: {reason}")
             if isinstance(image, Path):
                 pil_image = Image.open(image)
             else:
@@ -280,7 +331,7 @@ class HybridOCRManager:
             logger.debug(f"Hybrid Tesseract extracted {len(results)} text regions")
             
         except Exception as e:
-            logger.error(f"Hybrid Tesseract execution failed: {e}")
+            logger.error(f"Hybrid Tesseract execution failed: {e} | {_image_debug_info(image)}")
         
         return results
     

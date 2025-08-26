@@ -369,6 +369,9 @@ class OCRMatch:
     wipe_boundaries: Optional[Tuple[int, int]] = None  # Character start/end positions for wipe
     calculated_text_boundary: Optional[Tuple[int, int, int, int]] = None  # Precise pixel coordinates for wipe area
     wipe_area_info: Optional[Dict[str, Any]] = None  # Additional wipe metadata
+    # Image provenance for reporting
+    image_source_name: Optional[str] = None  # e.g., 'media/image1.png'
+    image_source_type: Optional[str] = None  # e.g., 'docx_media' or 'xml_embedded'
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -381,7 +384,9 @@ class OCRMatch:
             'extracted_pattern_text': self.extracted_pattern_text,
             'wipe_boundaries': self.wipe_boundaries,
             'calculated_text_boundary': self.calculated_text_boundary,
-            'wipe_area_info': self.wipe_area_info
+            'wipe_area_info': self.wipe_area_info,
+            'image_source_name': self.image_source_name,
+            'image_source_type': self.image_source_type
         }
 
 # Factory functions for creating OCR objects

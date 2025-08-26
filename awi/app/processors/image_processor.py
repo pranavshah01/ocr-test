@@ -508,6 +508,12 @@ class ImageProcessor(BaseProcessor):
                             ocr_match.extracted_pattern_text = universal_match.matched_text
                             # Set the original text (the full OCR text)
                             ocr_match.original_text = ocr_result.text
+                            # Attach image provenance for reports
+                            try:
+                                ocr_match.image_source_name = image_info.get('source_name')
+                                ocr_match.image_source_type = image_info.get('source_type')
+                            except Exception:
+                                pass
                             matches.append(ocr_match)
                             logger.debug(f"Added match to matches list. Total matches: {len(matches)}")
                             
@@ -855,11 +861,25 @@ class ImageProcessor(BaseProcessor):
                             f.write(image_data)
                         
                         # Store mapping information
+                        # Build provenance fields for reporting
+                        # target_ref looks like 'media/image1.png' for docx media
+                        target_ref = getattr(rel, 'target_ref', '')
+                        source_name = target_ref if target_ref else image_filename
+                        # Classify source type
+                        if target_ref.startswith('media/'):
+                            source_type = 'docx_media'
+                        elif target_ref:
+                            source_type = 'xml_embedded'
+                        else:
+                            source_type = 'unknown'
+
                         image_info = {
                             'temp_path': temp_image_path,
                             'original_rel': rel,
                             'location': f"image_{i}",
-                            'content_type': content_type
+                            'content_type': content_type,
+                            'source_name': source_name,
+                            'source_type': source_type
                         }
                         
                         image_info_list.append(image_info)
