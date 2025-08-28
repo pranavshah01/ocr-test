@@ -78,31 +78,63 @@ def save_processing_log(results: List[ProcessingResult], config_obj) -> bool:
         return False
 
 
-def move_processed_file(file_path: Path, config_obj) -> bool:
+def move_source_file_to_complete(file_path: Path, config_obj) -> bool:
     """
-    Move processed file to processed folder.
+    Move source file to complete folder after processing.
     
     Args:
-        file_path: Path to the processed file
+        file_path: Path to the source file
         config_obj: Configuration object
         
     Returns:
         True if moved successfully, False otherwise
     """
     try:
-        # Create processed folder in source directory
-        processed_dir = Path(config_obj.source_dir) / "processed"
-        processed_dir.mkdir(parents=True, exist_ok=True)
+        # Create complete folder
+        complete_dir = Path(config_obj.complete_dir)
+        complete_dir.mkdir(parents=True, exist_ok=True)
         
-        # Move the file
-        dest_path = processed_dir / file_path.name
+        # Move the source file to complete directory
+        dest_path = complete_dir / file_path.name
         shutil.move(str(file_path), str(dest_path))
         
-        logger.info(f"Moved {file_path.name} to processed folder")
+        logger.info(f"Moved source file {file_path.name} to complete folder")
         return True
         
     except Exception as e:
-        logger.error(f"Failed to move {file_path.name}: {e}")
+        logger.error(f"Failed to move source file {file_path.name}: {e}")
+        return False
+
+
+def save_processed_file_with_suffix(document, file_path: Path, config_obj) -> bool:
+    """
+    Save processed document with _12NC suffix to processed folder.
+    
+    Args:
+        document: The processed document to save
+        file_path: Path to the original source file
+        config_obj: Configuration object
+        
+    Returns:
+        True if saved successfully, False otherwise
+    """
+    try:
+        # Create processed folder
+        processed_dir = Path(config_obj.output_dir)
+        processed_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Create filename with _12NC suffix
+        processed_filename = f"{file_path.stem}{config_obj.suffix}{file_path.suffix}"
+        processed_path = processed_dir / processed_filename
+        
+        # Save the processed document
+        document.save(str(processed_path))
+        
+        logger.info(f"Saved processed file {processed_filename} to processed folder")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to save processed file {file_path.name}: {e}")
         return False
 
 
@@ -151,7 +183,8 @@ def process_with_retry(doc_path: Path, doc_processor, max_retries: int = 3,
                 result.status = ProcessingStatus.PROCESSED
                 result.success = True
                 logger.info(f"✓ Processed {doc_path.name}: {result.matches_found} matches found")
-                return result
+                # Return both the result and the modified document
+                return result, document
             else:
                 result.status = ProcessingStatus.ERROR
                 result.success = False
@@ -311,15 +344,39 @@ def main():
                                failed_processing, performance_monitor)
                 
                 # Process document with retry logic
-                result = process_with_retry(doc_path, doc_processor)
+                process_result = process_with_retry(doc_path, doc_processor)
                 
-                if result:
+                if process_result:
+                    # Unpack the result and modified document
+                    if isinstance(process_result, tuple):
+                        result, modified_document = process_result
+                    else:
+                        result = process_result
+                        modified_document = None
+                    
                     successful_processing += 1
                     total_matches += result.matches_found
                     results.append(result)
                     
-                    # Move processed file to processed folder
-                    move_processed_file(doc_path, config_obj)
+                    # Save processed document with _12NC suffix to processed folder
+                    if result.processed_file_name:
+                        # Create the processed document path
+                        processed_path = Path(config_obj.output_dir) / result.processed_file_name
+                        processed_path.parent.mkdir(parents=True, exist_ok=True)
+                        
+                        # Save the modified document (with reconstruction applied)
+                        if modified_document:
+                            modified_document.save(str(processed_path))
+                            logger.info(f"Saved processed file with reconstruction: {result.processed_file_name}")
+                        else:
+                            # Fallback: load the original document (this shouldn't happen if reconstruction worked)
+                            from docx import Document
+                            document = Document(doc_path)
+                            document.save(str(processed_path))
+                            logger.warning(f"Saved original document (no modified document found): {result.processed_file_name}")
+                    
+                    # Move source file to complete folder
+                    move_source_file_to_complete(doc_path, config_obj)
                     
                     # Generate individual report
                     report_generator = ReportGenerator(output_dir=config_obj.reports_dir, config=config_obj)
@@ -377,7 +434,8 @@ def main():
         
         print("Configuration loaded successfully!")
         print("Reports generated successfully!")
-        print(f"Processed files moved to: {config_obj.source_dir}/processed/")
+        print(f"Source files moved to: {config_obj.complete_dir}/")
+        print(f"Processed files saved to: {config_obj.output_dir}/")
         
     except KeyboardInterrupt:
         print("Pipeline interrupted by user")

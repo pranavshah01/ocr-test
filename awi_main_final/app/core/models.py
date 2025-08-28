@@ -296,6 +296,7 @@ class MatchDetail:
     match_flag: MatchFlag = MatchFlag.NO
     is_fallback: FallbackFlag = FallbackFlag.NO
     reasoning: Union[GraphicsReasoning, ImageReasoning, None] = None
+    reconstructed: bool = False  # Whether this match was successfully reconstructed in the document
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -314,7 +315,8 @@ class MatchDetail:
             "mapped_text_size": self.mapped_text_size,
             "match_flag": self.match_flag.value,
             "is_fallback": self.is_fallback.value,
-            "reasoning": self.reasoning.to_dict() if self.reasoning else None
+            "reasoning": self.reasoning.to_dict() if self.reasoning else None,
+            "reconstructed": self.reconstructed
         }
         return result
 

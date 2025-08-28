@@ -745,6 +745,7 @@ class ReportGenerator:
                         <th>Mapped Size</th>
                         <th>Match Flag</th>
                         <th>Is Fallback</th>
+                        <th>Reconstructed</th>
                         <th>Reasoning</th>
                     </tr>
                 </thead>
@@ -769,6 +770,7 @@ class ReportGenerator:
                         <td>{match.mapped_text_size}</td>
                         <td class="match-flag-column">{match.match_flag.value}</td>
                         <td class="fallback-column">{match.is_fallback.value}</td>
+                        <td class="fallback-column">{'Y' if match.reconstructed else 'N'}</td>
                         <td class="reasoning-column">{match.reasoning or ""}</td>
                     </tr>
             """

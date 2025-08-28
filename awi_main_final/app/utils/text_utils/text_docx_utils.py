@@ -199,6 +199,57 @@ class FontManager:
             logger.debug(f"Could not extract font info for detection '{matched_text}': {e}")
             # Fallback to default font info
             return FontManager.get_default_font_info()
+    
+    @staticmethod
+    def apply_font_info(run: Run, font_info: Dict[str, Any]):
+        """
+        Apply font information to a run.
+        
+        Args:
+            run: Run to apply font info to
+            font_info: Dictionary containing font properties
+        """
+        try:
+            # Apply font family
+            if font_info.get('font_family'):
+                run.font.name = font_info['font_family']
+            
+            # Apply font size
+            if font_info.get('font_size'):
+                from docx.shared import Pt
+                run.font.size = Pt(font_info['font_size'])
+            
+            # Apply bold
+            if font_info.get('is_bold') is not None:
+                run.font.bold = font_info['is_bold']
+            
+            # Apply italic
+            if font_info.get('is_italic') is not None:
+                run.font.italic = font_info['is_italic']
+            
+            # Apply underline
+            if font_info.get('is_underline') is not None:
+                run.font.underline = font_info['is_underline']
+            
+            # Apply color
+            if font_info.get('color'):
+                from docx.shared import RGBColor
+                try:
+                    # Convert hex color to RGB
+                    color_hex = font_info['color'].lstrip('#')
+                    r = int(color_hex[0:2], 16)
+                    g = int(color_hex[2:4], 16)
+                    b = int(color_hex[4:6], 16)
+                    run.font.color.rgb = RGBColor(r, g, b)
+                except (ValueError, IndexError):
+                    logger.debug(f"Could not apply color {font_info['color']}")
+            
+            # Apply highlight
+            if font_info.get('highlight'):
+                run.font.highlight_color = font_info['highlight']
+                
+        except Exception as e:
+            logger.debug(f"Could not apply font info: {e}")
 
 
 class PatternMatcher:

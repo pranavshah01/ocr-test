@@ -11,6 +11,7 @@ This module provides text processing capabilities for DOCX documents including:
 import re
 import logging
 import time
+from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
 
 from docx import Document
@@ -19,9 +20,111 @@ from docx.table import Table
 
 from ..core.models import ProcessingResult, MatchDetail, ProcessorType, MatchFlag, FallbackFlag
 from ..utils.text_utils.text_docx_utils import TextReconstructor, FontManager, PatternMatcher, create_pattern_matcher, load_patterns_and_mappings
-from config import DEFAULT_MAPPING
+from config import DEFAULT_MAPPING, DEFAULT_SEPARATOR, PROCESSING_MODES
 
 logger = logging.getLogger(__name__)
+
+
+class TextReplacer:
+    """Handles text replacement while preserving formatting."""
+    
+    def __init__(self, mode: str = PROCESSING_MODES['APPEND'], separator: str = DEFAULT_SEPARATOR, default_mapping: str = DEFAULT_MAPPING):
+        """
+        Initialize text replacer.
+        
+        Args:
+            mode: Replacement mode ('append' or 'replace')
+            separator: Separator between original and appended text in append mode
+            default_mapping: Default text to append when no mapping is found
+        """
+        self.mode = mode
+        self.separator = separator
+        self.default_mapping = default_mapping
+    
+    def replace_text_in_runs(self, runs: List, original_text: str, replacement_text: str, 
+                           start_pos: int, end_pos: int) -> bool:
+        """
+        Replace text across multiple runs while preserving formatting.
+        
+        Args:
+            runs: List of runs containing the text
+            original_text: Original text to replace
+            replacement_text: Replacement text
+            start_pos: Start position in reconstructed text
+            end_pos: End position in reconstructed text
+            
+        Returns:
+            True if replacement was successful
+        """
+        try:
+            # Find which runs are affected
+            current_pos = 0
+            affected_runs = []
+            
+            for run in runs:
+                run_start = current_pos
+                run_end = current_pos + len(run.text)
+                
+                if run_start < end_pos and run_end > start_pos:
+                    affected_runs.append((run, run_start, run_end))
+                
+                current_pos = run_end
+            
+            if not affected_runs:
+                return False
+            
+            # Determine replacement text based on mode
+            if self.mode == PROCESSING_MODES['APPEND']:
+                # Check if the replacement text already exists after the original text
+                # This prevents duplicate appending when the same text appears in multiple cells
+                expected_append = f"{original_text}{self.separator}{replacement_text}"
+                
+                # Get the current text in the affected runs to check for existing append
+                current_text = ""
+                for run in runs:
+                    current_text += run.text
+                
+                # Check if the expected append already exists
+                if expected_append in current_text:
+                    logger.info(f"APPEND MODE: Skipping duplicate append for '{original_text}' -> '{replacement_text}' (already exists)")
+                    return True  # Return True to indicate "success" (no action needed)
+                
+                final_text = expected_append
+            else:  # replace mode
+                final_text = replacement_text
+            
+            # Get font info from the first affected run
+            first_run = affected_runs[0][0]
+            font_info = FontManager.get_font_info(first_run)
+            
+            # Clear text from all affected runs except the first
+            for i, (run, run_start, run_end) in enumerate(affected_runs):
+                if i == 0:
+                    # Calculate the portion of text to replace in the first run
+                    run_match_start = max(0, start_pos - run_start)
+                    run_match_end = min(len(run.text), end_pos - run_start)
+                    
+                    # Replace the text in the first run
+                    before_text = run.text[:run_match_start]
+                    after_text = run.text[run_match_end:]
+                    run.text = before_text + final_text + after_text
+                    
+                    # Apply original formatting
+                    FontManager.apply_font_info(run, font_info)
+                else:
+                    # Clear subsequent runs that were part of the match
+                    run_match_start = max(0, start_pos - run_start)
+                    run_match_end = min(len(run.text), end_pos - run_start)
+                    
+                    before_text = run.text[:run_match_start]
+                    after_text = run.text[run_match_end:]
+                    run.text = before_text + after_text
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to replace text: {e}")
+            return False
 
 
 class TextProcessor:
@@ -39,6 +142,10 @@ class TextProcessor:
         self.patterns = {}
         self.mappings = {}
         self.pattern_matcher = None
+        self.text_replacer = None
+        self.mode = getattr(config, 'mode', PROCESSING_MODES['APPEND'])
+        self.separator = getattr(config, 'separator', DEFAULT_SEPARATOR)
+        self.default_mapping = getattr(config, 'default_mapping', DEFAULT_MAPPING)
         
         # Load patterns and mappings
         self._load_patterns_and_mappings()
@@ -52,6 +159,10 @@ class TextProcessor:
         try:
             # Create pattern matcher once during initialization
             self.pattern_matcher = create_pattern_matcher(self.patterns, self.mappings)
+            
+            # Create text replacer
+            self.text_replacer = TextReplacer(self.mode, self.separator, self.default_mapping)
+            
             logger.info(f"Pattern matcher created with {len(self.patterns)} patterns, {len(self.mappings)} mappings")
             
             self.initialized = True
@@ -86,6 +197,9 @@ class TextProcessor:
         logger.info("Starting text processing...")
         
         try:
+            # Store document for font information access
+            self.document = document
+            
             # Process all text content
             all_detections = []
             
@@ -113,6 +227,12 @@ class TextProcessor:
             # Update ProcessingResult with detection details
             self._update_processing_result(processing_result, all_detections)
             
+            # Reconstruct the document with the detected matches
+            reconstruction_results = self.reconstruct_document(document, all_detections)
+            
+            # Update match details with reconstruction status
+            self._update_reconstruction_status(processing_result, all_detections, reconstruction_results)
+            
             processing_time = time.time() - start_time
             logger.info(f"Text processing completed in {processing_time:.2f}s: {len(all_detections)} detections")
             
@@ -123,6 +243,208 @@ class TextProcessor:
             logger.error(error_msg)
             processing_result.error_message = error_msg
             return processing_result
+    
+    def reconstruct_document(self, document: Document, detections: List[Dict[str, Any]]) -> Dict[str, bool]:
+        """
+        Reconstruct the document by applying text replacements based on detections.
+        
+        Args:
+            document: The document to reconstruct
+            detections: List of detection dictionaries with match details
+            
+        Returns:
+            Dictionary mapping detection keys to reconstruction success status
+        """
+        logger.info("Starting document reconstruction...")
+        
+        reconstruction_results = {}
+        
+        try:
+            # Process main document body paragraphs
+            body_results = self._reconstruct_paragraphs(document.paragraphs, detections, "body")
+            reconstruction_results.update(body_results)
+            
+            # Process tables
+            table_results = self._reconstruct_tables(document.tables, detections)
+            reconstruction_results.update(table_results)
+            
+            # Process headers and footers
+            header_footer_results = self._reconstruct_headers_footers(document, detections)
+            reconstruction_results.update(header_footer_results)
+            
+            logger.info(f"Document reconstruction completed: {sum(reconstruction_results.values())}/{len(reconstruction_results)} matches reconstructed successfully")
+            
+        except Exception as e:
+            logger.error(f"Error during document reconstruction: {e}")
+        
+        return reconstruction_results
+    
+    def _reconstruct_paragraphs(self, paragraphs: List[Paragraph], detections: List[Dict[str, Any]], location: str) -> Dict[str, bool]:
+        """
+        Reconstruct paragraphs by applying text replacements.
+        
+        Args:
+            paragraphs: List of paragraphs to reconstruct
+            detections: List of detection dictionaries
+            location: Location description
+            
+        Returns:
+            Dictionary mapping detection keys to reconstruction success status
+        """
+        reconstruction_results = {}
+        
+        for i, paragraph in enumerate(paragraphs):
+            try:
+                paragraph_location = f"{location}_paragraph_{i}"
+                paragraph_results = self._reconstruct_paragraph(paragraph, detections, paragraph_location)
+                reconstruction_results.update(paragraph_results)
+            except Exception as e:
+                logger.error(f"Error reconstructing paragraph {i} in {location}: {e}")
+        
+        return reconstruction_results
+    
+    def _reconstruct_paragraph(self, paragraph: Paragraph, detections: List[Dict[str, Any]], location: str) -> Dict[str, bool]:
+        """
+        Reconstruct individual paragraph by applying text replacements.
+        
+        Args:
+            paragraph: Paragraph to reconstruct
+            detections: List of detection dictionaries
+            location: Location description
+            
+        Returns:
+            Dictionary mapping detection keys to reconstruction success status
+        """
+        reconstruction_results = {}
+        
+        if not paragraph.runs:
+            return reconstruction_results
+        
+        # Reconstruct full text from runs
+        full_text, runs = TextReconstructor.reconstruct_paragraph_text(paragraph)
+        
+        if not full_text.strip():
+            return reconstruction_results
+        
+        # Find detections for this paragraph location
+        paragraph_detections = [
+            detection for detection in detections 
+            if detection.get('location') == location and detection.get('is_matched', False)
+        ]
+        
+        # Sort detections by position (reverse order to avoid position shifts)
+        paragraph_detections.sort(key=lambda x: x.get('start_pos', 0), reverse=True)
+        
+        # Apply replacements
+        for detection in paragraph_detections:
+            try:
+                matched_text = detection.get('matched_text', '')
+                replacement_text = detection.get('replacement_text', '')
+                start_pos = detection.get('start_pos', 0)
+                end_pos = detection.get('end_pos', 0)
+                
+                if not matched_text or not replacement_text:
+                    continue
+                
+                # Create a unique key for this detection
+                detection_key = f"{location}_{matched_text}_{start_pos}_{end_pos}"
+                
+                # Find affected runs
+                text_span = TextReconstructor.find_text_in_runs(runs, matched_text, start_pos)
+                if not text_span:
+                    reconstruction_results[detection_key] = False
+                    continue
+                
+                span_start, span_end, affected_runs = text_span
+                
+                # Perform text replacement
+                success = self.text_replacer.replace_text_in_runs(
+                    runs, matched_text, replacement_text, span_start, span_end
+                )
+                
+                reconstruction_results[detection_key] = success
+                
+                if success:
+                    logger.info(f"Text replacement successful: '{matched_text}' -> '{replacement_text}' at {location}")
+                else:
+                    logger.warning(f"Text replacement failed: '{matched_text}' -> '{replacement_text}' at {location}")
+                    
+            except Exception as e:
+                logger.error(f"Error applying replacement for detection at {location}: {e}")
+                detection_key = f"{location}_{matched_text}_{start_pos}_{end_pos}"
+                reconstruction_results[detection_key] = False
+        
+        return reconstruction_results
+    
+    def _reconstruct_tables(self, tables: List[Table], detections: List[Dict[str, Any]], location_prefix: str = "") -> Dict[str, bool]:
+        """
+        Reconstruct tables by applying text replacements.
+        
+        Args:
+            tables: List of tables to reconstruct
+            detections: List of detection dictionaries
+            location_prefix: Prefix for location description (e.g., "header_section_0")
+            
+        Returns:
+            Dictionary mapping detection keys to reconstruction success status
+        """
+        reconstruction_results = {}
+        
+        # Import the table utilities
+        from ..utils.table_utils import get_table_cells_to_process
+        
+        for table_idx, table in enumerate(tables):
+            try:
+                # Get cells that should be processed (skipping vMerge continue cells)
+                cells_to_process = get_table_cells_to_process(table)
+                
+                for row_idx, cell_idx, cell in cells_to_process:
+                    if location_prefix:
+                        location = f"{location_prefix}_table_{table_idx}_row_{row_idx}_cell_{cell_idx}"
+                    else:
+                        location = f"table_{table_idx}_row_{row_idx}_cell_{cell_idx}"
+                    cell_results = self._reconstruct_paragraphs(cell.paragraphs, detections, location)
+                    reconstruction_results.update(cell_results)
+                    
+            except Exception as e:
+                logger.error(f"Error reconstructing table {table_idx}: {e}")
+        
+        return reconstruction_results
+    
+    def _reconstruct_headers_footers(self, document: Document, detections: List[Dict[str, Any]]) -> Dict[str, bool]:
+        """
+        Reconstruct headers and footers by applying text replacements.
+        
+        Args:
+            document: Document to reconstruct
+            detections: List of detection dictionaries
+            
+        Returns:
+            Dictionary mapping detection keys to reconstruction success status
+        """
+        reconstruction_results = {}
+        
+        try:
+            # Process headers and footers (including tables)
+            for section_idx, section in enumerate(document.sections):
+                # Process header paragraphs and tables
+                if section.header:
+                    header_results = self._reconstruct_paragraphs(section.header.paragraphs, detections, f"header_section_{section_idx}")
+                    reconstruction_results.update(header_results)
+                    header_table_results = self._reconstruct_tables(section.header.tables, detections, f"header_section_{section_idx}")
+                    reconstruction_results.update(header_table_results)
+                
+                # Process footer paragraphs and tables
+                if section.footer:
+                    footer_results = self._reconstruct_paragraphs(section.footer.paragraphs, detections, f"footer_section_{section_idx}")
+                    reconstruction_results.update(footer_results)
+                    footer_table_results = self._reconstruct_tables(section.footer.tables, detections, f"footer_section_{section_idx}")
+                    reconstruction_results.update(footer_table_results)
+                    
+        except Exception as e:
+            logger.error(f"Error reconstructing headers/footers: {e}")
+        
+        return reconstruction_results
     
     def _process_paragraphs(self, paragraphs: List[Paragraph], location: str) -> List[Dict[str, Any]]:
         """
@@ -177,9 +499,22 @@ class TextProcessor:
             # Get replacement text
             replacement_text = self.pattern_matcher.get_replacement(matched_text)
             
-            # If no replacement found, use default mapping for append mode
+            # Mode-specific behavior:
+            # - In "replace" mode: only process if we have a valid mapping (no default)
+            # - In "append" mode: use default mapping if no valid mapping found
             if not replacement_text:
-                replacement_text = DEFAULT_MAPPING
+                if self.mode == "replace":
+                    # In replace mode, skip if no mapping found
+                    logger.debug(f"REPLACE MODE: Skipping '{matched_text}' - no mapping found")
+                    replacement_text = None
+                elif self.mode == PROCESSING_MODES['APPEND']:
+                    # In append mode, use default mapping
+                    replacement_text = self.default_mapping
+                    logger.info(f"APPEND MODE: Using default mapping '{self.default_mapping}' for '{matched_text}'")
+                else:
+                    # Unknown mode, skip
+                    logger.warning(f"Unknown mode '{self.mode}', skipping '{matched_text}'")
+                    replacement_text = None
             
             # Determine if this pattern was successfully matched
             is_matched = replacement_text is not None
@@ -374,6 +709,15 @@ class TextProcessor:
         
         # Update processor type
         processing_result.processor_type = "text_processor"
+        
+        # Set success flag
+        processing_result.success = True
+        
+        # Update processed file name
+        if hasattr(self, 'document') and self.document:
+            # Get the base name without extension and add suffix before .docx
+            base_name = Path(processing_result.file_name).stem
+            processing_result.processed_file_name = f"{base_name}{getattr(self.config, 'suffix', '_12NC_processed')}.docx"
     
     def _convert_detection_to_match_detail(
         self,
@@ -411,10 +755,33 @@ class TextProcessor:
             'mapped_text_font': font_family,  # Use same font for mapped text
             'mapped_text_color': font_color,  # Use same color for mapped text
             'mapped_text_size': font_size,    # Use same size for mapped text
-            'match_flag': 'N' if detection.get('replacement_text', '') == DEFAULT_MAPPING else 'Y',
+            'match_flag': 'Y' if detection.get('is_matched', False) else 'N',
             'is_fallback': 'N',  # Will be updated during processing
-            'reasoning': None  # Will be populated by specific processors
+            'reasoning': None,  # Will be populated by specific processors
+            'reconstructed': False  # Will be updated with reconstruction status
         }
+    
+    def _update_reconstruction_status(self, processing_result: ProcessingResult, detections: List[Dict[str, Any]], reconstruction_results: Dict[str, bool]):
+        """
+        Update match details with reconstruction status.
+        
+        Args:
+            processing_result: ProcessingResult to update
+            detections: List of detection dictionaries
+            reconstruction_results: Dictionary mapping detection keys to reconstruction success status
+        """
+        for match_detail in processing_result.match_details:
+            # Find corresponding detection
+            for detection in detections:
+                if (detection.get('matched_text') == match_detail.src_text and
+                    detection.get('location') == match_detail.orig_id_name):
+                    
+                    # Create the same key used in reconstruction
+                    detection_key = f"{detection.get('location')}_{detection.get('matched_text')}_{detection.get('start_pos', 0)}_{detection.get('end_pos', 0)}"
+                    
+                    # Update reconstruction status
+                    match_detail.reconstructed = reconstruction_results.get(detection_key, False)
+                    break
     
     def cleanup(self):
         """Clean up resources used by the text processor."""
