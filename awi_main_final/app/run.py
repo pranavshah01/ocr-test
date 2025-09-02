@@ -43,10 +43,7 @@ def save_processing_log(results: List[ProcessingResult], config_obj) -> bool:
             'results': [r.to_dict() for r in results]
         }
 
-        # Validate and sanitize path to prevent traversal attacks
-        reports_dir = Path(config_obj.reports_dir).resolve()
-        log_filename = Path(PROCESSING_LOG_FILE).name  # Extract just filename, no path components
-        log_path = reports_dir / log_filename
+        log_path = Path(config_obj.reports_dir) / PROCESSING_LOG_FILE
         log_path.parent.mkdir(parents=True, exist_ok=True)
 
         with open(log_path, 'w', encoding='utf-8') as f:
@@ -63,44 +60,31 @@ def save_processing_log(results: List[ProcessingResult], config_obj) -> bool:
 def move_source_file_to_complete(file_path: Path, config_obj) -> bool:
     try:
 
-        # Validate and sanitize paths to prevent traversal attacks
-        complete_dir = Path(config_obj.complete_dir).resolve()
+        complete_dir = Path(config_obj.complete_dir)
         complete_dir.mkdir(parents=True, exist_ok=True)
 
-        # Extract just filename, no path components to prevent traversal
-        safe_filename = Path(file_path.name).name
-        dest_path = complete_dir / safe_filename
-        
-        # Ensure destination is within the complete directory
-        if not str(dest_path.resolve()).startswith(str(complete_dir)):
-            raise ValueError(f"Invalid destination path: {dest_path}")
-            
+
+        dest_path = complete_dir / file_path.name
         shutil.move(str(file_path), str(dest_path))
 
-        logger.info(f"Moved source file %s to complete folder", file_path.name)
+        logger.info(f"Moved source file {file_path.name} to complete folder")
         return True
 
     except Exception as e:
-        logger.error(f"Failed to move source file %s: %s", file_path.name, str(e).replace('\n', ' ').replace('\r', ''))
+        logger.error(f"Failed to move source file {file_path.name}: {e}")
         return False
 
 
 def save_processed_file_with_suffix(document, file_path: Path, config_obj) -> bool:
     try:
 
-        # Validate and sanitize paths to prevent traversal attacks
-        processed_dir = Path(config_obj.output_dir).resolve()
+        processed_dir = Path(config_obj.output_dir)
         processed_dir.mkdir(parents=True, exist_ok=True)
 
-        # Sanitize filename components to prevent traversal
-        safe_stem = Path(file_path.stem).name
-        safe_suffix = Path(file_path.suffix).name
-        processed_filename = f"{safe_stem}{config_obj.suffix}{safe_suffix}"
+
+        processed_filename = f"{file_path.stem}{config_obj.suffix}{file_path.suffix}"
         processed_path = processed_dir / processed_filename
-        
-        # Ensure destination is within the processed directory
-        if not str(processed_path.resolve()).startswith(str(processed_dir)):
-            raise ValueError(f"Invalid processed file path: {processed_path}")
+
 
         document.save(str(processed_path))
 
@@ -187,18 +171,36 @@ def process_with_retry(doc_path: Path, doc_processor, max_retries: int = 3,
                 else:
                     raise graphics_error
 
+            # Initialize image_success variable
+            image_success = False
 
-            if success or graphics_success:
+            # Process images
+            try:
+                image_success = doc_processor.process_document_images(document, result, doc_path)
+            except Exception as image_error:
+                if doc_processor.is_attvalue_error(str(image_error)):
+                    logger.warning(f"AttValue error in image processing, skipping problematic attributes: {image_error}")
+                    # Continue even if image processing failed due to AttValue
+                    image_success = False
+                    if result.error_message:
+                        result.error_message += f"; Image processing skipped due to AttValue error: {image_error}"
+                    else:
+                        result.error_message = f"Image processing skipped due to AttValue error: {image_error}"
+                else:
+                    raise image_error
+
+
+            if success or graphics_success or image_success:
                 result.status = ProcessingStatus.PROCESSED
                 result.success = True
-                total_matches = result.matches_found + result.total_graphics_matches
-                logger.info(f"Processed {doc_path.name}: {result.matches_found} text matches, {result.total_graphics_matches} graphics matches found")
+                total_matches = result.matches_found + result.total_graphics_matches + result.total_image_matches
+                logger.info(f"Processed {doc_path.name}: {result.matches_found} text matches, {result.total_graphics_matches} graphics matches, {result.total_image_matches} image matches found")
 
                 return result, document
             else:
                 result.status = ProcessingStatus.ERROR
                 result.success = False
-                raise Exception("Text and graphics processing failed")
+                raise Exception("Text, graphics, and image processing failed")
 
         except (OSError, IOError) as e:
 
@@ -228,7 +230,7 @@ def process_with_retry(doc_path: Path, doc_processor, max_retries: int = 3,
 
         except Exception as e:
 
-            logger.error(f"Unexpected error processing %s: %s", doc_path.name, str(e).replace('\n', ' ').replace('\r', ''))
+            logger.error(f"Unexpected error processing {doc_path.name}: {e}")
             if attempt < max_retries - 1:
                 delay = base_delay * (2 ** attempt)
                 logger.info(f"Retrying in {delay}s...")
@@ -350,6 +352,7 @@ def main():
                                failed_processing, performance_monitor)
 
 
+                per_file_start = time.time()
                 process_result = process_with_retry(doc_path, doc_processor)
 
                 if process_result:
@@ -359,6 +362,13 @@ def main():
                     else:
                         result = process_result
                         modified_document = None
+
+                    # Compute per-file processing time
+                    try:
+                        result.processing_time = time.time() - per_file_start
+                        result.processing_time_minutes = result.processing_time / 60.0
+                    except Exception:
+                        pass
 
                     successful_processing += 1
                     total_matches += result.matches_found
@@ -381,9 +391,22 @@ def main():
                             document.save(str(processed_path))
                             logger.warning(f"Saved original document (no modified document found): {result.processed_file_name}")
 
+                        # Record processed file size
+                        try:
+                            result.processed_file_size = processed_path.stat().st_size
+                        except Exception:
+                            result.processed_file_size = 0
+
 
                     move_source_file_to_complete(doc_path, config_obj)
 
+
+                    # Snapshot performance metrics into the file result for reporting
+                    try:
+                        if performance_monitor:
+                            result.performance = performance_monitor.get_performance_metrics()
+                    except Exception:
+                        pass
 
                     report_generator = ReportGenerator(output_dir=config_obj.reports_dir, config=config_obj)
                     report_generator.generate_document_reports(result)
@@ -425,7 +448,7 @@ def main():
                 break
             except Exception as e:
                 failed_processing += 1
-                logger.error(f"Unexpected error processing %s: %s", doc_path.name, str(e).replace('\n', ' ').replace('\r', ''))
+                logger.error(f"Unexpected error processing {doc_path.name}: {e}")
 
                 failed_result = create_pending_result(doc_path, config_obj, doc_processor)
                 failed_result.status = ProcessingStatus.ERROR
@@ -506,32 +529,119 @@ def discover_input_files(config_obj, force_refresh: bool = False):
     logger.debug(f"Performing fresh file discovery for {source_dir}")
     supported = {".docx", ".doc"}
     candidates = []
+    skipped_files = []
+    
+    import re  # Import regex for filename validation
+    
+    def is_valid_document_file(file_path: Path) -> bool:
+        """Validate that a file is a legitimate document file."""
+        try:
+            # Check if file exists and is readable
+            if not file_path.exists() or not file_path.is_file():
+                return False
+                
+            # Check file size (must be > 0)
+            if file_path.stat().st_size == 0:
+                return False
+                
+            # For .docx files, verify they're actually ZIP files (DOCX is a ZIP archive)
+            if file_path.suffix.lower() == '.docx':
+                try:
+                    with open(file_path, 'rb') as f:
+                        # Check ZIP magic number (PK\x03\x04)
+                        magic = f.read(4)
+                        if magic != b'PK\x03\x04':
+                            return False
+                except Exception:
+                    return False
+                    
+            return True
+        except Exception:
+            return False
     
     for path in source_dir.rglob("*"):
+        # Skip directories
         if not path.is_file():
             continue
+            
+        # Only process .doc and .docx files
         if path.suffix.lower() not in supported:
+            skipped_files.append(f"{path.name} (unsupported extension: {path.suffix})")
             continue
 
-        # Enforce filenames start with an alphanumeric character
-        name = path.name
-        if not name or not name[0].isalnum():
-            logger.debug(f"Skipping {path.name} (non-alphanumeric start)")
+        # Ensure filename starts with alphanumeric character
+        if not re.match(r'^[a-zA-Z0-9]', path.name):
+            skipped_files.append(f"{path.name} (filename doesn't start with alphanumeric)")
+            continue
+            
+        # Check for other problematic filename patterns
+        if re.search(r'[<>:"/\\|?*]', path.name):
+            skipped_files.append(f"{path.name} (contains invalid characters)")
+            continue
+            
+        # Skip files with only dots or very short names
+        if len(path.stem) < 1 or path.stem.replace('.', '') == '':
+            skipped_files.append(f"{path.name} (invalid filename)")
+            continue
+
+        # Skip files starting with ~ (temporary/lock files)
+        if path.name.startswith('~'):
+            skipped_files.append(f"{path.name} (temporary/lock file)")
+            continue
+
+        # Skip macOS hidden files and metadata files
+        if (path.name.startswith('._') or 
+            path.name.startswith('.DS_Store') or 
+            path.name.startswith('Thumbs.db') or
+            path.name.startswith('desktop.ini')):
+            skipped_files.append(f"{path.name} (hidden/metadata file)")
             continue
 
         # Skip excluded directories
         parent_names = {p.name for p in path.parents}
         if "orig_doc_files" in parent_names or "processed" in parent_names:
+            skipped_files.append(f"{path.name} (excluded directory)")
             continue
 
         # Skip already processed files
         if path.suffix.lower() == ".docx" and path.stem.endswith(config_obj.suffix):
+            skipped_files.append(f"{path.name} (already processed)")
             continue
         
         # Check file size constraints
         size_mb = path.stat().st_size / (1024 * 1024)
-        if size_mb >= config_obj.min_file_size and size_mb <= config_obj.max_file_size:
-            candidates.append(path)
+        if size_mb < config_obj.min_file_size:
+            skipped_files.append(f"{path.name} (too small: {size_mb:.2f}MB)")
+            continue
+        if size_mb > config_obj.max_file_size:
+            skipped_files.append(f"{path.name} (too large: {size_mb:.2f}MB)")
+            continue
+            
+        # Validate that this is actually a legitimate document file
+        if not is_valid_document_file(path):
+            skipped_files.append(f"{path.name} (failed validation - not a valid document)")
+            continue
+            
+        # File passed all filters - add to candidates
+        candidates.append(path)
+        logger.debug(f"Added candidate: {path.name} ({size_mb:.2f}MB)")
+    
+    # Log skipped files for debugging
+    if skipped_files:
+        logger.info(f"Skipped {len(skipped_files)} files during discovery:")
+        for skipped in skipped_files[:10]:  # Show first 10
+            logger.info(f"  - {skipped}")
+        if len(skipped_files) > 10:
+            logger.info(f"  ... and {len(skipped_files) - 10} more skipped files")
+    
+    # Log filtering rules for transparency
+    logger.info("File filtering rules applied:")
+    logger.info("  - Only .doc and .docx files")
+    logger.info("  - Filename must start with alphanumeric character")
+    logger.info("  - No invalid characters (< > : \" / \\ | ? *)")
+    logger.info("  - No hidden files (._*, .DS_Store, ~*)")
+    logger.info("  - File size between {:.1f}MB and {:.1f}MB".format(
+        config_obj.min_file_size, config_obj.max_file_size))
 
     # Deduplicate by stem, preferring .doc over .docx for conversion
     by_stem = {}
@@ -554,7 +664,14 @@ def discover_input_files(config_obj, force_refresh: bool = False):
         'timestamp': current_time
     }
     
-    logger.info(f"Discovered {len(final_files)} files in {source_dir}")
+    # Log final summary
+    logger.info(f"Discovered {len(final_files)} valid document files in {source_dir}")
+    if final_files:
+        logger.info("Files to process:")
+        for file_path in final_files:
+            size_mb = file_path.stat().st_size / (1024 * 1024)
+            logger.info(f"  - {file_path.name} ({size_mb:.2f}MB, {file_path.suffix})")
+    
     return final_files
 
 

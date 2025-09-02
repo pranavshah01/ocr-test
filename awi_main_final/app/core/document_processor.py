@@ -24,6 +24,7 @@ class DocumentProcessor:
         self.initialized = False
         self.text_processor = None
         self.graphics_processor = None
+        self.image_processor = None
         self.parked_attributes: List[Dict] = [] # Initialize parked_attributes
 
     def initialize(self) -> None:
@@ -55,6 +56,25 @@ class DocumentProcessor:
             logger.error(f"Failed to initialize graphics processor: {e}")
             self.graphics_processor = None
 
+        # Initialize image processor
+        try:
+            from app.processors.image_processor import ImageProcessor
+            self.image_processor = ImageProcessor(
+                patterns=patterns,
+                mappings=mappings,
+                mode=self.config.text_mode,
+                separator=self.config.text_separator,
+                default_mapping=self.config.default_mapping,
+                ocr_engine=getattr(self.config, 'ocr_engine', 'hybrid'),
+                confidence_min=getattr(self.config, 'confidence_min', 0.4),
+                use_gpu=getattr(self.config, 'use_gpu', True)
+            )
+            self.image_processor.initialize()
+            logger.info("Image processor initialized in document processor")
+        except Exception as e:
+            logger.error(f"Failed to initialize image processor: {e}")
+            self.image_processor = None
+
         self.initialized = True
 
     def cleanup(self) -> None:
@@ -68,12 +88,19 @@ class DocumentProcessor:
 
         if self.graphics_processor:
             try:
-                if hasattr(self.graphics_processor, 'cleanup'):
-                    self.graphics_processor.cleanup()
+
                 logger.info("Graphics processor cleaned up")
             except Exception as e:
-                logger.error(f"Error cleaning up graphics processor: %s", str(e).replace('\n', ' ').replace('\r', ''))
+                logger.error(f"Error cleaning up graphics processor: {e}")
         self.graphics_processor = None
+
+        if self.image_processor:
+            try:
+                self.image_processor.cleanup()
+                logger.info("Image processor cleaned up")
+            except Exception as e:
+                logger.error(f"Error cleaning up image processor: {e}")
+        self.image_processor = None
 
         self.initialized = False
 
@@ -141,7 +168,7 @@ class DocumentProcessor:
                 logger.info(f"Falling back from {current_parser} to {next_parser} parser")
                 return next_parser
         except ValueError:
-            logger.warning(f"Unknown parser type: %s", current_parser)
+            logger.warning(f"Unknown parser type: {current_parser}")
 
         return None
 
@@ -160,7 +187,7 @@ class DocumentProcessor:
             logger.error("System resources critical, aborting parser fallback")
             return "failed", "System resources critical"
 
-        logger.info(f"Starting parser fallback sequence with %s parser for %s", current_parser, file_path.name)
+        logger.info(f"Starting parser fallback sequence with {current_parser} parser for {file_path.name}")
 
         while current_parser and retry_count < max_retry_attempts:
             try:
@@ -189,7 +216,7 @@ class DocumentProcessor:
 
             except Exception as e:
                 last_error = str(e)
-                logger.warning(f"%s parser failed: %s", current_parser, str(last_error).replace('\n', ' ').replace('\r', ''))
+                logger.warning(f"{current_parser} parser failed: {last_error}")
                 
                 # Proper resource cleanup
                 document = self._cleanup_document_resource(document)
@@ -211,7 +238,7 @@ class DocumentProcessor:
                     logger.error("System resources critical during fallback, aborting")
                     return "failed", "System resources critical during fallback"
 
-        logger.error(f"All parsers failed for %s. Last error: %s", file_path.name, str(last_error).replace('\n', ' ').replace('\r', '') if last_error else 'None')
+        logger.error(f"All parsers failed for {file_path.name}. Last error: {last_error}")
         return "failed", last_error
 
     def _load_with_enhanced_parser_iterative(self, file_path: Path) -> Tuple[Optional[Document], List[Dict]]:
@@ -565,6 +592,29 @@ class DocumentProcessor:
             logger.error(f"Error during graphics processing: {e}")
             return False
 
+    def process_document_images(self, document, processing_result, file_path: Path = None) -> bool:
+        if not self.image_processor:
+            logger.warning("Image processor not available, skipping image processing")
+            return False
+
+        try:
+            logger.info("Processing document images with image processor...")
+
+            # Process images using the image processor (following graphics processor pattern)
+            # Pass the file_path to the image processor so it can extract media from the DOCX
+            updated_result = self.image_processor.process_images(document, processing_result, file_path)
+
+            if updated_result:
+                logger.info(f"Image processing completed: {updated_result.total_image_matches} image matches found")
+                return True
+            else:
+                logger.error("Image processing failed")
+                return False
+
+        except Exception as e:
+            logger.error(f"Error during image processing: {e}")
+            return False
+
     def convert_if_needed(self, src_path: Path) -> Tuple[bool, Optional[Path], str]:
         suffix = src_path.suffix.lower()
         if suffix == ".docx":
@@ -576,46 +626,6 @@ class DocumentProcessor:
         target = parent / f"{src_path.stem}.docx"
         try:
 
-            # On Windows: use Microsoft Word COM exclusively (no soffice)
-            import platform
-            if platform.system().lower() == "windows":
-                try:
-                    import win32com.client  # type: ignore
-                except Exception as com_err:
-                    return False, target, f"pywin32 not available for Word COM: {com_err}"
-
-                word_app = None
-                try:
-                    word_app = win32com.client.Dispatch("Word.Application")
-                    word_app.Visible = False
-                    doc = word_app.Documents.Open(str(src_path.absolute()))
-                    doc.SaveAs2(str(target.absolute()), FileFormat=16)
-                    doc.Close()
-                    word_app.Quit()
-
-                    # Archive original .doc as per existing logic
-                    try:
-                        source_root = Path(self.config.source_dir)
-                    except Exception:
-                        source_root = parent
-                    archive_dir = source_root / "orig_doc_files"
-                    archive_dir.mkdir(parents=True, exist_ok=True)
-                    dest = archive_dir / src_path.name
-                    try:
-                        shutil.move(str(src_path), str(dest))
-                    except Exception as move_err:
-                        return True, target, f"Converted via Word, but failed to move original: {move_err}"
-                    return True, target, "Converted .doc to .docx via Word and archived original"
-                except Exception as word_err:
-                    try:
-                        if word_app is not None:
-                            word_app.Quit()
-                    except Exception:
-                        pass
-                    cleaned_err = str(word_err).replace('\n', ' ').replace('\r', ' ')
-                    return False, target, f"Microsoft Word COM conversion failed: {cleaned_err}"
-
-            # Non-Windows: use LibreOffice/soffice if available
             soffice = shutil.which("soffice")
             if not soffice:
                 mac_path = "/Applications/LibreOffice.app/Contents/MacOS/soffice"

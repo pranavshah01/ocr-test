@@ -354,7 +354,7 @@ class ReportGenerator:
         .metric-grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; margin-top: 12px; }}
         .metric-card {{ border: 1px solid #cde7cd; border-radius: 6px; padding: 8px; background: #f7fff7; }}
         .metric-label {{ font-weight: 600; font-size: 12px; color: #356; }}
-        .metric-value {{ font-size: 16px; color: #143; margin-top: 6px; }}
+        .metric-value {{ font-size: 16px; color: #143; margin-top: 6px; line-height: 1.2; word-break: break-word; overflow-wrap: anywhere; white-space: normal; }}
         .pattern-grid {{ display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 12px; overflow-x: auto; padding-bottom: 6px; }}
         .pattern-card {{ border: 1px solid #ffe8a3; border-radius: 8px; padding: 12px; background: #fffaf0; min-width: 260px; }}
         .pattern-name {{ font-weight: 600; font-size: 12px; color: #7a5; margin-bottom: 6px; }}
@@ -634,7 +634,8 @@ class ReportGenerator:
         .metric-grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; margin-top: 12px; }}
         .metric-card {{ border: 1px solid #cde7cd; border-radius: 6px; padding: 8px; background: #f7fff7; }}
         .metric-label {{ font-weight: 600; font-size: 12px; color: #356; }}
-        .metric-value {{ font-size: 16px; color: #143; margin-top: 6px; }}
+        .metric-value {{ font-size: 16px; color: #143; margin-top: 6px; line-height: 1.2; word-break: break-word; overflow-wrap: anywhere; white-space: normal; }}
+        .metric-card-compact .metric-value {{ font-size: 14px; }}
         .metric-grid-compact {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; margin-top: 12px; }}
         .metric-card-compact {{ border: 1px solid #cde7cd; border-radius: 6px; padding: 8px; background: #f7fff7; }}
         .pattern-grid {{ display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 12px; overflow-x: auto; padding-bottom: 6px; }}
@@ -663,7 +664,8 @@ class ReportGenerator:
         }}
         .text-column {{ max-width: 200px; word-wrap: break-word; }}
         .font-column {{ max-width: 300px; font-size: 10px; word-wrap: break-word; }}
-        .dimension-column {{ max-width: 120px; word-wrap: break-word; font-size: 9px; }}
+        .dimension-column {{ max-width: 200px; word-wrap: break-word; font-size: 9px; }}
+
         .reasoning-column {{ max-width: 600px; word-wrap: break-word; }}
         .orig-id-column {{ max-width: 80px; word-wrap: break-word; font-size: 9px; }}
         .match-flag-column {{ max-width: 40px; text-align: center; }}

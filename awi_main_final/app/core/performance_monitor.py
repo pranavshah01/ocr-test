@@ -113,12 +113,7 @@ class PerformanceMonitor:
                 status['warnings'].append(f"WARNING: Memory usage {memory_percent:.1f}%")
 
 
-            # Use cross-platform disk usage check
-            try:
-                disk = psutil.disk_usage('.')
-            except OSError:
-                # Fallback for systems where current directory is inaccessible
-                disk = psutil.disk_usage(Path.home().anchor)
+            disk = psutil.disk_usage('/')
             disk_percent = disk.percent
 
             if disk_percent > self.disk_critical_threshold:
@@ -220,7 +215,7 @@ class PerformanceMonitor:
                 self._apply_memory_limits()
 
 
-                if len(self._cpu_samples) > 0 and len(self._cpu_samples) % 60 == 0:
+                if len(self._cpu_samples) % 60 == 0:
                     self.check_system_resources()
 
 
@@ -320,7 +315,7 @@ class PerformanceMonitor:
     def get_current_metrics(self) -> Dict[str, Any]:
 
         self.metrics.current_memory_mb = self.process.memory_info().rss / 1024 / 1024
-        self.metrics.current_cpu_percent = psutil.cpu_percent(interval=0.1)
+        self.metrics.current_cpu_percent = psutil.cpu_percent()
 
         return {
             'current_memory_mb': round(self.metrics.current_memory_mb, 2),

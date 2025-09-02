@@ -124,7 +124,7 @@ class GraphicsProcessor:
                 matched_text = detection.get('matched_text', 'Unknown')
                 replacement_text = detection.get('replacement_text', 'Unknown')
                 location = detection.get('location', 'Unknown')
-                logger.info(f"  %d. Pattern '%s' matched '%s' -> '%s' at %s", i, pattern_name, matched_text.replace('\n', ' ').replace('\r', ''), replacement_text.replace('\n', ' ').replace('\r', ''), location)
+                logger.info(f"  {i}. Pattern '{pattern_name}' matched '{matched_text}' -> '{replacement_text}' at {location}")
 
             if detection_count > 50:
                 logger.info(f"  ... and {detection_count - 50} more detections")
@@ -140,7 +140,7 @@ class GraphicsProcessor:
                 replacement_text = reconstruction.get('replacement_text', 'Unknown')
                 optimal_font_size = reconstruction.get('optimal_font_size', 'Unknown')
                 location = reconstruction.get('location', 'Unknown')
-                logger.info(f"  %d. Reconstructed '%s' -> '%s' at %s (font: %.1fpt)", i, matched_text.replace('\n', ' ').replace('\r', ''), replacement_text.replace('\n', ' ').replace('\r', ''), location, optimal_font_size)
+                logger.info(f"  {i}. Reconstructed '{matched_text}' -> '{replacement_text}' at {location} (font: {optimal_font_size}pt)")
 
             if len(successful_reconstructions) > 50:
                 logger.info(f"  ... and {len(successful_reconstructions) - 50} more reconstructions")
@@ -172,7 +172,7 @@ class GraphicsProcessor:
 
             combined_text, wt_elements = TextboxParser.extract_text_from_textbox(textbox_element)
 
-            logger.info(f"Textbox content: '%s'", (combined_text[:100] + '...' if len(combined_text) > 100 else combined_text).replace('\n', ' ').replace('\r', ''))
+            logger.info(f"Textbox content: '{combined_text[:100]}{'...' if len(combined_text) > 100 else ''}'")
             logger.info(f"Found {len(wt_elements)} w:t elements in textbox")
 
             if not combined_text.strip() or not wt_elements:
@@ -203,7 +203,7 @@ class GraphicsProcessor:
             if detailed_font_analysis['text_segments']:
                 logger.info(f"DETAILED FONT ANALYSIS for {location}:")
                 for i, segment in enumerate(detailed_font_analysis['text_segments'], 1):
-                    logger.info(f"  Segment %d: '%s' - %.1fpt %s", i, segment['text'].replace('\n', ' ').replace('\r', ''), segment['font_size'], segment['font_family'])
+                    logger.info(f"  Segment {i}: '{segment['text']}' - {segment['font_size']}pt {segment['font_family']}")
 
 
             all_pattern_matches = self.pattern_matcher.find_all_pattern_matches(combined_text)
@@ -445,7 +445,7 @@ class GraphicsProcessor:
 
                         reconstruction_results.append(reconstruction_result)
 
-                        logger.info(f"Graphics replacement: '%s' -> '%s' at %s (font: %s %.1fpt, baseline: %.1fpt)", matched_text.replace('\n', ' ').replace('\r', ''), replacement_text.replace('\n', ' ').replace('\r', ''), location, baseline_font_family, optimal_font_size, baseline_font_size)
+                        logger.info(f"Graphics replacement: '{matched_text}' -> '{replacement_text}' at {location} (font: {baseline_font_family} {optimal_font_size}pt, baseline: {baseline_font_size}pt)")
                         logger.info(f"Font reasoning: {font_reasoning}")
                     else:
                         logger.warning(f"RECONSTRUCTION: Text replacement failed for '{matched_text}', skipping reasoning generation")
@@ -483,7 +483,10 @@ class GraphicsProcessor:
 
         match_details = []
 
-        for i, detection in enumerate(detections, 1):
+        # Start numbering after any existing details to keep a single continuous sequence
+        start_sr = len(processing_result.match_details) + 1
+
+        for idx, detection in enumerate(detections, 1):
 
             replacement_text = detection.get('replacement_text', '')
             is_fallback_element = detection.get('is_fallback', False)
@@ -507,7 +510,7 @@ class GraphicsProcessor:
             mapped_text = detection.get('replacement_text', '')
 
             match_detail = MatchDetail(
-                sr_no=i,
+                sr_no=start_sr + idx - 1,
                 type=ProcessorType.GRAPHICS,
                 orig_id_name=detection.get('location', ''),
                 src_text=detection.get('matched_text', ''),
@@ -558,8 +561,9 @@ class GraphicsProcessor:
                         if 'font_reasoning' in reconstruction:
                             match_detail.reasoning = reconstruction['font_reasoning']
 
-                        if 'final_text' in reconstruction:
-                            match_detail.mapped_text = reconstruction['final_text']
+                        # Show only the mapped 4022 text in reports (not the appended original text)
+                        if 'replacement_text' in reconstruction:
+                            match_detail.mapped_text = reconstruction['replacement_text']
 
                         try:
                             if isinstance(reconstruction.get('font_reasoning'), GraphicsReasoning):

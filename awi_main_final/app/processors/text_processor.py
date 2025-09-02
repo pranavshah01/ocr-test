@@ -500,7 +500,8 @@ class TextProcessor:
 
 
         match_details = []
-        sr_no = 1
+        # Continue sr_no from existing match_details to keep numbering continuous across processors
+        sr_no = len(processing_result.match_details) + 1
 
         for detection in detections:
 

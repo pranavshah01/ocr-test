@@ -271,6 +271,7 @@ class MatchDetail:
     src_text_color: str = ""
     src_text_size: str = ""
     src_dimension: str = ""
+    src_bbox: str = ""  # Bounding box coordinates in format "x1,y1,x2,y2"
     src_graphics_lines: int = 0
     mapped_text: str = ""
     mapped_text_font: str = ""
@@ -292,6 +293,7 @@ class MatchDetail:
             "src_text_color": self.src_text_color,
             "src_text_size": self.src_text_size,
             "src_dimension": self.src_dimension,
+            "src_bbox": self.src_bbox,
             "src_graphics_lines": self.src_graphics_lines,
             "mapped_text": self.mapped_text,
             "mapped_text_font": self.mapped_text_font,
@@ -348,6 +350,7 @@ class ProcessingResult:
 
 
     match_details: List[MatchDetail] = field(default_factory=list)
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -379,7 +382,8 @@ class ProcessingResult:
             "total_graphics_no_match": self.total_graphics_no_match,
             "total_image_no_match": self.total_image_no_match,
             "performance": self.performance.to_dict(),
-            "match_details": [match.to_dict() for match in self.match_details]
+            "match_details": [match.to_dict() for match in self.match_details],
+            "metadata": self.metadata
         }
 
     def to_json(self) -> str:

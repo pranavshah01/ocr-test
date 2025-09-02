@@ -40,11 +40,11 @@ def get_width_multiplier(font_family: str) -> float:
     if fam:
         try:
             return float((fam.get('multipliers') or {}).get('width'))
-        except (ValueError, TypeError):
+        except Exception:
             pass
     try:
         return float(_get_defaults_block().get('width_multiplier', FALLBACK_DEFAULTS['width_multiplier']))
-    except (ValueError, TypeError):
+    except Exception:
         return FALLBACK_DEFAULTS['width_multiplier']
 
 
@@ -53,11 +53,11 @@ def get_line_height_multiplier(font_family: str) -> float:
     if fam:
         try:
             return float((fam.get('multipliers') or {}).get('line_height'))
-        except (ValueError, TypeError):
+        except Exception:
             pass
     try:
         return float(_get_defaults_block().get('line_height_multiplier', FALLBACK_DEFAULTS['line_height_multiplier']))
-    except (ValueError, TypeError):
+    except Exception:
         return FALLBACK_DEFAULTS['line_height_multiplier']
 
 
@@ -66,11 +66,11 @@ def get_conservative_headroom(font_family: str) -> float:
     if fam and 'conservative_headroom' in fam:
         try:
             return float(fam['conservative_headroom'])
-        except (ValueError, TypeError):
+        except Exception:
             pass
     try:
         return float(_get_defaults_block().get('conservative_headroom', FALLBACK_DEFAULTS['conservative_headroom']))
-    except (ValueError, TypeError):
+    except Exception:
         return FALLBACK_DEFAULTS['conservative_headroom']
 
 
