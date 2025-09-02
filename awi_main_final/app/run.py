@@ -43,7 +43,10 @@ def save_processing_log(results: List[ProcessingResult], config_obj) -> bool:
             'results': [r.to_dict() for r in results]
         }
 
-        log_path = Path(config_obj.reports_dir) / PROCESSING_LOG_FILE
+        # Validate and sanitize path to prevent traversal attacks
+        reports_dir = Path(config_obj.reports_dir).resolve()
+        log_filename = Path(PROCESSING_LOG_FILE).name  # Extract just filename, no path components
+        log_path = reports_dir / log_filename
         log_path.parent.mkdir(parents=True, exist_ok=True)
 
         with open(log_path, 'w', encoding='utf-8') as f:
@@ -60,31 +63,44 @@ def save_processing_log(results: List[ProcessingResult], config_obj) -> bool:
 def move_source_file_to_complete(file_path: Path, config_obj) -> bool:
     try:
 
-        complete_dir = Path(config_obj.complete_dir)
+        # Validate and sanitize paths to prevent traversal attacks
+        complete_dir = Path(config_obj.complete_dir).resolve()
         complete_dir.mkdir(parents=True, exist_ok=True)
 
-
-        dest_path = complete_dir / file_path.name
+        # Extract just filename, no path components to prevent traversal
+        safe_filename = Path(file_path.name).name
+        dest_path = complete_dir / safe_filename
+        
+        # Ensure destination is within the complete directory
+        if not str(dest_path.resolve()).startswith(str(complete_dir)):
+            raise ValueError(f"Invalid destination path: {dest_path}")
+            
         shutil.move(str(file_path), str(dest_path))
 
-        logger.info(f"Moved source file {file_path.name} to complete folder")
+        logger.info(f"Moved source file %s to complete folder", file_path.name)
         return True
 
     except Exception as e:
-        logger.error(f"Failed to move source file {file_path.name}: {e}")
+        logger.error(f"Failed to move source file %s: %s", file_path.name, str(e).replace('\n', ' ').replace('\r', ''))
         return False
 
 
 def save_processed_file_with_suffix(document, file_path: Path, config_obj) -> bool:
     try:
 
-        processed_dir = Path(config_obj.output_dir)
+        # Validate and sanitize paths to prevent traversal attacks
+        processed_dir = Path(config_obj.output_dir).resolve()
         processed_dir.mkdir(parents=True, exist_ok=True)
 
-
-        processed_filename = f"{file_path.stem}{config_obj.suffix}{file_path.suffix}"
+        # Sanitize filename components to prevent traversal
+        safe_stem = Path(file_path.stem).name
+        safe_suffix = Path(file_path.suffix).name
+        processed_filename = f"{safe_stem}{config_obj.suffix}{safe_suffix}"
         processed_path = processed_dir / processed_filename
-
+        
+        # Ensure destination is within the processed directory
+        if not str(processed_path.resolve()).startswith(str(processed_dir)):
+            raise ValueError(f"Invalid processed file path: {processed_path}")
 
         document.save(str(processed_path))
 
@@ -212,7 +228,7 @@ def process_with_retry(doc_path: Path, doc_processor, max_retries: int = 3,
 
         except Exception as e:
 
-            logger.error(f"Unexpected error processing {doc_path.name}: {e}")
+            logger.error(f"Unexpected error processing %s: %s", doc_path.name, str(e).replace('\n', ' ').replace('\r', ''))
             if attempt < max_retries - 1:
                 delay = base_delay * (2 ** attempt)
                 logger.info(f"Retrying in {delay}s...")
@@ -409,7 +425,7 @@ def main():
                 break
             except Exception as e:
                 failed_processing += 1
-                logger.error(f"Unexpected error processing {doc_path.name}: {e}")
+                logger.error(f"Unexpected error processing %s: %s", doc_path.name, str(e).replace('\n', ' ').replace('\r', ''))
 
                 failed_result = create_pending_result(doc_path, config_obj, doc_processor)
                 failed_result.status = ProcessingStatus.ERROR
@@ -495,6 +511,12 @@ def discover_input_files(config_obj, force_refresh: bool = False):
         if not path.is_file():
             continue
         if path.suffix.lower() not in supported:
+            continue
+
+        # Enforce filenames start with an alphanumeric character
+        name = path.name
+        if not name or not name[0].isalnum():
+            logger.debug(f"Skipping {path.name} (non-alphanumeric start)")
             continue
 
         # Skip excluded directories

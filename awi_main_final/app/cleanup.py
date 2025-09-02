@@ -43,7 +43,11 @@ def calculate_directory_size(directory: Path) -> int:
 
     for item in directory.rglob("*"):
         if item.is_file():
+            try:
             total_size += item.stat().st_size
+        except (OSError, FileNotFoundError):
+            # File may have been deleted or become inaccessible
+            continue
 
     return total_size
 
@@ -75,7 +79,7 @@ def cleanup_directory(directory: Path, dry_run: bool = False) -> tuple[bool, int
             return True, size_before
 
     except Exception as e:
-        logger.error(f"Failed to remove {directory}: {e}")
+        logger.error(f"Failed to remove %s: %s", directory, str(e).replace('\n', ' ').replace('\r', ''))
         return False, 0
 
 def cleanup_pycache_directories(start_path: Path, dry_run: bool = False) -> tuple[int, int]:
@@ -129,7 +133,7 @@ def cleanup_logs(logs_dir: Path, dry_run: bool = False) -> tuple[int, int]:
                 files_removed += 1
 
         except Exception as e:
-            logger.error(f"Failed to remove {log_file}: {e}")
+            logger.error(f"Failed to remove %s: %s", log_file, str(e).replace('\n', ' ').replace('\r', ''))
 
     return files_removed, total_size_freed
 
@@ -165,7 +169,7 @@ def cleanup_reports(reports_dir: Path, dry_run: bool = False) -> tuple[int, int]
                 files_removed += 1
 
         except Exception as e:
-            logger.error(f"Failed to remove {report_file}: {e}")
+            logger.error(f"Failed to remove %s: %s", report_file, str(e).replace('\n', ' ').replace('\r', ''))
 
     return files_removed, total_size_freed
 
