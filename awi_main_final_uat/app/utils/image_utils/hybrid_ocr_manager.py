@@ -119,6 +119,45 @@ class HybridOCRManager:
         except Exception as e:
             logger.error(f"Hybrid OCR processing failed: {e}")
             return []
+
+    def process_hybrid_with_image(self, image_path: Path, pil_image: Image.Image) -> List[HybridOCRResult]:
+        """
+        Process PIL Image with both OCR engines in parallel and combine results.
+        
+        Args:
+            image_path: Original path to image file (for reference)
+            pil_image: PIL Image object to process
+            
+        Returns:
+            List of HybridOCRResult objects with merged detections
+        """
+        try:
+            start_time = time.time()
+            
+            # Convert PIL Image to numpy array for processing
+            import numpy as np
+            image_array = np.array(pil_image)
+            
+            # Execute OCR engines in parallel
+            easyocr_results, tesseract_results = self.execute_ocr_parallel(image_array)
+            logger.debug(f"EasyOCR Results Count: {len(easyocr_results)}")
+            logger.debug(f"Tesseract Results Count: {len(tesseract_results)}")
+            
+            # Merge results to maximize text detection coverage
+            hybrid_results = self.merge_ocr_results(easyocr_results, tesseract_results)
+            logger.debug(f"Merged Results Count: {len(hybrid_results)}")
+            
+            processing_time = time.time() - start_time
+            
+            logger.info(f"Hybrid OCR processing with PIL image completed in {processing_time:.2f}s: "
+                       f"EasyOCR: {len(easyocr_results)}, Tesseract: {len(tesseract_results)}, "
+                       f"Merged: {len(hybrid_results)} unique detections")
+            
+            return hybrid_results
+            
+        except Exception as e:
+            logger.error(f"Hybrid OCR processing with PIL image failed: {e}")
+            return []
     
     def execute_ocr_parallel(self, image: Union[np.ndarray, Path]) -> Tuple[List[OCRResult], List[OCRResult]]:
         """

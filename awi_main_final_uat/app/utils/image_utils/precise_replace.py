@@ -162,12 +162,18 @@ class PreciseTextReplacer:
             # Clear the pattern area
             px, py, pw, ph = pattern_rect
             logger.info(f" REPLACE: Clearing pattern area: ({px}, {py}, {pw}, {ph})")
+            
+            # Detect text color from the original pattern area before wiping
+            detected_color = self._detect_text_color(cv_image, (px, py, pw, ph))
+            logger.info(f" REPLACE: Detected text color: RGB{detected_color}")
+            
             # Expose precise and reconstruction rectangles on match (wipe-only in replace path here)
             try:
                 setattr(match, 'precise_bbox', (px, py, pw, ph))
                 # For replace mode wipe-only, reconstruction bbox equals precise pattern rect
                 setattr(match, 'reconstruction_bbox', (px, py, pw, ph))
                 setattr(match, 'reconstruction_reasoning', 'Wipe-only replace: precise pattern rect used as reconstruction area')
+                setattr(match, 'detected_color', detected_color)
             except Exception:
                 pass
             
@@ -197,7 +203,7 @@ class PreciseTextReplacer:
             logger.info(f" REPLACE: Placing replacement text '{replacement_text}' at ({text_x}, {text_y}) with scale {scale:.2f}")
             
             # WIPE ONLY: Comment out replacement text drawing
-            # self._draw_text_with_bg(cv_image, replacement_text, (text_x, text_y), scale, thickness, font, padding=2)
+            # self._draw_text_with_bg(cv_image, replacement_text, (text_x, text_y), scale, thickness, font, padding=2, text_color=detected_color)
             logger.info(f" WIPE ONLY: Skipping replacement text drawing - only wiping pattern area")
             
             # Ensure prefix and suffix are preserved (redraw if necessary)
@@ -586,10 +592,74 @@ class PreciseTextReplacer:
             size = cv2.getTextSize(text, font, scale, thickness)[0]
         return max(scale, min_scale), size
 
+    def _detect_text_color(self, image: np.ndarray, bbox: Tuple[int, int, int, int]) -> Tuple[int, int, int]:
+        """
+        Detect the dominant text color in the given bounding box.
+        Returns RGB color tuple.
+        """
+        try:
+            x, y, w, h = bbox
+            # Ensure bbox is within image bounds
+            img_h, img_w = image.shape[:2]
+            x = max(0, min(x, img_w))
+            y = max(0, min(y, img_h))
+            w = max(1, min(w, img_w - x))
+            h = max(1, min(h, img_h - y))
+            
+            # Extract the region of interest
+            roi = image[y:y+h, x:x+w]
+            
+            # Convert to RGB if needed
+            if len(roi.shape) == 3 and roi.shape[2] == 3:
+                # BGR to RGB conversion
+                roi_rgb = cv2.cvtColor(roi, cv2.COLOR_BGR2RGB)
+            else:
+                roi_rgb = roi
+            
+            # Reshape to 1D array of pixels
+            pixels = roi_rgb.reshape(-1, 3)
+            
+            # Filter out white/light background pixels (assuming white background)
+            # Keep only darker pixels that are likely text
+            # Use a more lenient threshold to catch blue text
+            non_white_pixels = pixels[np.sum(pixels, axis=1) < 700]  # Increased threshold to catch blue text
+            
+            logger.debug(f"Color detection: Found {len(non_white_pixels)} non-white pixels out of {len(pixels)} total")
+            
+            if len(non_white_pixels) == 0:
+                # Fallback to black color if no dark pixels found
+                logger.debug("Color detection: No non-white pixels found, using black fallback")
+                return (0, 0, 0)  # Black color in RGB
+            
+            # Find the darkest color (minimum sum) instead of mean
+            pixel_sums = np.sum(non_white_pixels, axis=1)
+            darkest_idx = np.argmin(pixel_sums)
+            darkest_color = non_white_pixels[darkest_idx]
+            
+            # Convert to integer RGB values
+            r, g, b = int(darkest_color[0]), int(darkest_color[1]), int(darkest_color[2])
+            
+            logger.debug(f"Color detection: Darkest color RGB({r}, {g}, {b}), sum={r+g+b}")
+            
+            # Ensure we have a reasonable color (not too dark or too light)
+            if r + g + b < 50:  # Too dark - reduced threshold
+                logger.debug("Color detection: Color too dark, using black fallback")
+                return (0, 0, 0)  # Default black
+            elif r + g + b > 700:  # Too light - increased threshold
+                logger.debug("Color detection: Color too light, using black fallback")
+                return (0, 0, 0)  # Default black
+            
+            logger.debug(f"Detected text color: RGB({r}, {g}, {b})")
+            return (r, g, b)
+            
+        except Exception as e:
+            logger.warning(f"Color detection failed: {e}, using default black")
+            return (0, 0, 0)  # Default black color
+
     def _draw_text_with_bg(self, image: np.ndarray, text: str, origin: Tuple[int, int],
                             font_scale: float, thickness: int = 1,
                             font: int = cv2.FONT_HERSHEY_SIMPLEX,
-                            padding: int = 2) -> None:
+                            padding: int = 2, text_color: Tuple[int, int, int] = None) -> None:
         """
         Draw text with a white background rectangle behind it for readability.
         """
@@ -608,10 +678,17 @@ class PreciseTextReplacer:
         # Clear background
         cv2.rectangle(image, (tlx, tly), (brx, bry), (255, 255, 255), -1)
         
-        # Draw text with anti-aliasing
-        cv2.putText(image, text, (x0, y_baseline), font, font_scale, (0, 0, 0), thickness, cv2.LINE_AA)
+        # Use detected color or default to black
+        # Convert RGB to BGR for OpenCV
+        if text_color:
+            color = (text_color[2], text_color[1], text_color[0])  # RGB to BGR
+        else:
+            color = (0, 0, 0)  # Black in BGR
         
-        logger.debug(f" DRAW TEXT: '{text}' at ({x0}, {y_baseline}) with bg ({tlx}, {tly}) to ({brx}, {bry})")
+        # Draw text with anti-aliasing
+        cv2.putText(image, text, (x0, y_baseline), font, font_scale, color, thickness, cv2.LINE_AA)
+        
+        logger.debug(f" DRAW TEXT: '{text}' at ({x0}, {y_baseline}) with color {color} and bg ({tlx}, {tly}) to ({brx}, {bry})")
 
     def _generate_output_path(self, input_path: Path) -> Path:
         """Generate output path for processed image."""

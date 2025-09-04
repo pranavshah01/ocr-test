@@ -7,6 +7,7 @@ All processing logic remains line-by-line equivalent where possible.
 """
 
 import logging
+import os
 import time
 import uuid
 from typing import Dict, List, Any, Optional, Tuple
@@ -231,6 +232,7 @@ class ImageProcessor(BaseProcessor):
     # --- Below methods mirror UAT logic with minimal/no changes ---
     def _process_images(self, document: Document, **kwargs) -> List[EnhancedImageMatch]:
         logger.info("Starting 3-phase image processing...")
+        temp_dir = None
         try:
             logger.info("=== PHASE 1: EXTRACTION ===")
             extraction_results = self._phase1_extraction(document, **kwargs)
@@ -246,6 +248,11 @@ class ImageProcessor(BaseProcessor):
         except Exception as e:
             logger.error(f"Error in 3-phase image processing: {e}")
             return []
+        finally:
+            # Clean up temp directory after all processing is complete
+            if hasattr(self, '_current_temp_dir') and self._current_temp_dir and self._current_temp_dir.exists():
+                self._safe_cleanup_temp_directory(self._current_temp_dir)
+                self._current_temp_dir = None
 
     def _phase1_extraction(self, document: Document, **kwargs) -> List[Dict]:
         extraction_results: List[Dict[str, Any]] = []
@@ -255,6 +262,14 @@ class ImageProcessor(BaseProcessor):
                 try:
                     logger.debug(f"Extracting text from: {image_info['location']}")
                     ocr_results = self.ocr_manager.process_hybrid(image_info['temp_path'])
+                    
+                    # Check if initial OCR found text or if pattern matching on results works
+                    initial_matches = self._find_pattern_matches_in_ocr(ocr_results)
+                    
+                    if not initial_matches:
+                        logger.info(f"No initial matches in {image_info['location']}. Trying fallback OCR...")
+                        ocr_results = self._try_fallback_ocr(image_info['temp_path'])
+                    
                     ocr_comparison = {}
                     if hasattr(self.ocr_manager, 'get_comparison_data'):
                         ocr_comparison = self.ocr_manager.get_comparison_data()
@@ -293,10 +308,13 @@ class ImageProcessor(BaseProcessor):
                                 if not replacement_text:
                                     replacement_text = self.default_mapping
                                 font_info = getattr(ocr_result, 'font_info', {})
-                                # Format bounding box as dimension string
+                                # Format bounding box as dimension string with orientation
                                 bbox = ocr_result.bounding_box
+                                rotation_angle = getattr(ocr_result, 'rotation_angle', 0)
                                 if isinstance(bbox, (list, tuple)) and len(bbox) >= 4:
                                     dimension_str = f"({bbox[0]},{bbox[1]})-({bbox[0]+bbox[2]},{bbox[1]+bbox[3]})"
+                                    if rotation_angle and rotation_angle not in [0, 360]:
+                                        dimension_str += f" (orientation: {rotation_angle}°)"
                                 else:
                                     dimension_str = ""
                                 
@@ -317,10 +335,13 @@ class ImageProcessor(BaseProcessor):
                                 if not replacement_text:
                                     continue
                                 font_info = getattr(ocr_result, 'font_info', {})
-                                # Format bounding box as dimension string
+                                # Format bounding box as dimension string with orientation
                                 bbox = ocr_result.bounding_box
+                                rotation_angle = getattr(ocr_result, 'rotation_angle', 0)
                                 if isinstance(bbox, (list, tuple)) and len(bbox) >= 4:
                                     dimension_str = f"({bbox[0]},{bbox[1]})-({bbox[0]+bbox[2]},{bbox[1]+bbox[3]})"
+                                    if rotation_angle and rotation_angle not in [0, 360]:
+                                        dimension_str += f" (orientation: {rotation_angle}°)"
                                 else:
                                     dimension_str = ""
                                 
@@ -335,9 +356,11 @@ class ImageProcessor(BaseProcessor):
                                 matches.append(ocr_match)
                     except Exception as e:
                         logger.error(f"Error in pattern matching for text '{ocr_result.text}': {e}")
+                
+                # Apply wipes with proper rotation handling
                 wiped_image_path = None
                 if matches:
-                    wiped_image_path = self._apply_wipes_to_image(image_info['temp_path'], matches)
+                    wiped_image_path = self._apply_wipes_with_rotation(image_info['temp_path'], matches)
                 wipe_results.append({'image_info': image_info, 'matches': matches, 'wiped_image_path': wiped_image_path})
                 logger.debug(f"Match & wipe completed for {image_info['location']}: {len(matches)} matches, wiped: {wiped_image_path is not None}")
             except Exception as e:
@@ -359,21 +382,8 @@ class ImageProcessor(BaseProcessor):
                 logger.debug(f"Reconstructing: {image_info['location']}")
                 if wiped_image_path and matches:
                     try:
-                        ocr_results_for_image = []
-                        for m in matches:
-                            if hasattr(m, 'ocr_result') and m.ocr_result:
-                                ocr_results_for_image.append(m.ocr_result)
-                            else:
-                                ocr_results_for_image.append(OCRResult(text=m.original_text, confidence=getattr(m, 'confidence', 0.0), bounding_box=getattr(m, 'bounding_box', (0, 0, 0, 0))))
-                        # Choose replacer based on OCR mode
-                        if str(self.mode).lower() in ["append", "append-image"]:
-                            reconstructed_path = self._append_replacer_for_reconstruction.replace_text_in_image(
-                                Path(wiped_image_path), ocr_results_for_image, matches
-                            )
-                        else:
-                            reconstructed_path = self.text_replacer.replace_text_in_image(
-                                Path(wiped_image_path), ocr_results_for_image, matches
-                            )
+                        # Apply reconstruction with proper rotation handling
+                        reconstructed_path = self._apply_reconstruction_with_rotation(wiped_image_path, matches)
                         image_to_insert = reconstructed_path or wiped_image_path
                     except Exception as e:
                         logger.error(f"Error in reconstruction for {image_info['location']}: {e}")
@@ -395,21 +405,47 @@ class ImageProcessor(BaseProcessor):
         logger.info(f"Reconstruction phase completed: {len(final_matches)} total matches")
         return final_matches
 
-    def _apply_wipes_to_image(self, image_path: Path, matches: List[EnhancedImageMatch]) -> Optional[Path]:
+    def _apply_wipes_with_rotation(self, image_path: Path, matches: List[EnhancedImageMatch]) -> Optional[Path]:
+        """Apply wipes with proper rotation handling, following the working version's approach."""
         try:
-            image = Image.open(image_path)
+            from PIL import Image as PILImage
+            img = PILImage.open(image_path).convert('RGB')
+            
+            # Group actions by rotation angle to apply in aligned orientation
+            actions_by_angle: Dict[int, List[EnhancedImageMatch]] = {}
             for match in matches:
-                try:
-                    image = self._apply_single_wipe(image, match)
-                except Exception as e:
-                    logger.error(f"Failed to apply wipe for match '{match.original_text}': {e}")
+                rotation_angle = getattr(match.ocr_result, 'rotation_angle', 0) if hasattr(match, 'ocr_result') and match.ocr_result else 0
+                angle = int(rotation_angle) % 360
+                actions_by_angle.setdefault(angle, []).append(match)
+
+            # Apply wipes for each rotation angle
+            for angle, angle_matches in actions_by_angle.items():
+                if angle:
+                    rotate_before = (360 - angle) % 360
+                    img = img.rotate(rotate_before, expand=True)
+                    logger.debug(f"Rotated image by {rotate_before}° for wiping at angle {angle}°")
+                
+                for match in angle_matches:
+                    try:
+                        img = self._apply_single_wipe_no_rotation(img, match)
+                    except Exception as e:
+                        logger.error(f"Failed to apply wipe for match '{match.original_text}': {e}")
+                
+                if angle:
+                    img = img.rotate(angle, expand=True)
+                    logger.debug(f"Rotated image back by {angle}° after wiping")
+
             output_path = self._generate_output_path(image_path)
-            image.save(output_path)
-            logger.debug(f"Wipe application completed: {output_path}")
+            img.save(output_path)
+            logger.debug(f"Wipe application with rotation completed: {output_path}")
             return output_path
         except Exception as e:
-            logger.error(f"Failed to apply wipes to image {image_path}: {e}")
+            logger.error(f"Failed to apply wipes with rotation to image {image_path}: {e}")
             return None
+
+    def _apply_wipes_to_image(self, image_path: Path, matches: List[EnhancedImageMatch]) -> Optional[Path]:
+        """Legacy method - now redirects to rotation-aware version."""
+        return self._apply_wipes_with_rotation(image_path, matches)
 
     def _calculate_reconstruction_reasoning(self, image: Image.Image, match: EnhancedImageMatch) -> Dict[str, Any]:
         try:
@@ -464,10 +500,12 @@ class ImageProcessor(BaseProcessor):
                 'reconstruction_dimensions': {'width': 100, 'height': 50}
             }
 
-    def _apply_single_wipe(self, image: Image.Image, match: EnhancedImageMatch) -> Image.Image:
+    def _apply_single_wipe_no_rotation(self, image: Image.Image, match: EnhancedImageMatch) -> Image.Image:
+        """Apply wipe without rotation handling (image is already in correct orientation)."""
         try:
             reasoning = self._calculate_reconstruction_reasoning(image, match)
             bbox = getattr(match, 'bounding_box', (0, 0, 0, 0))
+            
             original_full_text = match.original_text
             pattern_matches = self.pattern_matcher.find_matches_universal(original_full_text)
             if not pattern_matches:
@@ -487,6 +525,7 @@ class ImageProcessor(BaseProcessor):
             if not target_match:
                 logger.warning(f"Could not find target match for replacement: '{match.replacement_text}'")
                 return image
+            
             import numpy as np
             import cv2
             cv_image = np.array(image.convert('RGB'))
@@ -500,18 +539,103 @@ class ImageProcessor(BaseProcessor):
                     cv2.rectangle(cv_image, (int(x1), int(y1)), (int(x2), int(y2)), (255, 255, 255), -1)
             cv_image_rgb = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
             wiped_image = Image.fromarray(cv_image_rgb)
+            
             match.reconstruction_reasoning = reasoning
-            logger.debug(f"Applied wipe for '{original_full_text}'")
+            logger.debug(f"Applied wipe for '{original_full_text}' (no rotation)")
             return wiped_image
         except Exception as e:
             logger.error(f"Failed to apply single wipe: {e}")
             return image
+
+    def _apply_single_wipe(self, image: Image.Image, match: EnhancedImageMatch) -> Image.Image:
+        """Legacy method - now redirects to no-rotation version since rotation is handled at higher level."""
+        return self._apply_single_wipe_no_rotation(image, match)
+
+    def _apply_reconstruction_with_rotation(self, wiped_image_path: Path, matches: List[EnhancedImageMatch]) -> Optional[Path]:
+        """Apply reconstruction with proper rotation handling, following the working version's approach."""
+        try:
+            from PIL import Image as PILImage
+            img = PILImage.open(wiped_image_path).convert('RGB')
+            
+            # Group matches by rotation angle to apply in aligned orientation
+            matches_by_angle: Dict[int, List[EnhancedImageMatch]] = {}
+            for match in matches:
+                rotation_angle = getattr(match.ocr_result, 'rotation_angle', 0) if hasattr(match, 'ocr_result') and match.ocr_result else 0
+                angle = int(rotation_angle) % 360
+                matches_by_angle.setdefault(angle, []).append(match)
+
+            # Apply reconstruction for each rotation angle
+            for angle, angle_matches in matches_by_angle.items():
+                if angle:
+                    rotate_before = (360 - angle) % 360
+                    img = img.rotate(rotate_before, expand=True)
+                    logger.debug(f"Rotated image by {rotate_before}° for reconstruction at angle {angle}°")
+                
+                # Apply reconstruction using the existing precise replacers
+                try:
+                    ocr_results_for_image = []
+                    for m in angle_matches:
+                        if hasattr(m, 'ocr_result') and m.ocr_result:
+                            ocr_results_for_image.append(m.ocr_result)
+                        else:
+                            ocr_results_for_image.append(OCRResult(text=m.original_text, confidence=getattr(m, 'confidence', 0.0), bounding_box=getattr(m, 'bounding_box', (0, 0, 0, 0))))
+                    
+                    # Choose replacer based on OCR mode
+                    if str(self.mode).lower() in ["append", "append-image"]:
+                        # For append mode, we need to create a temporary image and use the replacer
+                        temp_path = wiped_image_path.parent / f"temp_recon_{wiped_image_path.name}"
+                        try:
+                            # Ensure proper file closure
+                            with open(temp_path, 'wb') as temp_file:
+                                img.save(temp_file, format='PNG')
+                            
+                            reconstructed_path = self._append_replacer_for_reconstruction.replace_text_in_image(
+                                temp_path, ocr_results_for_image, angle_matches
+                            )
+                            if reconstructed_path and reconstructed_path.exists():
+                                img = PILImage.open(reconstructed_path).convert('RGB')
+                        finally:
+                            # Robust cleanup with Windows-specific handling
+                            self._safe_cleanup_temp_file(temp_path)
+                    else:
+                        # For replace mode, use the text replacer
+                        temp_path = wiped_image_path.parent / f"temp_recon_{wiped_image_path.name}"
+                        try:
+                            # Ensure proper file closure
+                            with open(temp_path, 'wb') as temp_file:
+                                img.save(temp_file, format='PNG')
+                            
+                            reconstructed_path = self.text_replacer.replace_text_in_image(
+                                temp_path, ocr_results_for_image, angle_matches
+                            )
+                            if reconstructed_path and reconstructed_path.exists():
+                                img = PILImage.open(reconstructed_path).convert('RGB')
+                        finally:
+                            # Robust cleanup with Windows-specific handling
+                            self._safe_cleanup_temp_file(temp_path)
+                except Exception as e:
+                    logger.error(f"Error in reconstruction for angle {angle}: {e}")
+                
+                if angle:
+                    img = img.rotate(angle, expand=True)
+                    logger.debug(f"Rotated image back by {angle}° after reconstruction")
+
+            # Save the final reconstructed image
+            output_path = self._generate_output_path(wiped_image_path)
+            img.save(output_path)
+            logger.debug(f"Reconstruction with rotation completed: {output_path}")
+            return output_path
+        except Exception as e:
+            logger.error(f"Failed to apply reconstruction with rotation to image {wiped_image_path}: {e}")
+            return None
 
     def _extract_images_with_mapping(self, document: Document, **kwargs) -> List[Dict]:
         image_info_list: List[Dict[str, Any]] = []
         try:
             temp_dir = PathManager.get_temp_directory() / f"enhanced_docx_images_{uuid.uuid4().hex[:8]}"
             PathManager.ensure_directory(temp_dir)
+            # Store temp directory reference for cleanup at the end of processing
+            self._current_temp_dir = temp_dir
             for i, rel in enumerate(document.part.rels.values()):
                 if "image" in rel.target_ref:
                     try:
@@ -534,21 +658,33 @@ class ImageProcessor(BaseProcessor):
                             media_name = f"image_{i}{ext}"
                         image_filename = media_name
                         temp_image_path = temp_dir / image_filename
-                        with open(temp_image_path, 'wb') as f:
-                            f.write(image_data)
-                        image_info = {
-                            'temp_path': temp_image_path,
-                            'original_rel': rel,
-                            'location': media_name,
-                            'content_type': content_type
-                        }
-                        image_info_list.append(image_info)
-                        logger.debug(f"Extracted image: {temp_image_path}")
+                        
+                        # Ensure proper file closure and handle Windows file locking
+                        try:
+                            with open(temp_image_path, 'wb') as f:
+                                f.write(image_data)
+                                f.flush()  # Ensure data is written to disk
+                                os.fsync(f.fileno())  # Force OS to write to disk
+                            
+                            image_info = {
+                                'temp_path': temp_image_path,
+                                'original_rel': rel,
+                                'location': media_name,
+                                'content_type': content_type
+                            }
+                            image_info_list.append(image_info)
+                            logger.debug(f"Extracted image: {temp_image_path}")
+                        except Exception as e:
+                            logger.error(f"Failed to write image data to {temp_image_path}: {e}")
+                            # Clean up partial file if it exists
+                            if temp_image_path.exists():
+                                self._safe_cleanup_temp_file(temp_image_path)
                     except Exception as e:
                         logger.error(f"Failed to extract image from {rel.target_ref}: {e}")
             logger.debug(f"Extracted {len(image_info_list)} images from document")
         except Exception as e:
             logger.error(f"Error extracting images from document: {e}")
+        # Note: temp directory cleanup is handled at the end of _process_images method
         return image_info_list
 
     def _store_ocr_comparison_data(self, location: str, image_path: Path, ocr_comparison: Dict[str, List[OCRResult]]):
@@ -615,3 +751,196 @@ class ImageProcessor(BaseProcessor):
         except Exception as e:
             logger.error(f"Failed to generate output path: {e}")
             return input_path
+
+    def _find_pattern_matches_in_ocr(self, ocr_results: List[OCRResult]) -> List[tuple]:
+        """Finds all pattern matches within a list of OCR results."""
+        all_matches = []
+        for result in ocr_results:
+            text = result.text.strip()
+            if not text:
+                continue
+            
+            if self.mode in ["append", "append-image"]:
+                pattern_matches = self.pattern_matcher.find_all_pattern_matches(text)
+            else:
+                universal_matches = self.pattern_matcher.find_matches_universal(text)
+                pattern_matches = [(um.pattern_name, um.matched_text, um.start_pos, um.end_pos) for um in universal_matches]
+            
+            for pm in pattern_matches:
+                pattern_name, matched_text, start, end = pm
+                # Preserve character indices for bounding-box refinement later
+                all_matches.append((pattern_name, matched_text, start, end, result))
+        return all_matches
+
+    def _run_ocr_with_osd_rotation(self, image_path: Path) -> List[OCRResult]:
+        """Efficiently corrects orientation using Tesseract OSD and runs OCR."""
+        logger.info(f"Attempting Tesseract OSD orientation correction for {image_path.name}")
+        try:
+            import pytesseract
+            import re
+            with Image.open(image_path) as img:
+                # Heuristic: skip OSD on very small images where OSD is unreliable
+                width, height = img.size
+                if (width * height) < 200_000:  # ~< 447x447
+                    logger.debug(f"OSD skipped (image too small): {width}x{height}")
+                    return []
+
+                # Use OSD mode explicitly
+                try:
+                    osd_data = pytesseract.image_to_osd(img, config='--psm 0')
+                except Exception as e:
+                    msg = str(e)
+                    # Downgrade common benign messages to debug
+                    if 'Too few characters' in msg or 'Invalid resolution' in msg:
+                        logger.debug(f"OSD fallback benign skip: {msg}")
+                        return []
+                    raise
+                angle_match = re.search(r'(?<=Rotate: )\d+', osd_data)
+                angle = int(angle_match.group(0)) if angle_match else 0
+
+                if angle not in [0, 360]:
+                    logger.info(f"  OSD detected {angle}° rotation. Correcting image...")
+                    corrected_img = img.rotate(360 - angle, expand=True)
+                    results = self.ocr_manager.process_hybrid_with_image(image_path, corrected_img)
+                    for res in results:
+                        setattr(res, 'rotation_angle', angle) # Tag result with rotation info
+                    return results
+                else:
+                    logger.info("  OSD found no rotation needed.")
+                    return []
+        except ImportError:
+            logger.warning("Pytesseract is not installed; cannot perform OSD fallback.")
+            return []
+        except Exception as e:
+            # Non-fatal: OSD fallback can legitimately fail on low-text/low-DPI images
+            logger.warning(f"OSD fallback skipped: {e}")
+            return []
+
+    def _safe_cleanup_temp_file(self, temp_path: Path) -> None:
+        """
+        Safely clean up temporary files with Windows-specific handling.
+        Handles file locking issues and permission problems.
+        """
+        if not temp_path or not temp_path.exists():
+            return
+        
+        try:
+            # Windows-specific: Force garbage collection to release file handles
+            import gc
+            gc.collect()
+            
+            # Try multiple cleanup strategies
+            max_attempts = 3
+            for attempt in range(max_attempts):
+                try:
+                    # Standard deletion
+                    temp_path.unlink()
+                    logger.debug(f"Successfully cleaned up temp file: {temp_path.name}")
+                    return
+                except PermissionError as e:
+                    if attempt < max_attempts - 1:
+                        # Wait a bit and try again (Windows file locking)
+                        import time
+                        time.sleep(0.1)
+                        logger.debug(f"Permission error on attempt {attempt + 1}, retrying: {e}")
+                        continue
+                    else:
+                        logger.warning(f"Could not delete temp file after {max_attempts} attempts: {e}")
+                        # Try to mark for deletion on Windows
+                        try:
+                            import os
+                            os.remove(str(temp_path))
+                        except:
+                            pass
+                except FileNotFoundError:
+                    # File already deleted, that's fine
+                    logger.debug(f"Temp file already deleted: {temp_path.name}")
+                    return
+                except Exception as e:
+                    logger.warning(f"Unexpected error cleaning up temp file {temp_path.name}: {e}")
+                    return
+                    
+        except Exception as e:
+            logger.error(f"Failed to clean up temp file {temp_path.name}: {e}")
+
+    def _safe_cleanup_temp_directory(self, temp_dir: Path) -> None:
+        """
+        Safely clean up temporary directories with Windows-specific handling.
+        Handles file locking issues and permission problems.
+        """
+        if not temp_dir or not temp_dir.exists():
+            return
+        
+        try:
+            # Windows-specific: Force garbage collection to release file handles
+            import gc
+            gc.collect()
+            
+            # Try multiple cleanup strategies
+            max_attempts = 3
+            for attempt in range(max_attempts):
+                try:
+                    # Standard deletion
+                    import shutil
+                    shutil.rmtree(temp_dir)
+                    logger.debug(f"Successfully cleaned up temp directory: {temp_dir}")
+                    return
+                except PermissionError as e:
+                    if attempt < max_attempts - 1:
+                        # Wait a bit and try again (Windows file locking)
+                        import time
+                        time.sleep(0.2)
+                        logger.debug(f"Permission error on attempt {attempt + 1}, retrying: {e}")
+                        continue
+                    else:
+                        logger.warning(f"Could not delete temp directory after {max_attempts} attempts: {e}")
+                        # Try to remove individual files first
+                        try:
+                            for root, dirs, files in os.walk(temp_dir, topdown=False):
+                                for file in files:
+                                    try:
+                                        os.remove(os.path.join(root, file))
+                                    except:
+                                        pass
+                                for dir in dirs:
+                                    try:
+                                        os.rmdir(os.path.join(root, dir))
+                                    except:
+                                        pass
+                            os.rmdir(temp_dir)
+                        except:
+                            pass
+                except FileNotFoundError:
+                    # Directory already deleted, that's fine
+                    logger.debug(f"Temp directory already deleted: {temp_dir}")
+                    return
+                except Exception as e:
+                    logger.warning(f"Unexpected error cleaning up temp directory {temp_dir}: {e}")
+                    return
+                    
+        except Exception as e:
+            logger.error(f"Failed to clean up temp directory {temp_dir}: {e}")
+
+    def _try_fallback_ocr(self, image_path: Path) -> List[OCRResult]:
+        """Tries various fallback methods if initial OCR fails."""
+        # Fallback 1: Tesseract OSD (most efficient for rotation)
+        osd_results = self._run_ocr_with_osd_rotation(image_path)
+        if osd_results:
+            return osd_results
+
+        # Fallback 2: Image enhancement (sharpen, contrast)
+        try:
+            logger.info("Trying fallback with image enhancement...")
+            with Image.open(image_path) as img:
+                from PIL import ImageEnhance, ImageFilter
+                enhanced_img = img.filter(ImageFilter.SHARPEN)
+                enhancer = ImageEnhance.Contrast(enhanced_img)
+                enhanced_img = enhancer.enhance(1.5)
+                enhanced_results = self.ocr_manager.process_hybrid_with_image(image_path, enhanced_img)
+                if enhanced_results:
+                    return enhanced_results
+        except Exception as e:
+            logger.warning(f"Image enhancement fallback failed: {e}")
+
+        logger.warning(f"All fallback OCR methods failed for {image_path.name}")
+        return []

@@ -107,6 +107,10 @@ class PreciseAppendReplacer:
             x, y, width, height = bbox
             logger.info(f" OPENCV REPLACE: Replacing '{original_text}' with '{new_text}' at bbox {bbox}")
 
+            # Detect text color from original image before wiping
+            detected_color = self._detect_text_color(cv_image, bbox)
+            logger.info(f" OPENCV REPLACE: Detected text color: RGB{detected_color}")
+
             # Wipe original text area
             cv2.rectangle(cv_image, (x, y), (x + width, y + height), (255, 255, 255), -1)
 
@@ -133,9 +137,11 @@ class PreciseAppendReplacer:
             text_x = max(0, min(text_x, img_w - text_width))
             text_y = max(text_height, min(text_y, img_h))
 
-            cv2.putText(cv_image, new_text, (text_x, text_y), font, font_scale, (0, 0, 0), thickness, cv2.LINE_AA)
+            # Convert RGB to BGR for OpenCV and use detected color for text rendering
+            bgr_color = (detected_color[2], detected_color[1], detected_color[0])  # RGB to BGR
+            cv2.putText(cv_image, new_text, (text_x, text_y), font, font_scale, bgr_color, thickness, cv2.LINE_AA)
 
-            logger.info(f" OPENCV REPLACE: Successfully placed text at ({text_x}, {text_y}), font_scale={font_scale}")
+            logger.info(f" OPENCV REPLACE: Successfully placed text at ({text_x}, {text_y}), font_scale={font_scale}, color={detected_color}")
             return cv_image
         except Exception as e:
             logger.error(f" OPENCV REPLACE: Error in OpenCV replacement: {e}")
@@ -152,10 +158,74 @@ class PreciseAppendReplacer:
             size = cv2.getTextSize(text, font, scale, thickness)[0]
         return max(scale, min_scale), size
 
+    def _detect_text_color(self, image: np.ndarray, bbox: Tuple[int, int, int, int]) -> Tuple[int, int, int]:
+        """
+        Detect the dominant text color in the given bounding box.
+        Returns RGB color tuple.
+        """
+        try:
+            x, y, w, h = bbox
+            # Ensure bbox is within image bounds
+            img_h, img_w = image.shape[:2]
+            x = max(0, min(x, img_w))
+            y = max(0, min(y, img_h))
+            w = max(1, min(w, img_w - x))
+            h = max(1, min(h, img_h - y))
+            
+            # Extract the region of interest
+            roi = image[y:y+h, x:x+w]
+            
+            # Convert to RGB if needed
+            if len(roi.shape) == 3 and roi.shape[2] == 3:
+                # BGR to RGB conversion
+                roi_rgb = cv2.cvtColor(roi, cv2.COLOR_BGR2RGB)
+            else:
+                roi_rgb = roi
+            
+            # Reshape to 1D array of pixels
+            pixels = roi_rgb.reshape(-1, 3)
+            
+            # Filter out white/light background pixels (assuming white background)
+            # Keep only darker pixels that are likely text
+            # Use a more lenient threshold to catch blue text
+            non_white_pixels = pixels[np.sum(pixels, axis=1) < 700]  # Increased threshold to catch blue text
+            
+            logger.debug(f"Color detection: Found {len(non_white_pixels)} non-white pixels out of {len(pixels)} total")
+            
+            if len(non_white_pixels) == 0:
+                # Fallback to black color if no dark pixels found
+                logger.debug("Color detection: No non-white pixels found, using black fallback")
+                return (0, 0, 0)  # Black color in RGB
+            
+            # Find the darkest color (minimum sum) instead of mean
+            pixel_sums = np.sum(non_white_pixels, axis=1)
+            darkest_idx = np.argmin(pixel_sums)
+            darkest_color = non_white_pixels[darkest_idx]
+            
+            # Convert to integer RGB values
+            r, g, b = int(darkest_color[0]), int(darkest_color[1]), int(darkest_color[2])
+            
+            logger.debug(f"Color detection: Darkest color RGB({r}, {g}, {b}), sum={r+g+b}")
+            
+            # Ensure we have a reasonable color (not too dark or too light)
+            if r + g + b < 50:  # Too dark - reduced threshold
+                logger.debug("Color detection: Color too dark, using black fallback")
+                return (0, 0, 0)  # Default black
+            elif r + g + b > 700:  # Too light - increased threshold
+                logger.debug("Color detection: Color too light, using black fallback")
+                return (0, 0, 0)  # Default black
+            
+            logger.debug(f"Detected text color: RGB({r}, {g}, {b})")
+            return (r, g, b)
+            
+        except Exception as e:
+            logger.warning(f"Color detection failed: {e}, using default black")
+            return (0, 0, 0)  # Default black color
+
     def _draw_text_with_bg(self, image: np.ndarray, text: str, origin: Tuple[int, int],
                             font_scale: float, thickness: int = 1,
                             font: int = cv2.FONT_HERSHEY_SIMPLEX,
-                            padding: int = 2) -> None:
+                            padding: int = 2, text_color: Tuple[int, int, int] = None) -> None:
         """
         Draw text with a white background rectangle behind it for readability.
         ENHANCED: More aggressive background clearing to prevent ghosting.
@@ -181,16 +251,28 @@ class PreciseAppendReplacer:
         # Second pass: exact area
         cv2.rectangle(image, (tlx, tly), (brx, bry), (255, 255, 255), -1)
         
-        # Draw text with enhanced anti-aliasing
-        cv2.putText(image, text, (x0, y_baseline), font, font_scale, (0, 0, 0), thickness, cv2.LINE_AA)
+        # Use detected color or default to black
+        # Convert RGB to BGR for OpenCV
+        if text_color:
+            color = (text_color[2], text_color[1], text_color[0])  # RGB to BGR
+        else:
+            color = (0, 0, 0)  # Black in BGR
         
-        logger.debug(f" DRAW TEXT: '{text}' at ({x0}, {y_baseline}) with bg ({tlx}, {tly}) to ({brx}, {bry})")
+        # Draw text with enhanced anti-aliasing
+        cv2.putText(image, text, (x0, y_baseline), font, font_scale, color, thickness, cv2.LINE_AA)
+        
+        logger.debug(f" DRAW TEXT: '{text}' at ({x0}, {y_baseline}) with color {color} and bg ({tlx}, {tly}) to ({brx}, {bry})")
 
     def _draw_text_plain(self, image: np.ndarray, text: str, origin: Tuple[int, int],
                          font_scale: float, thickness: int = 1,
-                         font: int = cv2.FONT_HERSHEY_SIMPLEX) -> None:
+                         font: int = cv2.FONT_HERSHEY_SIMPLEX, text_color: Tuple[int, int, int] = None) -> None:
         """Draw text without any background rectangle (used after area is wiped)."""
-        cv2.putText(image, text, origin, font, font_scale, (0, 0, 0), thickness, cv2.LINE_AA)
+        # Convert RGB to BGR for OpenCV
+        if text_color:
+            color = (text_color[2], text_color[1], text_color[0])  # RGB to BGR
+        else:
+            color = (0, 0, 0)  # Black in BGR
+        cv2.putText(image, text, origin, font, font_scale, color, thickness, cv2.LINE_AA)
 
     def _draw_appended_text(self, cv_image: np.ndarray, bbox: Tuple[int, int, int, int],
                             original_full_text: str, matched_pattern: str, replacement_text: str,
@@ -206,6 +288,16 @@ class PreciseAppendReplacer:
         try:
             x, y, width, height = bbox
             img_h, img_w = cv_image.shape[:2]
+
+            # Detect text color from the original image before any processing
+            detected_color = self._detect_text_color(cv_image, bbox)
+            logger.info(f" DRAW APPENDED: Detected text color: RGB{detected_color} for bbox {bbox}")
+            
+            # Debug: Log some pixel values from the bbox area
+            x, y, w, h = bbox
+            if x < cv_image.shape[1] and y < cv_image.shape[0]:
+                sample_pixels = cv_image[y:y+min(5,h), x:x+min(5,w)]
+                logger.info(f" DRAW APPENDED: Sample pixels from bbox: {sample_pixels.flatten()[:10]}")
 
             font = cv2.FONT_HERSHEY_SIMPLEX
             thickness = 1
@@ -272,11 +364,11 @@ class PreciseAppendReplacer:
                     })
                 except Exception:
                     pass
-                placed = self._place_two_tokens_in_rect(cv_image, expanded_rect, token_77, token_4022, prefer_vertical=prefer_vertical_choice, anchor_limit_rect=bbox)
+                placed, font_scale = self._place_two_tokens_in_rect(cv_image, expanded_rect, token_77, token_4022, prefer_vertical=prefer_vertical_choice, anchor_limit_rect=bbox, text_color=detected_color)
                 if not placed:
                     joined = f"{token_77} {token_4022}".strip()
-                    self._place_single_text_in_rect(cv_image, expanded_rect, joined)
-                # Mark reconstructed
+                    font_scale = self._place_single_text_in_rect(cv_image, expanded_rect, joined, text_color=detected_color)
+                 # Mark reconstructed
                 try:
                     setattr(match, 'reconstructed', True)
                 except Exception:
@@ -341,11 +433,11 @@ class PreciseAppendReplacer:
                 })
             except Exception:
                 pass
-            placed = self._place_two_tokens_in_rect(cv_image, expanded_precise_rect, token_77, token_4022, prefer_vertical=False, anchor_limit_rect=bbox)
+            placed, font_scale = self._place_two_tokens_in_rect(cv_image, expanded_precise_rect, token_77, token_4022, prefer_vertical=False, anchor_limit_rect=bbox, text_color=detected_color)
             if not placed:
                 logger.warning(f" PRECISE APPEND: Two-token placement failed, trying single text fallback")
                 joined = f"{token_77} {token_4022}".strip()
-                self._place_single_text_in_rect(cv_image, expanded_precise_rect, joined)
+                font_scale = self._place_single_text_in_rect(cv_image, expanded_precise_rect, joined, text_color=detected_color)
             try:
                 setattr(match, 'reconstructed', True)
             except Exception:
@@ -356,7 +448,7 @@ class PreciseAppendReplacer:
             # PRESERVE SUFFIX: Always redraw suffix to ensure it's visible
             if suffix_text.strip():
                 logger.info(f" PRECISE APPEND: Redrawing suffix '{suffix_text}' to ensure preservation")
-                self._redraw_suffix_if_needed(cv_image, (x, y, width, height), suffix_text, wipe_end_pos, original_full_text)
+                self._redraw_suffix_if_needed(cv_image, (x, y, width, height), suffix_text, wipe_end_pos, original_full_text, main_font_scale=font_scale)
             else:
                 logger.info(f" PRECISE APPEND: No suffix to preserve")
             
@@ -450,10 +542,11 @@ class PreciseAppendReplacer:
             return None
     
     def _redraw_suffix_if_needed(self, cv_image: np.ndarray, bbox: Tuple[int, int, int, int], 
-                               suffix_text: str, suffix_start_pos: int, full_text: str) -> None:
+                               suffix_text: str, suffix_start_pos: int, full_text: str, 
+                               main_font_scale: float = None) -> None:
         """
         Redraw suffix text if it was accidentally wiped.
-        ENHANCED: More robust suffix preservation.
+        ENHANCED: More robust suffix preservation with color detection.
         """
         try:
             if not suffix_text.strip():
@@ -462,6 +555,10 @@ class PreciseAppendReplacer:
                 
             x, y, width, height = bbox
             
+            # Detect text color from the original bbox area
+            detected_color = self._detect_text_color(cv_image, bbox)
+            logger.info(f" SUFFIX REDRAW: Detected text color: RGB{detected_color}")
+            
             # Calculate suffix position more precisely
             char_width = width / len(full_text) if len(full_text) > 0 else 10
             suffix_x = x + int(suffix_start_pos * char_width)
@@ -469,9 +566,15 @@ class PreciseAppendReplacer:
             # Position suffix at the original text baseline
             suffix_y = y + int(height * 0.7)  # Approximate baseline position
             
-            # Use appropriate font size based on original text height
+            # Use the same font scale as the main pattern for consistency
             font = cv2.FONT_HERSHEY_SIMPLEX
-            font_scale = max(0.5, min(1.0, height / 25.0))  # Scale based on text height
+            if main_font_scale is not None:
+                font_scale = main_font_scale
+                logger.info(f" SUFFIX REDRAW: Using main pattern font scale: {font_scale}")
+            else:
+                # Fallback to calculated scale if main scale not provided
+                font_scale = max(0.5, min(1.0, height / 25.0))
+                logger.info(f" SUFFIX REDRAW: Using fallback font scale: {font_scale}")
             thickness = 1
             
             # Ensure suffix doesn't go outside image bounds
@@ -479,12 +582,12 @@ class PreciseAppendReplacer:
             suffix_x = max(0, min(suffix_x, img_w - 50))  # Leave some margin
             suffix_y = max(15, min(suffix_y, img_h - 5))
             
-            logger.info(f" SUFFIX REDRAW: Drawing '{suffix_text}' at ({suffix_x}, {suffix_y}) with scale {font_scale}")
+            logger.info(f" SUFFIX REDRAW: Drawing '{suffix_text}' at ({suffix_x}, {suffix_y}) with scale {font_scale} and color {detected_color}")
             
-            # Draw suffix with enhanced background clearing
-            self._draw_text_with_bg(cv_image, suffix_text, (suffix_x, suffix_y), font_scale, thickness, font, padding=3)
+            # Draw suffix with enhanced background clearing and detected color
+            self._draw_text_with_bg(cv_image, suffix_text, (suffix_x, suffix_y), font_scale, thickness, font, padding=3, text_color=detected_color)
             
-            logger.info(f" SUFFIX REDRAW: Successfully drew suffix '{suffix_text}'")
+            logger.info(f" SUFFIX REDRAW: Successfully drew suffix '{suffix_text}' with color {detected_color}")
             
         except Exception as e:
             logger.error(f"Failed to redraw suffix: {e}")
@@ -904,7 +1007,7 @@ class PreciseAppendReplacer:
         except Exception:
             return None
 
-    def _place_single_text_in_rect(self, image: np.ndarray, rect: Tuple[int, int, int, int], text: str) -> None:
+    def _place_single_text_in_rect(self, image: np.ndarray, rect: Tuple[int, int, int, int], text: str, text_color: Tuple[int, int, int] = None) -> float:
         """
         Place single text in rectangle with enhanced clearing and positioning.
         ENHANCED: Better font scaling and positioning for single text fallback.
@@ -929,9 +1032,11 @@ class PreciseAppendReplacer:
         logger.info(f" SINGLE TEXT: Positioned at ({tx}, {ty}) with scale {scale:.2f}")
         
         # Draw with enhanced background clearing
-        self._draw_text_with_bg(image, text, (tx, ty), scale, thickness, font, padding=4)
+        self._draw_text_with_bg(image, text, (tx, ty), scale, thickness, font, padding=4, text_color=text_color)
+        
+        return scale
 
-    def _place_two_tokens_in_rect(self, image: np.ndarray, rect: Tuple[int, int, int, int], t1: str, t2: str, prefer_vertical: bool = False, anchor_limit_rect: Optional[Tuple[int, int, int, int]] = None) -> bool:
+    def _place_two_tokens_in_rect(self, image: np.ndarray, rect: Tuple[int, int, int, int], t1: str, t2: str, prefer_vertical: bool = False, anchor_limit_rect: Optional[Tuple[int, int, int, int]] = None, text_color: Tuple[int, int, int] = None) -> Tuple[bool, float]:
         """
         Place two tokens in the given rectangle with enhanced vertical stacking preference.
         ENHANCED: Always prefer vertical stacking as per user requirements.
@@ -1033,8 +1138,8 @@ class PreciseAppendReplacer:
             logger.info(f" VERTICAL STACK (common font): scale={v_scale:.2f}, L1 at ({tx1},{ty1}), L2 at ({tx2},{ty2})")
             # Ensure the entire rect is white once; avoid per-line bg overlap
             cv2.rectangle(image, (x, y), (x + w, y + h), (255, 255, 255), -1)
-            self._draw_text_plain(image, t1, (tx1, ty1), v_scale, thickness, font)
-            self._draw_text_plain(image, t2, (tx2, ty2), v_scale, thickness, font)
+            self._draw_text_plain(image, t1, (tx1, ty1), v_scale, thickness, font, text_color=text_color)
+            self._draw_text_plain(image, t2, (tx2, ty2), v_scale, thickness, font, text_color=text_color)
             # Attach reasoning for report exporters if upstream captures it
             reasoning = {
                 'algorithm': 'Rect-fit (binary search)',
@@ -1048,7 +1153,7 @@ class PreciseAppendReplacer:
                 setattr(self, '_last_reasoning', reasoning)
             except Exception:
                 pass
-            return True
+            return True, v_scale
 
         if h_sz[0] > 0:
             # Side-by-side must remain strictly within rect; align vertically centered
@@ -1063,7 +1168,7 @@ class PreciseAppendReplacer:
             tx = max(x + padding, min(tx, x + w - h_sz[0] - padding))
             ty = max(y + h_sz[1] + padding, min(ty, y + h - padding))
             logger.info(f" HORIZONTAL (max font): scale={h_scale:.2f}, at ({tx},{ty})")
-            self._draw_text_with_bg(image, joined, (tx, ty), h_scale, thickness, font, padding=3)
+            self._draw_text_with_bg(image, joined, (tx, ty), h_scale, thickness, font, padding=3, text_color=text_color)
             reasoning = {
                 'algorithm': 'Rect-fit (binary search)',
                 'decision': 'horizontal-single-line',
@@ -1075,10 +1180,10 @@ class PreciseAppendReplacer:
                 setattr(self, '_last_reasoning', reasoning)
             except Exception:
                 pass
-            return True
+            return True, h_scale
 
         logger.warning(f" PLACE TOKENS: Could not fit both tokens in rect ({x}, {y}, {w}, {h})")
-        return False
+        return False, 0.0
 
     def _generate_output_path(self, input_path: Path) -> Path:
         """Generate output path for processed image."""

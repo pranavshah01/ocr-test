@@ -200,6 +200,11 @@ class DocumentProcessor:
                     if document:
                         # Store parked attributes for later restoration
                         self.parked_attributes = parked_attributes
+                        
+                        # CRITICAL: Ensure document is detached from temp files before processing
+                        if not self._ensure_document_detached_from_temp_files(document):
+                            raise Exception("Failed to detach document from temp files")
+                        
                         logger.info(f"Successfully loaded document with enhanced parser")
                         return current_parser, None
                     else:
@@ -210,6 +215,10 @@ class DocumentProcessor:
                 
                 # Test if document loaded successfully
                 _ = document.paragraphs
+                
+                # CRITICAL: Ensure document is detached from temp files before processing
+                if not self._ensure_document_detached_from_temp_files(document):
+                    raise Exception("Failed to detach document from temp files")
                 
                 logger.info(f"Successfully loaded document with {current_parser} parser")
                 return current_parser, None
@@ -330,30 +339,54 @@ class DocumentProcessor:
                 temp_xml_path = os.path.join(temp_dir, 'document.xml')
                 temp_docx_path = os.path.join(temp_dir, 'document.docx')
                 
-                # Write processed XML
-                with open(temp_xml_path, 'w', encoding='utf-8') as temp_xml:
-                    temp_xml.write(processed_xml)
+                # Write processed XML with proper file handling
+                try:
+                    with open(temp_xml_path, 'w', encoding='utf-8') as temp_xml:
+                        temp_xml.write(processed_xml)
+                        temp_xml.flush()  # Ensure data is written to disk
+                        os.fsync(temp_xml.fileno())  # Force OS to write to disk
+                except Exception as e:
+                    logger.error(f"Failed to write processed XML to {temp_xml_path}: {e}")
+                    raise
                 
-                # Copy DOCX structure but replace document.xml
-                with zipfile.ZipFile(file_path, 'r') as source_zip:
-                    with zipfile.ZipFile(temp_docx_path, 'w') as target_zip:
-                        for item in source_zip.infolist():
-                            if item.filename == 'word/document.xml':
-                                target_zip.writestr(item, processed_xml.encode('utf-8'))
-                            else:
-                                target_zip.writestr(item, source_zip.read(item.filename))
+                # Copy DOCX structure but replace document.xml with proper file handling
+                try:
+                    with zipfile.ZipFile(file_path, 'r') as source_zip:
+                        with zipfile.ZipFile(temp_docx_path, 'w', compression=zipfile.ZIP_DEFLATED) as target_zip:
+                            for item in source_zip.infolist():
+                                if item.filename == 'word/document.xml':
+                                    target_zip.writestr(item, processed_xml.encode('utf-8'))
+                                else:
+                                    target_zip.writestr(item, source_zip.read(item.filename))
+                except Exception as e:
+                    logger.error(f"Failed to create temporary DOCX file {temp_docx_path}: {e}")
+                    raise
                 
                 # Load the processed document with python-docx
                 from docx import Document
-                document = Document(temp_docx_path)
+                try:
+                    document = Document(temp_docx_path)
+                except Exception as e:
+                    logger.error(f"Failed to load document from {temp_docx_path}: {e}")
+                    raise
                 
-                # Force loading of document content
+                # Force loading of document content to ensure it's fully loaded
                 _ = len(document.paragraphs)
                 _ = len(document.tables)
                 _ = len(document.sections)
                 
+                # CRITICAL: Ensure temp files are properly closed before processing
+                # Force garbage collection to release any file handles
+                import gc
+                gc.collect()
+                
+                # Verify temp files are accessible (they should be closed by now)
+                if not os.path.exists(temp_docx_path):
+                    raise Exception(f"Temp DOCX file disappeared: {temp_docx_path}")
+                
                 logger.info(f"Successfully loaded document with enhanced parser: {file_path.name}")
                 logger.info(f"Parked {len(parked_attributes)} attributes for later reconstruction")
+                logger.info(f"Temp files properly closed before processing: {temp_docx_path}")
                 return document, parked_attributes
                 
             except Exception as inner_e:
@@ -366,11 +399,7 @@ class DocumentProcessor:
         finally:
             # Always clean up temporary files, even on exceptions
             if temp_dir and os.path.exists(temp_dir):
-                try:
-                    shutil.rmtree(temp_dir)
-                    logger.debug(f"Cleaned up temp directory: {temp_dir}")
-                except Exception as cleanup_e:
-                    logger.warning(f"Could not clean up temp directory {temp_dir}: {cleanup_e}")
+                self._safe_cleanup_temp_directory(temp_dir)
 
     def _find_and_remove_problematic_attribute(self, xml_content: bytes, error_msg: str) -> Optional[Dict]:
         """
@@ -515,6 +544,63 @@ class DocumentProcessor:
             logger.warning(f"Error checking system resources: {e}")
             return True  # Default to allowing processing if check fails
     
+    def _safe_cleanup_temp_directory(self, temp_dir: str) -> None:
+        """
+        Safely clean up temporary directories with Windows-specific handling.
+        Handles file locking issues and permission problems.
+        """
+        if not temp_dir or not os.path.exists(temp_dir):
+            return
+        
+        try:
+            # Windows-specific: Force garbage collection to release file handles
+            import gc
+            gc.collect()
+            
+            # Try multiple cleanup strategies
+            max_attempts = 3
+            for attempt in range(max_attempts):
+                try:
+                    # Standard deletion
+                    shutil.rmtree(temp_dir)
+                    logger.debug(f"Successfully cleaned up temp directory: {temp_dir}")
+                    return
+                except PermissionError as e:
+                    if attempt < max_attempts - 1:
+                        # Wait a bit and try again (Windows file locking)
+                        import time
+                        time.sleep(0.2)
+                        logger.debug(f"Permission error on attempt {attempt + 1}, retrying: {e}")
+                        continue
+                    else:
+                        logger.warning(f"Could not delete temp directory after {max_attempts} attempts: {e}")
+                        # Try to remove individual files first
+                        try:
+                            for root, dirs, files in os.walk(temp_dir, topdown=False):
+                                for file in files:
+                                    try:
+                                        os.remove(os.path.join(root, file))
+                                    except:
+                                        pass
+                                for dir in dirs:
+                                    try:
+                                        os.rmdir(os.path.join(root, dir))
+                                    except:
+                                        pass
+                            os.rmdir(temp_dir)
+                        except:
+                            pass
+                except FileNotFoundError:
+                    # Directory already deleted, that's fine
+                    logger.debug(f"Temp directory already deleted: {temp_dir}")
+                    return
+                except Exception as e:
+                    logger.warning(f"Unexpected error cleaning up temp directory {temp_dir}: {e}")
+                    return
+                    
+        except Exception as e:
+            logger.error(f"Failed to clean up temp directory {temp_dir}: {e}")
+
     def _cleanup_document_resource(self, document) -> None:
         """Properly cleanup document resources to prevent leaks."""
         if document is None:
@@ -538,6 +624,32 @@ class DocumentProcessor:
             logger.debug(f"Error during document cleanup: {e}")
         
         return None
+
+    def _ensure_document_detached_from_temp_files(self, document) -> bool:
+        """
+        Ensure the document is properly detached from temp files before processing.
+        This prevents file locking issues during processing.
+        """
+        try:
+            if document is None:
+                return False
+            
+            # Force loading of all document content to ensure it's fully loaded
+            # This ensures the document doesn't need to access temp files during processing
+            _ = len(document.paragraphs)
+            _ = len(document.tables)
+            _ = len(document.sections)
+            
+            # Force garbage collection to release any file handles
+            import gc
+            gc.collect()
+            
+            logger.debug("Document successfully detached from temp files")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to detach document from temp files: {e}")
+            return False
 
     def prepare_for_large_file(self, size_mb: float) -> None:
         if size_mb > LARGE_FILE_THRESHOLD_MB:
