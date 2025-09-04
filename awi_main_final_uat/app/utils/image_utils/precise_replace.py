@@ -162,6 +162,14 @@ class PreciseTextReplacer:
             # Clear the pattern area
             px, py, pw, ph = pattern_rect
             logger.info(f" REPLACE: Clearing pattern area: ({px}, {py}, {pw}, {ph})")
+            # Expose precise and reconstruction rectangles on match (wipe-only in replace path here)
+            try:
+                setattr(match, 'precise_bbox', (px, py, pw, ph))
+                # For replace mode wipe-only, reconstruction bbox equals precise pattern rect
+                setattr(match, 'reconstruction_bbox', (px, py, pw, ph))
+                setattr(match, 'reconstruction_reasoning', 'Wipe-only replace: precise pattern rect used as reconstruction area')
+            except Exception:
+                pass
             
             # Enhanced clearing to prevent ghosting
             cv2.rectangle(cv_image, (px, py), (px + pw, py + ph), (255, 255, 255), -1)
@@ -261,6 +269,11 @@ class PreciseTextReplacer:
             logger.info(f" WIPE ONLY: Enhanced wipe area: ({px}, {wipe_y}, {pw}, {wipe_height})")
             
             logger.info(f" WIPE ONLY: Successfully wiped pattern area '{matched_pattern}' from '{original_full_text}'")
+            # Replace mode wipe-only doesn't reconstruct; flag accordingly
+            try:
+                setattr(match, 'reconstructed', False)
+            except Exception:
+                pass
             
             return cv_image
 

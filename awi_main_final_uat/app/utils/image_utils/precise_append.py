@@ -80,16 +80,16 @@ class PreciseAppendReplacer:
             
             logger.info(f" HYBRID APPEND: Bbox: {bbox}, Full OCR: '{original_full_text}', Replacement: '{replacement_text}'")
             
-            # Use our pattern matcher to find the exact pattern within the OCR text
-            pattern_matches = self.pattern_matcher.find_matches_universal(original_full_text)
-            if not pattern_matches:
+            # Use our pattern matcher to find the pattern within the OCR text
+            # In append mode we must handle unmapped patterns too, so allow all matches here
+            raw_matches = self.pattern_matcher.find_all_pattern_matches(original_full_text)
+            if not raw_matches:
                 logger.warning(f" HYBRID APPEND: No pattern found in '{original_full_text}'")
                 return cv_image
             
-            # Use the first match found
-            first_match = pattern_matches[0]
-            matched_pattern = first_match.matched_text
-            logger.info(f" HYBRID APPEND: Found pattern: '{matched_pattern}' (pattern: {first_match.pattern_name})")
+            # Use the first match found (pattern_name, matched_text, start_pos, end_pos)
+            pattern_name, matched_pattern, _, _ = raw_matches[0]
+            logger.info(f" HYBRID APPEND: Found pattern: '{matched_pattern}' (pattern: {pattern_name})")
             
             # Draw the appended text either side-by-side or top/down without erasing originals
             return self._draw_appended_text(cv_image, bbox, original_full_text, matched_pattern, replacement_text, all_ocr_results)
@@ -261,10 +261,26 @@ class PreciseAppendReplacer:
                 prefer_vertical_choice = not can_horizontal_at_min
                 # Try to expand into surrounding whitespace before placement
                 expanded_rect = self._expand_rect_into_whitespace(cv_image, wiped_rect, all_ocr_results, anchor_bbox=bbox)
+                # Expose precise and reconstruction rects on the match for reporting
+                try:
+                    setattr(match, 'precise_bbox', (rx, ry, rw, rh))
+                    setattr(match, 'reconstruction_bbox', expanded_rect)
+                    setattr(match, 'reconstruction_reasoning', {
+                        'reason': 'Character-level wipe + whitespace expansion',
+                        'expanded_from': (rx, ry, rw, rh),
+                        'expanded_to': expanded_rect
+                    })
+                except Exception:
+                    pass
                 placed = self._place_two_tokens_in_rect(cv_image, expanded_rect, token_77, token_4022, prefer_vertical=prefer_vertical_choice, anchor_limit_rect=bbox)
                 if not placed:
                     joined = f"{token_77} {token_4022}".strip()
                     self._place_single_text_in_rect(cv_image, expanded_rect, joined)
+                # Mark reconstructed
+                try:
+                    setattr(match, 'reconstructed', True)
+                except Exception:
+                    pass
                 return cv_image
 
             # ENHANCED: Use precise wipe boundaries to avoid wiping suffix
@@ -314,11 +330,26 @@ class PreciseAppendReplacer:
             logger.info(f" PRECISE APPEND: Placing tokens '{token_77}' and '{token_4022}' vertically in wiped area")
             
             expanded_precise_rect = self._expand_rect_into_whitespace(cv_image, precise_wipe_rect, all_ocr_results, anchor_bbox=bbox)
+            # Attach rectangles for reporting
+            try:
+                setattr(match, 'precise_bbox', (wx, wy, ww, wh))
+                setattr(match, 'reconstruction_bbox', expanded_precise_rect)
+                setattr(match, 'reconstruction_reasoning', {
+                    'reason': 'Precise proportional wipe + whitespace expansion',
+                    'expanded_from': (wx, wy, ww, wh),
+                    'expanded_to': expanded_precise_rect
+                })
+            except Exception:
+                pass
             placed = self._place_two_tokens_in_rect(cv_image, expanded_precise_rect, token_77, token_4022, prefer_vertical=False, anchor_limit_rect=bbox)
             if not placed:
                 logger.warning(f" PRECISE APPEND: Two-token placement failed, trying single text fallback")
                 joined = f"{token_77} {token_4022}".strip()
                 self._place_single_text_in_rect(cv_image, expanded_precise_rect, joined)
+            try:
+                setattr(match, 'reconstructed', True)
+            except Exception:
+                pass
             else:
                 logger.info(f" PRECISE APPEND: Successfully placed two tokens vertically")
 

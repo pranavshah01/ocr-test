@@ -167,7 +167,13 @@ class ImageProcessor(BaseProcessor):
             for m in image_matches:
                 bbox = getattr(m, 'bounding_box', getattr(m.ocr_result, 'bounding_box', (0, 0, 0, 0)))
                 mapped_text = m.replacement_text or self.default_mapping
-                has_specific_mapping = m.replacement_text is not None and m.replacement_text != ""
+                # Treat default mapping (e.g., 4022-NA) as no specific mapping found
+                has_specific_mapping = (
+                    m.replacement_text is not None and m.replacement_text != "" and m.replacement_text != self.default_mapping
+                )
+                # Get dimension from the match object
+                src_dimension = getattr(m, 'dimension', '')
+                
                 match_detail = MatchDetail(
                     sr_no=sr_no,
                     type=ProcessorType.IMAGE,
@@ -176,6 +182,7 @@ class ImageProcessor(BaseProcessor):
                     src_bbox=','.join(str(int(x)) for x in (
                         bbox[0], bbox[1], bbox[0] + bbox[2], bbox[1] + bbox[3]
                     )) if isinstance(bbox, (list, tuple)) and len(bbox) >= 4 else "",
+                    src_dimension=src_dimension,
                     mapped_text=mapped_text,
                     match_flag=MatchFlag.YES if has_specific_mapping else MatchFlag.NO,
                     reasoning=ImageReasoning(
@@ -183,8 +190,18 @@ class ImageProcessor(BaseProcessor):
                         total_characters=len(mapped_text),
                         line_reasoning=str(getattr(m, 'reconstruction_reasoning', ''))
                     ),
-                    reconstructed=False
+                    reconstructed=bool(getattr(m, 'reconstructed', False))
                 )
+                # Populate reconstruction-specific fields only when reconstruction occurred
+                try:
+                    if getattr(match_detail, 'reconstructed', False):
+                        # Note: precise_bbox and reconstruction_bbox are not currently being set
+                        # in the reconstruction process, so we skip those for now
+                        if hasattr(m, 'reconstruction_reasoning'):
+                            rr = getattr(m, 'reconstruction_reasoning')
+                            match_detail.reconstruction_reasoning = rr if isinstance(rr, str) else str(rr)
+                except Exception:
+                    pass
                 match_details.append(match_detail)
                 sr_no += 1
 
@@ -269,26 +286,53 @@ class ImageProcessor(BaseProcessor):
                 for ocr_result in ocr_results:
                     logger.debug(f"OCR Text: '{ocr_result.text}'")
                     try:
-                        universal_matches = self.pattern_matcher.find_matches_universal(ocr_result.text)
-                        for um in universal_matches:
-                            replacement_text = self.pattern_matcher.get_replacement(um.matched_text)
-                            if not replacement_text:
-                                if self.mode == "replace":
-                                    continue
-                                elif self.mode in ["append", "append-image"]:
+                        if self.mode in ["append", "append-image"]:
+                            all_matches = self.pattern_matcher.find_all_pattern_matches(ocr_result.text)
+                            for pattern_name, matched_text, start_pos, end_pos in all_matches:
+                                replacement_text = self.pattern_matcher.get_replacement(matched_text)
+                                if not replacement_text:
                                     replacement_text = self.default_mapping
+                                font_info = getattr(ocr_result, 'font_info', {})
+                                # Format bounding box as dimension string
+                                bbox = ocr_result.bounding_box
+                                if isinstance(bbox, (list, tuple)) and len(bbox) >= 4:
+                                    dimension_str = f"({bbox[0]},{bbox[1]})-({bbox[0]+bbox[2]},{bbox[1]+bbox[3]})"
                                 else:
+                                    dimension_str = ""
+                                
+                                ocr_match = EnhancedImageMatch(
+                                    pattern_name, matched_text, replacement_text,
+                                    start_pos, image_info['location'],
+                                    font_info, ocr_result.confidence, pattern_name,
+                                    "Image", dimension_str, "OCR", ocr_result
+                                )
+                                ocr_match.extracted_pattern_text = matched_text
+                                ocr_match.original_text = ocr_result.text
+                                matches.append(ocr_match)
+                        else:
+                            # Existing behavior for replace mode (only mapped results)
+                            universal_matches = self.pattern_matcher.find_matches_universal(ocr_result.text)
+                            for um in universal_matches:
+                                replacement_text = self.pattern_matcher.get_replacement(um.matched_text)
+                                if not replacement_text:
                                     continue
-                            font_info = getattr(ocr_result, 'font_info', {})
-                            ocr_match = EnhancedImageMatch(
-                                um.pattern_name, um.matched_text, replacement_text,
-                                um.start_pos, image_info['location'],
-                                font_info, ocr_result.confidence, um.pattern_name,
-                                "Image", ocr_result.bounding_box, "OCR", ocr_result
-                            )
-                            ocr_match.extracted_pattern_text = um.matched_text
-                            ocr_match.original_text = ocr_result.text
-                            matches.append(ocr_match)
+                                font_info = getattr(ocr_result, 'font_info', {})
+                                # Format bounding box as dimension string
+                                bbox = ocr_result.bounding_box
+                                if isinstance(bbox, (list, tuple)) and len(bbox) >= 4:
+                                    dimension_str = f"({bbox[0]},{bbox[1]})-({bbox[0]+bbox[2]},{bbox[1]+bbox[3]})"
+                                else:
+                                    dimension_str = ""
+                                
+                                ocr_match = EnhancedImageMatch(
+                                    um.pattern_name, um.matched_text, replacement_text,
+                                    um.start_pos, image_info['location'],
+                                    font_info, ocr_result.confidence, um.pattern_name,
+                                    "Image", dimension_str, "OCR", ocr_result
+                                )
+                                ocr_match.extracted_pattern_text = um.matched_text
+                                ocr_match.original_text = ocr_result.text
+                                matches.append(ocr_match)
                     except Exception as e:
                         logger.error(f"Error in pattern matching for text '{ocr_result.text}': {e}")
                 wiped_image_path = None
@@ -307,7 +351,10 @@ class ImageProcessor(BaseProcessor):
         for wipe_result in wipe_results:
             try:
                 image_info = wipe_result['image_info']
+                # Respect mode semantics: append always reconstructs; replace skips default-mapped
                 matches = wipe_result['matches']
+                if str(self.mode).lower() == "replace":
+                    matches = [m for m in matches if getattr(m, 'replacement_text', None) not in (None, "", self.default_mapping)]
                 wiped_image_path = wipe_result['wiped_image_path']
                 logger.debug(f"Reconstructing: {image_info['location']}")
                 if wiped_image_path and matches:
@@ -318,9 +365,15 @@ class ImageProcessor(BaseProcessor):
                                 ocr_results_for_image.append(m.ocr_result)
                             else:
                                 ocr_results_for_image.append(OCRResult(text=m.original_text, confidence=getattr(m, 'confidence', 0.0), bounding_box=getattr(m, 'bounding_box', (0, 0, 0, 0))))
-                        reconstructed_path = self._append_replacer_for_reconstruction.replace_text_in_image(
-                            Path(wiped_image_path), ocr_results_for_image, matches
-                        )
+                        # Choose replacer based on OCR mode
+                        if str(self.mode).lower() in ["append", "append-image"]:
+                            reconstructed_path = self._append_replacer_for_reconstruction.replace_text_in_image(
+                                Path(wiped_image_path), ocr_results_for_image, matches
+                            )
+                        else:
+                            reconstructed_path = self.text_replacer.replace_text_in_image(
+                                Path(wiped_image_path), ocr_results_for_image, matches
+                            )
                         image_to_insert = reconstructed_path or wiped_image_path
                     except Exception as e:
                         logger.error(f"Error in reconstruction for {image_info['location']}: {e}")
@@ -329,6 +382,8 @@ class ImageProcessor(BaseProcessor):
                     if success:
                         for match in matches:
                             match.image_path = image_to_insert
+                            # Mark as reconstructed for reporting
+                            setattr(match, 'reconstructed', True)
                         final_matches.extend(matches)
                         logger.info(f"RECONSTRUCTED: {len(matches)} matches in {image_info['location']}")
                     else:
@@ -470,14 +525,21 @@ class ImageProcessor(BaseProcessor):
                             ext = '.gif'
                         else:
                             ext = '.jpg'
-                        image_filename = f"image_{i}{ext}"
+                        # Prefer actual media filename from relationship if present
+                        try:
+                            media_name = Path(rel.target_ref).name
+                            if not media_name:
+                                media_name = f"image_{i}{ext}"
+                        except Exception:
+                            media_name = f"image_{i}{ext}"
+                        image_filename = media_name
                         temp_image_path = temp_dir / image_filename
                         with open(temp_image_path, 'wb') as f:
                             f.write(image_data)
                         image_info = {
                             'temp_path': temp_image_path,
                             'original_rel': rel,
-                            'location': f"image_{i}",
+                            'location': media_name,
                             'content_type': content_type
                         }
                         image_info_list.append(image_info)
