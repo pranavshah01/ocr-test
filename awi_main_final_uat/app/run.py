@@ -1,25 +1,24 @@
 
+import gc
+import json
+import logging
+import shutil
 import sys
 import time
-import logging
-import json
-import gc
-import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Any, Optional
-
+from typing import List, Optional
 
 sys.path.insert(0, str(Path(__file__).parent))
 
 
-from core.performance_monitor import PerformanceMonitor
+from app.core.performance_monitor import PerformanceMonitor
 
 
-from utils.report_generator import ReportGenerator
-from core.models import (
+from app.utils.report_generator import ReportGenerator
+from app.core.models import (
     ProcessingResult, BatchReport, CLIParameters,
-    PerformanceMetrics, PatternInfo, ProcessingStatus
+    PatternInfo, ProcessingStatus
 )
 
 
@@ -96,7 +95,7 @@ def save_processed_file_with_suffix(document, file_path: Path, config_obj) -> bo
         return False
 
 
-def process_with_retry(doc_path: Path, doc_processor, max_retries: int = 3,
+def process_with_retry(doc_path: Path, doc_processor, cli_parameters=None, max_retries: int = 3,
                       base_delay: float = 2.0) -> Optional[ProcessingResult]:
     for attempt in range(max_retries):
         try:
@@ -137,10 +136,10 @@ def process_with_retry(doc_path: Path, doc_processor, max_retries: int = 3,
                 raise Exception(f"All parsers failed for {doc_path.name}: {error_msg}")
             
             # Load document with the determined parser
-            document = Document(doc_path)
+            document = Document(str(doc_path))
 
 
-            result = create_pending_result(doc_path, doc_processor.config, doc_processor)
+            result = create_pending_result(doc_path, doc_processor.config, doc_processor, cli_parameters)
             
             # Update the parser field in the result
             result.parser = parser_type
@@ -286,6 +285,32 @@ def main():
         args = parser.parse_args()
         config_obj = load_config_from_args(args)
 
+        # Create CLI parameters early so they can be passed to ProcessingResult objects
+        cli_parameters = CLIParameters(
+            text_mode=config_obj.text_mode,
+            text_separator=config_obj.text_separator,
+            default_mapping=config_obj.default_mapping,
+            ocr_mode=config_obj.ocr_mode,
+            ocr_engine=config_obj.ocr_engine,
+            use_gpu=config_obj.use_gpu,
+            gpu_device=config_obj.gpu_device,
+            gpu_available=config_obj.gpu_available,
+            max_workers=config_obj.max_workers,
+            confidence_min=config_obj.confidence_min,
+            verbose=config_obj.verbose,
+            patterns_file=str(config_obj.patterns_file),
+            mappings_file=str(config_obj.mappings_file),
+            source_dir=str(config_obj.source_dir),
+            output_dir=str(config_obj.output_dir),
+            reports_dir=str(config_obj.reports_dir),
+            logs_dir=str(config_obj.logs_dir),
+            suffix=config_obj.suffix,
+            processing_timeout=config_obj.processing_timeout,
+            max_retries=config_obj.max_retries,
+            min_file_size=config_obj.min_file_size,
+            max_file_size=config_obj.max_file_size
+        )
+
 
         log_file = Path(config_obj.logs_dir) / f"processing_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
         log_file.parent.mkdir(parents=True, exist_ok=True)
@@ -353,7 +378,7 @@ def main():
 
 
                 per_file_start = time.time()
-                process_result = process_with_retry(doc_path, doc_processor)
+                process_result = process_with_retry(doc_path, doc_processor, cli_parameters)
 
                 if process_result:
 
@@ -387,7 +412,7 @@ def main():
                         else:
 
                             from docx import Document
-                            document = Document(doc_path)
+                            document = Document(str(doc_path))
                             document.save(str(processed_path))
                             logger.warning(f"Saved original document (no modified document found): {result.processed_file_name}")
 
@@ -414,7 +439,7 @@ def main():
                 else:
                     failed_processing += 1
 
-                    failed_result = create_pending_result(doc_path, config_obj, doc_processor)
+                    failed_result = create_pending_result(doc_path, config_obj, doc_processor, cli_parameters)
                     failed_result.status = ProcessingStatus.ERROR
                     failed_result.success = False
                     failed_result.error_message = "Processing failed after all retries"
@@ -450,7 +475,7 @@ def main():
                 failed_processing += 1
                 logger.error(f"Unexpected error processing {doc_path.name}: {e}")
 
-                failed_result = create_pending_result(doc_path, config_obj, doc_processor)
+                failed_result = create_pending_result(doc_path, config_obj, doc_processor, cli_parameters)
                 failed_result.status = ProcessingStatus.ERROR
                 failed_result.success = False
                 failed_result.error_message = str(e)
@@ -472,7 +497,7 @@ def main():
         print(f"\nPROCESSING COMPLETED: {successful_processing} successful, {failed_processing} failed, {total_matches} total matches")
 
         print("\nGENERATING REPORTS...")
-        generate_reports_from_results(config_obj, results, performance_monitor, args)
+        generate_reports_from_results(config_obj, results, cli_parameters, performance_monitor, args)
 
 
         save_processing_log(results, config_obj)
@@ -676,8 +701,8 @@ def discover_input_files(config_obj, force_refresh: bool = False):
     return final_files
 
 
-def create_pending_result(file_path: Path, config_obj, doc_processor=None):
-    from core.models import ProcessingResult, ProcessingStatus
+def create_pending_result(file_path: Path, config_obj, doc_processor=None, cli_parameters=None):
+    from app.core.models import ProcessingResult, ProcessingStatus
 
     intended_processed_name = f"{file_path.stem}{config_obj.suffix}.docx"
 
@@ -700,6 +725,7 @@ def create_pending_result(file_path: Path, config_obj, doc_processor=None):
 
     result = ProcessingResult(
         timestamp=datetime.now().strftime("%Y%m%d_%H%M%S"),
+        cli_parameters=cli_parameters if cli_parameters else CLIParameters(),
         success=False,
         processor_type="document_discovery",
         parser=parser_type,
@@ -729,34 +755,36 @@ def create_pending_result(file_path: Path, config_obj, doc_processor=None):
     return result
 
 
-def generate_reports_from_results(config_obj, results, performance_monitor=None, original_args=None):
+def generate_reports_from_results(config_obj, results, cli_parameters=None, performance_monitor=None, original_args=None):
     report_generator = ReportGenerator(output_dir=config_obj.reports_dir, config=config_obj)
 
 
-    cli_parameters = CLIParameters(
-        text_mode=config_obj.text_mode,
-        text_separator=config_obj.text_separator,
-        default_mapping=config_obj.default_mapping,
-        ocr_mode=config_obj.ocr_mode,
-        ocr_engine=config_obj.ocr_engine,
-        use_gpu=config_obj.use_gpu,
-        gpu_device=config_obj.gpu_device,
-        gpu_available=config_obj.gpu_available,
-        max_workers=config_obj.max_workers,
-        confidence_min=config_obj.confidence_min,
-        verbose=config_obj.verbose,
-        patterns_file=str(config_obj.patterns_file),
-        mappings_file=str(config_obj.mappings_file),
-        source_dir=str(config_obj.source_dir),
-        output_dir=str(config_obj.output_dir),
-        reports_dir=str(config_obj.reports_dir),
-        logs_dir=str(config_obj.logs_dir),
-        suffix=config_obj.suffix,
-        processing_timeout=config_obj.processing_timeout,
-        max_retries=config_obj.max_retries,
-        min_file_size=config_obj.min_file_size,
-        max_file_size=config_obj.max_file_size
-    )
+    # Use the passed CLI parameters or create new ones if not provided
+    if cli_parameters is None:
+        cli_parameters = CLIParameters(
+            text_mode=config_obj.text_mode,
+            text_separator=config_obj.text_separator,
+            default_mapping=config_obj.default_mapping,
+            ocr_mode=config_obj.ocr_mode,
+            ocr_engine=config_obj.ocr_engine,
+            use_gpu=config_obj.use_gpu,
+            gpu_device=config_obj.gpu_device,
+            gpu_available=config_obj.gpu_available,
+            max_workers=config_obj.max_workers,
+            confidence_min=config_obj.confidence_min,
+            verbose=config_obj.verbose,
+            patterns_file=str(config_obj.patterns_file),
+            mappings_file=str(config_obj.mappings_file),
+            source_dir=str(config_obj.source_dir),
+            output_dir=str(config_obj.output_dir),
+            reports_dir=str(config_obj.reports_dir),
+            logs_dir=str(config_obj.logs_dir),
+            suffix=config_obj.suffix,
+            processing_timeout=config_obj.processing_timeout,
+            max_retries=config_obj.max_retries,
+            min_file_size=config_obj.min_file_size,
+            max_file_size=config_obj.max_file_size
+        )
 
 
     cli_parameters.user_provided = set()

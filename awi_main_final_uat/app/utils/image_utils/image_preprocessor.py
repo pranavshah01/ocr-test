@@ -3,12 +3,12 @@ Image preprocessing pipeline for enhanced OCR text detection.
 Provides adaptive image enhancement techniques to improve OCR accuracy.
 """
 
-import cv2
-import numpy as np
-from PIL import Image
-from typing import List, Tuple, Dict, Any, Optional
 import logging
 from pathlib import Path
+from typing import List, Dict, Any, Optional
+
+import cv2
+import numpy as np
 
 logger = logging.getLogger(__name__)
 

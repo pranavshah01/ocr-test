@@ -1,43 +1,46 @@
-
-import re
+import logging
+import gc
 import logging
 import time
 import xml.etree.ElementTree as ET
 from typing import Dict, List, Any, Optional, Tuple
-from pathlib import Path
-import gc
 
 from docx import Document
-from docx.text.paragraph import Paragraph
-from docx.table import Table
 
+from config import DEFAULT_MAPPING, DEFAULT_SEPARATOR, PROCESSING_MODES, MIN_FONT_SIZE
 from ..core.models import ProcessingResult, MatchDetail, ProcessorType, MatchFlag, FallbackFlag, GraphicsReasoning
-from ..utils.text_utils.text_docx_utils import create_pattern_matcher, load_patterns_and_mappings
-from ..utils.graphics_utils.graphics_docx_utils import TextboxParser, GraphicsFontManager, GraphicsTextReplacer, create_graphics_text_replacer
+from ..core.processor_interface import BaseProcessor
 from ..utils.font_capacity import (
     evaluate_capacity,
     get_safety_margin,
     get_conservative_headroom,
     apply_guidelines_to_capacity,
-    get_guideline_limits,
     get_guideline_limits_interpolated,
-    get_guideline_limits_scaled,
 )
-from config import DEFAULT_MAPPING, DEFAULT_SEPARATOR, PROCESSING_MODES, MIN_FONT_SIZE
+from ..utils.graphics_utils.graphics_docx_utils import TextboxParser, GraphicsFontManager
+from ..utils.text_utils.text_docx_utils import create_pattern_matcher
 
 logger = logging.getLogger(__name__)
 
 
-class GraphicsProcessor:
+class GraphicsProcessor(BaseProcessor):
 
     def __init__(self, patterns: Dict[str, Any] = None, mappings: Dict[str, Any] = None,
                  mode: str = PROCESSING_MODES['APPEND'], separator: str = DEFAULT_SEPARATOR, default_mapping: str = DEFAULT_MAPPING):
+        config = {
+            'patterns': patterns or {},
+            'mappings': mappings or {},
+            'mode': mode,
+            'separator': separator,
+            'default_mapping': default_mapping
+        }
+        super().__init__("graphics", config)
+        
         self.patterns = patterns or {}
         self.mappings = mappings or {}
         self.mode = mode
         self.separator = separator
         self.default_mapping = default_mapping
-
 
         self.pattern_matcher = None
 
@@ -45,14 +48,14 @@ class GraphicsProcessor:
 
     def initialize(self, **kwargs) -> bool:
         try:
-
             self.pattern_matcher = create_pattern_matcher(self.patterns, self.mappings)
-
+            self.initialized = True
             logger.info(f"Graphics processor initialized with {len(self.patterns)} patterns, {len(self.mappings)} mappings, mode: {self.mode}")
             return True
 
         except Exception as e:
             logger.error(f"Error initializing Graphics Processor: {e}")
+            self.initialized = False
             return False
 
     def process_graphics(self, document: Document, processing_result: ProcessingResult) -> ProcessingResult:
@@ -341,14 +344,26 @@ class GraphicsProcessor:
                 baseline_font_family = "Times New Roman"
                 logger.info(f"MANUAL OVERRIDE: Using Times New Roman 14pt for voltage wire textbox")
             else:
-                baseline_font_size = max_font_size
-                logger.info(f"RECONSTRUCTION: Using highest detected font size {baseline_font_size}pt as baseline")
+                # Use the font size of the original matched text, not the global maximum
+                baseline_font_size = self._get_font_size_of_matched_text(detailed_font_analysis, all_pattern_matches)
+                if baseline_font_size is None:
+                    baseline_font_size = max_font_size
+                    logger.info(f"RECONSTRUCTION: Could not find specific font size, using highest detected font size {baseline_font_size}pt as baseline")
+                else:
+                    logger.info(f"RECONSTRUCTION: Using font size of original matched text: {baseline_font_size}pt as baseline")
 
 
-            global_optimal_font_size = self._find_optimal_font_size_for_reconstruction(
-                simulated_text, dimensions, all_font_sizes, baseline_font_size, baseline_font_family, combined_text, textbox_src_graphics_lines
-            )
-            logger.info(f"RECONSTRUCTION: Global optimal size for textbox {location}: {global_optimal_font_size}pt (baseline {baseline_font_size}pt)")
+            # Mode-aware font size calculation
+            if self.mode == PROCESSING_MODES['REPLACE']:
+                # In replace mode, use original font size since we're only placing replacement text
+                global_optimal_font_size = baseline_font_size
+                logger.info(f"REPLACE MODE: Using original font size {global_optimal_font_size}pt (no calculation needed)")
+            else:
+                # In append mode, calculate optimal size for both original and replacement text
+                global_optimal_font_size = self._find_optimal_font_size_for_reconstruction(
+                    simulated_text, dimensions, all_font_sizes, baseline_font_size, baseline_font_family, combined_text, textbox_src_graphics_lines
+                )
+                logger.info(f"APPEND MODE: Global optimal size for textbox {location}: {global_optimal_font_size}pt (baseline {baseline_font_size}pt)")
             fonts_normalized = False
 
 
@@ -395,8 +410,13 @@ class GraphicsProcessor:
                             break
 
 
-                    optimal_font_size = global_optimal_font_size
-                    logger.info(f"RECONSTRUCTION: Using global optimal size {optimal_font_size}pt, baseline {baseline_font_size}pt, Family: {baseline_font_family}")
+                    # Use mode-appropriate font size
+                    if self.mode == PROCESSING_MODES['REPLACE']:
+                        optimal_font_size = baseline_font_size  # Use original size for replace mode
+                        logger.info(f"REPLACE MODE: Using original font size {optimal_font_size}pt, Family: {baseline_font_family}")
+                    else:
+                        optimal_font_size = global_optimal_font_size
+                        logger.info(f"APPEND MODE: Using global optimal size {optimal_font_size}pt, baseline {baseline_font_size}pt, Family: {baseline_font_family}")
 
 
                     if not fonts_normalized:
@@ -957,6 +977,55 @@ class GraphicsProcessor:
 
         return MIN_FONT_SIZE
 
+    def _get_font_size_of_matched_text(self, detailed_font_analysis: Dict, pattern_matches: List) -> Optional[float]:
+        """
+        Get the font size of the original matched text (77- pattern) from the detailed font analysis.
+        If the pattern spans multiple segments with different sizes, returns the minimum size.
+        Returns None if not found.
+        """
+        if not detailed_font_analysis or not pattern_matches:
+            return None
+            
+        text_segments = detailed_font_analysis.get('text_segments', [])
+        if not text_segments:
+            return None
+            
+        # Get the first pattern match to find its font size
+        first_match = pattern_matches[0] if pattern_matches else None
+        if not first_match:
+            return None
+            
+        pattern_name, matched_text, start_pos, end_pos = first_match
+        matching_font_sizes = []
+        
+        # Find all text segments that contain this matched text
+        for segment in text_segments:
+            segment_text = segment.get('text', '')
+            segment_start = segment.get('start_pos', 0)
+            segment_end = segment.get('end_pos', len(segment_text))
+            
+            # Check if this segment overlaps with the matched text
+            if (segment_start <= start_pos < segment_end or 
+                segment_start < end_pos <= segment_end or
+                start_pos <= segment_start < end_pos):
+                
+                font_size = segment.get('font_size')
+                if font_size:
+                    matching_font_sizes.append(font_size)
+                    logger.info(f"FONT SIZE MATCH: Found font size {font_size}pt for matched text '{matched_text}' in segment '{segment_text[:20]}...'")
+        
+        if matching_font_sizes:
+            # Use the minimum font size to ensure the replacement text fits
+            min_font_size = min(matching_font_sizes)
+            if len(matching_font_sizes) > 1:
+                logger.info(f"FONT SIZE MATCH: Pattern spans multiple segments with sizes {matching_font_sizes}, using minimum: {min_font_size}pt")
+            else:
+                logger.info(f"FONT SIZE MATCH: Using font size {min_font_size}pt for matched text '{matched_text}'")
+            return min_font_size
+                    
+        logger.warning(f"FONT SIZE MATCH: Could not find font size for matched text '{matched_text}'")
+        return None
+
     def _generate_font_size_reasoning(self, simulated_text: str, dimensions: Dict[str, Any],
                                     all_font_sizes: List[float], baseline_font_size: float,
                                     optimal_font_size: float, baseline_font_family: str,
@@ -1194,3 +1263,9 @@ class GraphicsProcessor:
         except Exception as e:
             logger.error(f"Error replacing text in w:t elements: {e}")
             return False
+
+    def cleanup(self):
+        """Clean up graphics processor resources."""
+        logger.info("Cleaning up graphics processor")
+        self.initialized = False
+        self.pattern_matcher = None

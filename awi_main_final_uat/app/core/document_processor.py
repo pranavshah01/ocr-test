@@ -1,18 +1,20 @@
 
 from __future__ import annotations
-from pathlib import Path
-from typing import Optional, Tuple, List, Dict
-import subprocess
-import shutil
+
 import logging
+import os
+import shutil
+import subprocess
+import tempfile
+import zipfile
+from pathlib import Path
+from typing import Optional, Tuple, List, Dict, Any
+
 from config import (
     MAX_FILE_SIZE_MB,
     LARGE_FILE_THRESHOLD_MB,
     VERY_LARGE_FILE_THRESHOLD_MB
 )
-import tempfile
-import zipfile
-import os
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +31,7 @@ class DocumentProcessor:
 
     def initialize(self) -> None:
 
+        # Initialize text processor
         try:
             from app.processors.text_processor import create_text_processor
             self.text_processor = create_text_processor(self.config)
@@ -38,11 +41,19 @@ class DocumentProcessor:
             logger.error(f"Failed to initialize text processor: {e}")
             self.text_processor = None
 
-
+        # Load patterns and mappings once for both graphics and image processors
+        patterns = {}
+        mappings = {}
         try:
-            from app.processors.graphics_processor import GraphicsProcessor
             from app.utils.text_utils.text_docx_utils import load_patterns_and_mappings
             patterns, mappings = load_patterns_and_mappings(self.config)
+            logger.info(f"Loaded patterns and mappings: {len(patterns)} patterns, {len(mappings)} mappings")
+        except Exception as e:
+            logger.error(f"Failed to load patterns and mappings: {e}. Proceeding with empty configurations.")
+
+        # Initialize graphics processor
+        try:
+            from app.processors.graphics_processor import GraphicsProcessor
             self.graphics_processor = GraphicsProcessor(
                 patterns=patterns,
                 mappings=mappings,
@@ -62,7 +73,7 @@ class DocumentProcessor:
             self.image_processor = ImageProcessor(
                 patterns=patterns,
                 mappings=mappings,
-                mode=self.config.text_mode,
+                mode=getattr(self.config, 'ocr_mode', 'append'),
                 separator=self.config.text_separator,
                 default_mapping=self.config.default_mapping,
                 ocr_engine=getattr(self.config, 'ocr_engine', 'hybrid'),
@@ -88,7 +99,7 @@ class DocumentProcessor:
 
         if self.graphics_processor:
             try:
-
+                self.graphics_processor.cleanup()
                 logger.info("Graphics processor cleaned up")
             except Exception as e:
                 logger.error(f"Error cleaning up graphics processor: {e}")
@@ -130,7 +141,7 @@ class DocumentProcessor:
                 return "enhanced"
 
 
-            if size_mb >= VERY_LARGE_FILE_THRESHOLD_MB:
+            if size_mb >= very_large_threshold:
                 logger.info(f"Selected custom parser for {size_mb:.1f}MB file ({file_path.name})")
                 return "custom"
 
@@ -211,7 +222,7 @@ class DocumentProcessor:
                         raise Exception("Enhanced parser failed to load document")
                 
                 # Standard parser: direct python-docx loading
-                document = Document(file_path)
+                document = Document(str(file_path))
                 
                 # Test if document loaded successfully
                 _ = document.paragraphs
@@ -228,7 +239,7 @@ class DocumentProcessor:
                 logger.warning(f"{current_parser} parser failed: {last_error}")
                 
                 # Proper resource cleanup
-                document = self._cleanup_document_resource(document)
+                self._cleanup_document_resource(document)
 
                 # Increment retry counter
                 retry_count += 1
@@ -250,7 +261,7 @@ class DocumentProcessor:
         logger.error(f"All parsers failed for {file_path.name}. Last error: {last_error}")
         return "failed", last_error
 
-    def _load_with_enhanced_parser_iterative(self, file_path: Path) -> Tuple[Optional[Document], List[Dict]]:
+    def _load_with_enhanced_parser_iterative(self, file_path: Path) -> Tuple[Optional[Any], List[Dict]]:
         """
         Enhanced parser with iterative AttValue error handling:
         1. Load document.xml directly with huge_tree=True
@@ -580,15 +591,15 @@ class DocumentProcessor:
                                 for file in files:
                                     try:
                                         os.remove(os.path.join(root, file))
-                                    except:
+                                    except Exception:
                                         pass
                                 for dir in dirs:
                                     try:
                                         os.rmdir(os.path.join(root, dir))
-                                    except:
+                                    except Exception:
                                         pass
                             os.rmdir(temp_dir)
-                        except:
+                        except Exception:
                             pass
                 except FileNotFoundError:
                     # Directory already deleted, that's fine

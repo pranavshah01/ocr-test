@@ -4,19 +4,19 @@ Provides parallel execution and intelligent result merging to maximize text patt
 """
 
 import logging
-import numpy as np
-from pathlib import Path
-from typing import List, Tuple, Dict, Optional, Union
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+from typing import List, Tuple, Optional, Union
 
-from PIL import Image
 import cv2
 import easyocr
+import numpy as np
 import pytesseract
+from PIL import Image
 
-from .ocr_models import OCRResult, HybridOCRResult, create_ocr_result, create_hybrid_ocr_result
 from config import DEFAULT_OCR_CONFIDENCE
+from .ocr_models import OCRResult, HybridOCRResult, create_ocr_result, create_hybrid_ocr_result
 
 logger = logging.getLogger(__name__)
 

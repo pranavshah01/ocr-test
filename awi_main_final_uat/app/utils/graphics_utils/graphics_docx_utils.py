@@ -2,7 +2,9 @@
 import logging
 import xml.etree.ElementTree as ET
 from typing import Dict, List, Any, Optional, Tuple
+
 from docx import Document
+
 from config import DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE
 
 logger = logging.getLogger(__name__)

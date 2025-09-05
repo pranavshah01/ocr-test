@@ -10,29 +10,27 @@ import logging
 import os
 import time
 import uuid
-from typing import Dict, List, Any, Optional, Tuple
-from pathlib import Path
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Dict, List, Any, Optional
 
 from PIL import Image
 from docx import Document
 
-from ..core.processor_interface import BaseProcessor, ProcessingResult as UATProcessingResult
-from ..core.models import (
-    ProcessingResult, MatchDetail, ImageReasoning, ProcessorType, MatchFlag
-)
-from ..utils.image_utils.ocr_models import OCRResult, OCRMatch
-from ..utils.image_utils.pattern_matcher import PatternMatcher, create_pattern_matcher
-from ..utils.image_utils.hybrid_ocr_manager import HybridOCRManager
-from ..utils.image_utils.precise_replace import create_precise_text_replacer
-from ..utils.image_utils.precise_append import PreciseAppendReplacer
 from config import (
     DEFAULT_MAPPING,
     DEFAULT_SEPARATOR,
-    PROCESSING_MODES,
-    DEFAULT_OCR_CONFIDENCE
+    PROCESSING_MODES
 )
+from ..core.models import (
+    ProcessingResult, MatchDetail, ImageReasoning, ProcessorType, MatchFlag
+)
+from ..core.processor_interface import BaseProcessor
+from ..utils.image_utils.hybrid_ocr_manager import HybridOCRManager
+from ..utils.image_utils.ocr_models import OCRResult, OCRMatch
+from ..utils.image_utils.pattern_matcher import PatternMatcher, create_pattern_matcher
 from ..utils.image_utils.platform_utils import PathManager
+from ..utils.image_utils.precise_append import PreciseAppendReplacer
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +103,6 @@ class ImageProcessor(BaseProcessor):
         self.pattern_matcher = None
         self.ocr_manager = None
         self.ocr_comparison_data = []
-        self.text_replacer = None
         self._append_replacer_for_reconstruction = None
 
         logger.info(f"Image processor initialized with mode: {mode}, separator: '{separator}', "
@@ -139,8 +136,7 @@ class ImageProcessor(BaseProcessor):
 
             self.pattern_matcher = create_pattern_matcher(patterns, mappings, enhanced_mode=True)
             self.ocr_manager = HybridOCRManager(confidence_threshold=confidence_min, use_gpu=use_gpu)
-            self.text_replacer = create_precise_text_replacer(self.pattern_matcher)
-            self._append_replacer_for_reconstruction = PreciseAppendReplacer(self.pattern_matcher)
+            self._append_replacer_for_reconstruction = PreciseAppendReplacer(self.pattern_matcher, mode=self.mode)
 
             self.initialized = True
             logger.info(f"Image processor initialized with {len(patterns)} patterns, {len(mappings)} mappings, mode: {mode}")
@@ -328,12 +324,11 @@ class ImageProcessor(BaseProcessor):
                                 ocr_match.original_text = ocr_result.text
                                 matches.append(ocr_match)
                         else:
-                            # Existing behavior for replace mode (only mapped results)
-                            universal_matches = self.pattern_matcher.find_matches_universal(ocr_result.text)
+                            # Replace mode: create matches for all patterns, but only process replacements for those with mappings
+                            universal_matches = self.pattern_matcher.find_matches_universal(ocr_result.text, include_unmapped=True)
                             for um in universal_matches:
                                 replacement_text = self.pattern_matcher.get_replacement(um.matched_text)
-                                if not replacement_text:
-                                    continue
+                                # In replace mode, create matches even without mappings for reporting purposes
                                 font_info = getattr(ocr_result, 'font_info', {})
                                 # Format bounding box as dimension string with orientation
                                 bbox = ocr_result.bounding_box
@@ -374,32 +369,35 @@ class ImageProcessor(BaseProcessor):
         for wipe_result in wipe_results:
             try:
                 image_info = wipe_result['image_info']
+                # Get all matches for reporting purposes
+                all_matches = wipe_result['matches']
                 # Respect mode semantics: append always reconstructs; replace skips default-mapped
-                matches = wipe_result['matches']
+                matches_for_reconstruction = all_matches
                 if str(self.mode).lower() == "replace":
-                    matches = [m for m in matches if getattr(m, 'replacement_text', None) not in (None, "", self.default_mapping)]
+                    matches_for_reconstruction = [m for m in all_matches if getattr(m, 'replacement_text', None) not in (None, "", self.default_mapping)]
                 wiped_image_path = wipe_result['wiped_image_path']
                 logger.debug(f"Reconstructing: {image_info['location']}")
-                if wiped_image_path and matches:
+                if wiped_image_path and matches_for_reconstruction:
                     try:
                         # Apply reconstruction with proper rotation handling
-                        reconstructed_path = self._apply_reconstruction_with_rotation(wiped_image_path, matches)
+                        reconstructed_path = self._apply_reconstruction_with_rotation(wiped_image_path, matches_for_reconstruction)
                         image_to_insert = reconstructed_path or wiped_image_path
                     except Exception as e:
                         logger.error(f"Error in reconstruction for {image_info['location']}: {e}")
                         image_to_insert = wiped_image_path
                     success = self._replace_image_in_document(image_info['original_rel'], image_to_insert)
                     if success:
-                        for match in matches:
+                        # Mark only reconstructed matches as reconstructed
+                        for match in matches_for_reconstruction:
                             match.image_path = image_to_insert
                             # Mark as reconstructed for reporting
                             setattr(match, 'reconstructed', True)
-                        final_matches.extend(matches)
-                        logger.info(f"RECONSTRUCTED: {len(matches)} matches in {image_info['location']}")
+                        logger.info(f"RECONSTRUCTED: {len(matches_for_reconstruction)} matches in {image_info['location']}")
                     else:
                         logger.warning(f"Failed to reconstruct image in document for {image_info['location']}")
-                else:
-                    logger.debug(f"No reconstruction needed for {image_info['location']}")
+                
+                # Always include all matches in final results for reporting
+                final_matches.extend(all_matches)
             except Exception as e:
                 logger.error(f"Error in reconstruction phase for {wipe_result['image_info']['location']}: {e}")
         logger.info(f"Reconstruction phase completed: {len(final_matches)} total matches")
@@ -531,12 +529,10 @@ class ImageProcessor(BaseProcessor):
             cv_image = np.array(image.convert('RGB'))
             cv_image = cv2.cvtColor(cv_image, cv2.COLOR_RGB2BGR)
             ocr_result = OCRResult(text=match.original_text, confidence=match.confidence or 0.0, bounding_box=bbox)
-            if hasattr(self, 'text_replacer') and self.text_replacer:
-                cv_image = self.text_replacer._apply_hybrid_replace(cv_image, OCRMatch(ocr_result=ocr_result, pattern=match.pattern, replacement_text=match.replacement_text, image_path=Path(""), processing_mode=self.mode), [ocr_result])
-            else:
-                if len(bbox) >= 4:
-                    x1, y1, x2, y2 = bbox
-                    cv2.rectangle(cv_image, (int(x1), int(y1)), (int(x2), int(y2)), (255, 255, 255), -1)
+            # Simple wipe - just fill the bounding box with white
+            if len(bbox) >= 4:
+                x1, y1, x2, y2 = bbox
+                cv2.rectangle(cv_image, (int(x1), int(y1)), (int(x2), int(y2)), (255, 255, 255), -1)
             cv_image_rgb = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
             wiped_image = Image.fromarray(cv_image_rgb)
             
@@ -580,39 +576,21 @@ class ImageProcessor(BaseProcessor):
                         else:
                             ocr_results_for_image.append(OCRResult(text=m.original_text, confidence=getattr(m, 'confidence', 0.0), bounding_box=getattr(m, 'bounding_box', (0, 0, 0, 0))))
                     
-                    # Choose replacer based on OCR mode
-                    if str(self.mode).lower() in ["append", "append-image"]:
-                        # For append mode, we need to create a temporary image and use the replacer
-                        temp_path = wiped_image_path.parent / f"temp_recon_{wiped_image_path.name}"
-                        try:
-                            # Ensure proper file closure
-                            with open(temp_path, 'wb') as temp_file:
-                                img.save(temp_file, format='PNG')
-                            
-                            reconstructed_path = self._append_replacer_for_reconstruction.replace_text_in_image(
-                                temp_path, ocr_results_for_image, angle_matches
-                            )
-                            if reconstructed_path and reconstructed_path.exists():
-                                img = PILImage.open(reconstructed_path).convert('RGB')
-                        finally:
-                            # Robust cleanup with Windows-specific handling
-                            self._safe_cleanup_temp_file(temp_path)
-                    else:
-                        # For replace mode, use the text replacer
-                        temp_path = wiped_image_path.parent / f"temp_recon_{wiped_image_path.name}"
-                        try:
-                            # Ensure proper file closure
-                            with open(temp_path, 'wb') as temp_file:
-                                img.save(temp_file, format='PNG')
-                            
-                            reconstructed_path = self.text_replacer.replace_text_in_image(
-                                temp_path, ocr_results_for_image, angle_matches
-                            )
-                            if reconstructed_path and reconstructed_path.exists():
-                                img = PILImage.open(reconstructed_path).convert('RGB')
-                        finally:
-                            # Robust cleanup with Windows-specific handling
-                            self._safe_cleanup_temp_file(temp_path)
+                    # Use append replacer for all modes (it will handle mode-specific behavior internally)
+                    temp_path = wiped_image_path.parent / f"temp_recon_{wiped_image_path.name}"
+                    try:
+                        # Ensure proper file closure
+                        with open(temp_path, 'wb') as temp_file:
+                            img.save(temp_file, format='PNG')
+                        
+                        reconstructed_path = self._append_replacer_for_reconstruction.replace_text_in_image(
+                            temp_path, ocr_results_for_image, angle_matches
+                        )
+                        if reconstructed_path and reconstructed_path.exists():
+                            img = PILImage.open(reconstructed_path).convert('RGB')
+                    finally:
+                        # Robust cleanup with Windows-specific handling
+                        self._safe_cleanup_temp_file(temp_path)
                 except Exception as e:
                     logger.error(f"Error in reconstruction for angle {angle}: {e}")
                 
@@ -689,10 +667,12 @@ class ImageProcessor(BaseProcessor):
 
     def _store_ocr_comparison_data(self, location: str, image_path: Path, ocr_comparison: Dict[str, List[OCRResult]]):
         try:
+            # Store stable, document-relative image reference instead of temp absolute path
             comparison_entry = {
                 'location': location,
-                'image_path': str(image_path),
+                'image_path': location,  # Use original media name/path (e.g., image1.png)
                 'image_name': image_path.name,
+                'temp_image_path': str(image_path),  # Keep temp path for debugging only
                 'easyocr_results': [
                     {'text': r.text, 'confidence': r.confidence, 'bounding_box': r.bounding_box}
                     for r in ocr_comparison.get('easyocr', [])
@@ -763,7 +743,7 @@ class ImageProcessor(BaseProcessor):
             if self.mode in ["append", "append-image"]:
                 pattern_matches = self.pattern_matcher.find_all_pattern_matches(text)
             else:
-                universal_matches = self.pattern_matcher.find_matches_universal(text)
+                universal_matches = self.pattern_matcher.find_matches_universal(text, include_unmapped=True)
                 pattern_matches = [(um.pattern_name, um.matched_text, um.start_pos, um.end_pos) for um in universal_matches]
             
             for pm in pattern_matches:

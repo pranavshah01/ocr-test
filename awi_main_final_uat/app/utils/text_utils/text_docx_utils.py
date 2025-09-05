@@ -1,14 +1,14 @@
 
-import re
-from typing import Dict, List, Tuple, Optional, Any
 import logging
+import re
 from pathlib import Path
+from typing import Dict, List, Tuple, Optional, Any
 
 from docx import Document
-from docx.text.run import Run
 from docx.text.paragraph import Paragraph
+from docx.text.run import Run
 
-from config import DEFAULT_FONT_SIZE, DEFAULT_FONT_FAMILY, DEFAULT_MAPPING
+from config import DEFAULT_FONT_SIZE, DEFAULT_FONT_FAMILY
 
 logger = logging.getLogger(__name__)
 
@@ -257,7 +257,6 @@ _CACHE_TIMESTAMPS = {}
 
 def load_patterns_and_mappings(config) -> Tuple[Dict[str, str], Dict[str, str]]:
     """Load patterns and mappings with file-based caching."""
-    import json
 
     patterns = {}
     mappings = {}

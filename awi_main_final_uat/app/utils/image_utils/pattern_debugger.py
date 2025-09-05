@@ -3,13 +3,13 @@ Pattern debugging and validation system for enhanced OCR text detection.
 Provides comprehensive testing and debugging capabilities for pattern matching.
 """
 
-import re
-from typing import Dict, List, Tuple, Optional, Any
-from pathlib import Path
-import logging
 import json
+import logging
+import re
+from pathlib import Path
+from typing import Dict, List, Optional, Any
 
-from .pattern_matcher import PatternMatcher, UniversalMatch
+from .pattern_matcher import PatternMatcher
 
 logger = logging.getLogger(__name__)
 

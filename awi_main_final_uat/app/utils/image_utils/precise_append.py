@@ -4,12 +4,13 @@ Merges simple, direct OpenCV text replacement with our pattern matching system.
 """
 
 import logging
-import cv2
-import pytesseract
 import re
-import numpy as np
 from pathlib import Path
-from typing import List, Optional, Tuple, Dict, Any
+from typing import List, Optional, Tuple
+
+import cv2
+import numpy as np
+import pytesseract
 
 from .ocr_models import OCRResult, OCRMatch
 from .pattern_matcher import PatternMatcher
@@ -21,32 +22,35 @@ MIN_FONT_SCALE = 0.3
 
 class PreciseAppendReplacer:
     """
-    Hybrid append mode replacer that combines OpenCV + Tesseract with existing mapping logic.
+    Hybrid text replacer that combines OpenCV + Tesseract with existing mapping logic.
+    Handles both replace and append modes based on the processing mode.
     Uses direct OpenCV text replacement while preserving our pattern matching system.
     """
     
-    def __init__(self, pattern_matcher: PatternMatcher):
-        """Initialize hybrid append replacer."""
+    def __init__(self, pattern_matcher: PatternMatcher, mode: str = "append"):
+        """Initialize hybrid text replacer."""
         self.pattern_matcher = pattern_matcher
-        logger.info(" PreciseAppendReplacer initialized with hybrid OpenCV+mapping approach")
+        self.mode = mode
+        logger.info(f"PreciseAppendReplacer initialized with hybrid OpenCV+mapping approach, mode: {mode}")
     
     def replace_text_in_image(self, image_path: Path, ocr_results: List[OCRResult], ocr_matches: List[OCRMatch]) -> Optional[Path]:
         """Replace text in image using hybrid OpenCV + mapping approach."""
         try:
-            logger.info(f" HYBRID APPEND: Processing {image_path} with {len(ocr_matches)} matches")
+            mode_label = "REPLACE" if self.mode == "replace" else "APPEND"
+            logger.info(f"HYBRID {mode_label}: Processing {image_path} with {len(ocr_matches)} matches")
             
             # Convert to OpenCV format
             cv_image = cv2.imread(str(image_path))
             if cv_image is None:
-                logger.error(f" HYBRID APPEND: Could not load image {image_path}")
+                logger.error(f"HYBRID {mode_label}: Could not load image {image_path}")
                 return None
             
             # Process each match using hybrid approach
             for i, match in enumerate(ocr_matches):
-                logger.info(f" HYBRID APPEND: Processing match {i}: '{match.ocr_result.text}' -> '{match.replacement_text}'")
+                logger.info(f"HYBRID {mode_label}: Processing match {i}: '{match.ocr_result.text}' -> '{match.replacement_text}'")
                 
-                # Apply hybrid append replacement
-                cv_image = self._apply_hybrid_append(cv_image, match, ocr_results)
+                # Apply hybrid replacement (mode-aware)
+                cv_image = self._apply_hybrid_replacement(cv_image, match, ocr_results)
             
             # Save result
             output_path = self._generate_output_path(image_path)
@@ -59,9 +63,10 @@ class PreciseAppendReplacer:
             logger.error(f" HYBRID APPEND: Error processing {image_path}: {e}")
             return None
     
-    def _apply_hybrid_append(self, cv_image: np.ndarray, match: OCRMatch, all_ocr_results: List[OCRResult]) -> np.ndarray:
+    def _apply_hybrid_replacement(self, cv_image: np.ndarray, match: OCRMatch, all_ocr_results: List[OCRResult]) -> np.ndarray:
         """
-        Apply hybrid append replacement combining OpenCV + our mapping logic.
+        Apply hybrid replacement combining OpenCV + our mapping logic.
+        Handles both replace and append modes based on self.mode.
         
         Args:
             cv_image: OpenCV image to modify
@@ -77,8 +82,9 @@ class PreciseAppendReplacer:
             replacement_text = match.replacement_text
             
             x, y, width, height = bbox
+            mode_label = "REPLACE" if self.mode == "replace" else "APPEND"
             
-            logger.info(f" HYBRID APPEND: Bbox: {bbox}, Full OCR: '{original_full_text}', Replacement: '{replacement_text}'")
+            logger.info(f"HYBRID {mode_label}: Bbox: {bbox}, Full OCR: '{original_full_text}', Replacement: '{replacement_text}'")
             
             # Use our pattern matcher to find the pattern within the OCR text
             # In append mode we must handle unmapped patterns too, so allow all matches here
@@ -92,7 +98,7 @@ class PreciseAppendReplacer:
             logger.info(f" HYBRID APPEND: Found pattern: '{matched_pattern}' (pattern: {pattern_name})")
             
             # Draw the appended text either side-by-side or top/down without erasing originals
-            return self._draw_appended_text(cv_image, bbox, original_full_text, matched_pattern, replacement_text, all_ocr_results)
+            return self._draw_appended_text(cv_image, bbox, original_full_text, matched_pattern, replacement_text, all_ocr_results, match)
             
         except Exception as e:
             logger.error(f" HYBRID APPEND: Error in hybrid append: {e}")
@@ -149,8 +155,19 @@ class PreciseAppendReplacer:
 
     def _compute_fitting_scale(self, text: str, max_width: int, max_height: int,
                                base_scale: float = 1.0, min_scale: float = 0.3,
-                               thickness: int = 1, font: int = cv2.FONT_HERSHEY_SIMPLEX) -> Tuple[float, Tuple[int, int]]:
+                               thickness: int = 1, font: int = cv2.FONT_HERSHEY_SIMPLEX,
+                               mode: str = "append") -> Tuple[float, Tuple[int, int]]:
         """Compute the largest font scale that fits text inside the given area."""
+        # Mode-aware font scaling
+        if mode == "replace":
+            # Replace mode: can use larger font since we're only placing one text
+            base_scale = max(base_scale, 1.2)
+            min_scale = max(min_scale, 0.4)
+        else:
+            # Append mode: need smaller font to fit both original and replacement text
+            base_scale = min(base_scale, 0.8)
+            min_scale = max(min_scale, 0.3)
+        
         scale = base_scale
         size = cv2.getTextSize(text, font, scale, thickness)[0]
         while (size[0] > max_width or size[1] > max_height) and scale > min_scale:
@@ -225,7 +242,7 @@ class PreciseAppendReplacer:
     def _draw_text_with_bg(self, image: np.ndarray, text: str, origin: Tuple[int, int],
                             font_scale: float, thickness: int = 1,
                             font: int = cv2.FONT_HERSHEY_SIMPLEX,
-                            padding: int = 2, text_color: Tuple[int, int, int] = None) -> None:
+                            padding: int = 2, text_color: Optional[Tuple[int, int, int]] = None) -> None:
         """
         Draw text with a white background rectangle behind it for readability.
         ENHANCED: More aggressive background clearing to prevent ghosting.
@@ -265,7 +282,7 @@ class PreciseAppendReplacer:
 
     def _draw_text_plain(self, image: np.ndarray, text: str, origin: Tuple[int, int],
                          font_scale: float, thickness: int = 1,
-                         font: int = cv2.FONT_HERSHEY_SIMPLEX, text_color: Tuple[int, int, int] = None) -> None:
+                         font: int = cv2.FONT_HERSHEY_SIMPLEX, text_color: Optional[Tuple[int, int, int]] = None) -> None:
         """Draw text without any background rectangle (used after area is wiped)."""
         # Convert RGB to BGR for OpenCV
         if text_color:
@@ -276,7 +293,7 @@ class PreciseAppendReplacer:
 
     def _draw_appended_text(self, cv_image: np.ndarray, bbox: Tuple[int, int, int, int],
                             original_full_text: str, matched_pattern: str, replacement_text: str,
-                            all_ocr_results: List[OCRResult]) -> np.ndarray:
+                            all_ocr_results: List[OCRResult], match: Optional[OCRMatch] = None) -> np.ndarray:
         """
         Draw the appended text near the matched pattern without erasing any original content.
 
@@ -354,20 +371,27 @@ class PreciseAppendReplacer:
                 # Try to expand into surrounding whitespace before placement
                 expanded_rect = self._expand_rect_into_whitespace(cv_image, wiped_rect, all_ocr_results, anchor_bbox=bbox)
                 # Expose precise and reconstruction rects on the match for reporting
-                try:
-                    setattr(match, 'precise_bbox', (rx, ry, rw, rh))
-                    setattr(match, 'reconstruction_bbox', expanded_rect)
-                    setattr(match, 'reconstruction_reasoning', {
-                        'reason': 'Character-level wipe + whitespace expansion',
-                        'expanded_from': (rx, ry, rw, rh),
-                        'expanded_to': expanded_rect
-                    })
-                except Exception:
-                    pass
-                placed, font_scale = self._place_two_tokens_in_rect(cv_image, expanded_rect, token_77, token_4022, prefer_vertical=prefer_vertical_choice, anchor_limit_rect=bbox, text_color=detected_color)
-                if not placed:
-                    joined = f"{token_77} {token_4022}".strip()
-                    font_scale = self._place_single_text_in_rect(cv_image, expanded_rect, joined, text_color=detected_color)
+                if match is not None:
+                    try:
+                        setattr(match, 'precise_bbox', (rx, ry, rw, rh))
+                        setattr(match, 'reconstruction_bbox', expanded_rect)
+                        setattr(match, 'reconstruction_reasoning', {
+                            'reason': 'Character-level wipe + whitespace expansion',
+                            'expanded_from': (rx, ry, rw, rh),
+                            'expanded_to': expanded_rect
+                        })
+                    except Exception:
+                        pass
+                # Mode-aware text placement
+                if self.mode == "replace":
+                    # Replace mode: only place the replacement text
+                    font_scale = self._place_single_text_in_rect(cv_image, expanded_rect, token_4022, text_color=detected_color)
+                else:
+                    # Append mode: place both original and replacement text
+                    placed, font_scale = self._place_two_tokens_in_rect(cv_image, expanded_rect, token_77, token_4022, prefer_vertical=prefer_vertical_choice, anchor_limit_rect=bbox, text_color=detected_color)
+                    if not placed:
+                        joined = f"{token_77} {token_4022}".strip()
+                        font_scale = self._place_single_text_in_rect(cv_image, expanded_rect, joined, text_color=detected_color)
                  # Mark reconstructed
                 try:
                     setattr(match, 'reconstructed', True)
@@ -423,25 +447,33 @@ class PreciseAppendReplacer:
             
             expanded_precise_rect = self._expand_rect_into_whitespace(cv_image, precise_wipe_rect, all_ocr_results, anchor_bbox=bbox)
             # Attach rectangles for reporting
-            try:
-                setattr(match, 'precise_bbox', (wx, wy, ww, wh))
-                setattr(match, 'reconstruction_bbox', expanded_precise_rect)
-                setattr(match, 'reconstruction_reasoning', {
-                    'reason': 'Precise proportional wipe + whitespace expansion',
-                    'expanded_from': (wx, wy, ww, wh),
-                    'expanded_to': expanded_precise_rect
-                })
-            except Exception:
-                pass
-            placed, font_scale = self._place_two_tokens_in_rect(cv_image, expanded_precise_rect, token_77, token_4022, prefer_vertical=False, anchor_limit_rect=bbox, text_color=detected_color)
-            if not placed:
-                logger.warning(f" PRECISE APPEND: Two-token placement failed, trying single text fallback")
-                joined = f"{token_77} {token_4022}".strip()
-                font_scale = self._place_single_text_in_rect(cv_image, expanded_precise_rect, joined, text_color=detected_color)
-            try:
-                setattr(match, 'reconstructed', True)
-            except Exception:
-                pass
+            if match is not None:
+                try:
+                    setattr(match, 'precise_bbox', (wx, wy, ww, wh))
+                    setattr(match, 'reconstruction_bbox', expanded_precise_rect)
+                    setattr(match, 'reconstruction_reasoning', {
+                        'reason': 'Precise proportional wipe + whitespace expansion',
+                        'expanded_from': (wx, wy, ww, wh),
+                        'expanded_to': expanded_precise_rect
+                    })
+                except Exception:
+                    pass
+            # Mode-aware text placement
+            if self.mode == "replace":
+                # Replace mode: only place the replacement text
+                font_scale = self._place_single_text_in_rect(cv_image, expanded_precise_rect, token_4022, text_color=detected_color)
+            else:
+                # Append mode: place both original and replacement text
+                placed, font_scale = self._place_two_tokens_in_rect(cv_image, expanded_precise_rect, token_77, token_4022, prefer_vertical=False, anchor_limit_rect=bbox, text_color=detected_color)
+                if not placed:
+                    logger.warning(f"PRECISE APPEND: Two-token placement failed, trying single text fallback")
+                    joined = f"{token_77} {token_4022}".strip()
+                    font_scale = self._place_single_text_in_rect(cv_image, expanded_precise_rect, joined, text_color=detected_color)
+            if match is not None:
+                try:
+                    setattr(match, 'reconstructed', True)
+                except Exception:
+                    pass
             else:
                 logger.info(f" PRECISE APPEND: Successfully placed two tokens vertically")
 
@@ -1007,7 +1039,7 @@ class PreciseAppendReplacer:
         except Exception:
             return None
 
-    def _place_single_text_in_rect(self, image: np.ndarray, rect: Tuple[int, int, int, int], text: str, text_color: Tuple[int, int, int] = None) -> float:
+    def _place_single_text_in_rect(self, image: np.ndarray, rect: Tuple[int, int, int, int], text: str, text_color: Optional[Tuple[int, int, int]] = None) -> float:
         """
         Place single text in rectangle with enhanced clearing and positioning.
         ENHANCED: Better font scaling and positioning for single text fallback.
@@ -1018,8 +1050,8 @@ class PreciseAppendReplacer:
         
         logger.info(f" SINGLE TEXT: Placing '{text}' in rect ({x}, {y}, {w}, {h})")
         
-        # ENHANCED: Better font scaling with higher minimum size
-        scale, size = self._compute_fitting_scale(text, w - 6, h - 6, base_scale=1.2, min_scale=0.4, thickness=thickness, font=font)
+        # ENHANCED: Better font scaling with mode-aware sizing
+        scale, size = self._compute_fitting_scale(text, w - 6, h - 6, base_scale=1.2, min_scale=0.4, thickness=thickness, font=font, mode=self.mode)
         
         # Center text in rectangle
         tx = x + (w - size[0]) // 2
@@ -1036,7 +1068,7 @@ class PreciseAppendReplacer:
         
         return scale
 
-    def _place_two_tokens_in_rect(self, image: np.ndarray, rect: Tuple[int, int, int, int], t1: str, t2: str, prefer_vertical: bool = False, anchor_limit_rect: Optional[Tuple[int, int, int, int]] = None, text_color: Tuple[int, int, int] = None) -> Tuple[bool, float]:
+    def _place_two_tokens_in_rect(self, image: np.ndarray, rect: Tuple[int, int, int, int], t1: str, t2: str, prefer_vertical: bool = False, anchor_limit_rect: Optional[Tuple[int, int, int, int]] = None, text_color: Optional[Tuple[int, int, int]] = None) -> Tuple[bool, float]:
         """
         Place two tokens in the given rectangle with enhanced vertical stacking preference.
         ENHANCED: Always prefer vertical stacking as per user requirements.
@@ -1061,8 +1093,12 @@ class PreciseAppendReplacer:
             avail_h = h - 2 * padding
 
             def search_scale_width_only(text: str) -> float:
-                lo, hi = MIN_FONT_SCALE, 3.0
-                best = MIN_FONT_SCALE
+                # Mode-aware scale ranges
+                if self.mode == "replace":
+                    lo, hi = max(MIN_FONT_SCALE, 0.4), 3.0  # Larger font for replace mode
+                else:
+                    lo, hi = MIN_FONT_SCALE, 2.0  # Smaller font for append mode
+                best = lo
                 for _ in range(20):
                     mid = (lo + hi) / 2.0
                     tw, th = measure(text, mid)
@@ -1096,8 +1132,12 @@ class PreciseAppendReplacer:
         # Maximise scale for single-line horizontal layout with joined text
         def max_scale_horizontal() -> Tuple[float, Tuple[int, int], str]:
             joined = f"{t1} {t2}"
-            low, high = MIN_FONT_SCALE, 3.0
-            best = MIN_FONT_SCALE
+            # Mode-aware scale ranges
+            if self.mode == "replace":
+                low, high = max(MIN_FONT_SCALE, 0.4), 3.0  # Larger font for replace mode
+            else:
+                low, high = MIN_FONT_SCALE, 2.0  # Smaller font for append mode
+            best = low
             best_sz = (0, 0)
             for _ in range(20):
                 mid = (low + high) / 2.0

@@ -7,8 +7,8 @@ for the document processing pipeline.
 
 import platform
 import sys
-from typing import Dict, Any
 from pathlib import Path
+from typing import Dict, Any
 
 
 def validate_platform_support() -> bool:

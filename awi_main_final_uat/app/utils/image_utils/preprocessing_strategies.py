@@ -3,12 +3,13 @@ Multiple preprocessing strategies for different image conditions.
 Provides automatic strategy selection and fallback mechanisms.
 """
 
+import logging
+from enum import Enum
+from pathlib import Path
+from typing import List, Dict, Any, Optional
+
 import cv2
 import numpy as np
-from typing import List, Dict, Any, Optional, Callable
-import logging
-from pathlib import Path
-from enum import Enum
 
 from .image_preprocessor import ImagePreprocessor
 

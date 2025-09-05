@@ -4,10 +4,10 @@ Handles regex pattern matching and text mapping across image, text, and graphics
 Includes enhanced universal pattern matching for better detection.
 """
 
-import re
-from typing import Dict, List, Tuple, Optional, Any
-from dataclasses import dataclass
 import logging
+import re
+from dataclasses import dataclass
+from typing import Dict, List, Tuple, Optional, Any
 
 logger = logging.getLogger(__name__)
 
@@ -194,13 +194,14 @@ class PatternMatcher:
         
         return deduplicated_matches
     
-    def find_matches_universal(self, text: str, context_chars: int = 5) -> List[UniversalMatch]:
+    def find_matches_universal(self, text: str, context_chars: int = 5, include_unmapped: bool = False) -> List[UniversalMatch]:
         """
         Find matches with universal character support and context information.
         
         Args:
             text: Text to search
             context_chars: Number of context characters to include
+            include_unmapped: When True, include detections even if there is no mapping. When False, only include mapped.
             
         Returns:
             List of UniversalMatch objects
@@ -232,10 +233,12 @@ class PatternMatcher:
                     else:
                         logger.debug(f"No pattern extracted, using original: '{matched_text}'")
                     
-                    # Check if we have a mapping for this text
+                    # Determine if we have a mapping for this text
                     replacement = self.get_replacement(matched_text)
                     logger.debug(f"Replacement for '{matched_text}': '{replacement}'")
-                    if replacement:
+
+                    # Decide inclusion
+                    if include_unmapped or replacement:
                         # Get context
                         preceding_context = self.get_match_context(text, start_pos, context_chars, before=True)
                         following_context = self.get_match_context(text, end_pos, context_chars, before=False)

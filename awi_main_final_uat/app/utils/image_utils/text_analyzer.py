@@ -3,13 +3,12 @@ Text analysis and orientation detection for enhanced OCR processing.
 Provides comprehensive text property analysis including orientation, font size, and color detection.
 """
 
-import cv2
-import numpy as np
-from typing import Dict, Any, Tuple, Optional, List
 import logging
 from dataclasses import dataclass
-from PIL import Image, ImageDraw, ImageFont
-import math
+from typing import Dict, Any, Tuple, Optional, List
+
+import cv2
+import numpy as np
 
 logger = logging.getLogger(__name__)
 

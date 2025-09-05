@@ -1,6 +1,7 @@
 
 import logging
-from typing import List, Dict, Any, Tuple, Optional
+from typing import List, Tuple
+
 from docx.table import Table, _Cell
 
 logger = logging.getLogger(__name__)

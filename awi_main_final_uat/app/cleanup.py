@@ -1,12 +1,10 @@
 
-import sys
-import shutil
-import logging
-from pathlib import Path
-from typing import List, Set
 import argparse
-from datetime import datetime
-
+import logging
+import shutil
+import sys
+from pathlib import Path
+from typing import List
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -44,10 +42,10 @@ def calculate_directory_size(directory: Path) -> int:
     for item in directory.rglob("*"):
         if item.is_file():
             try:
-            total_size += item.stat().st_size
-        except (OSError, FileNotFoundError):
-            # File may have been deleted or become inaccessible
-            continue
+                total_size += item.stat().st_size
+            except (OSError, FileNotFoundError):
+                # File may have been deleted or become inaccessible
+                continue
 
     return total_size
 
@@ -102,76 +100,60 @@ def cleanup_pycache_directories(start_path: Path, dry_run: bool = False) -> tupl
 
     return directories_removed, total_size_freed
 
-def cleanup_logs(logs_dir: Path, dry_run: bool = False) -> tuple[int, int]:
-    if not logs_dir.exists():
-        logger.info("No logs directory found")
+def _cleanup_files_by_patterns(directory: Path, patterns: list[str], empty_msg: str, label: str, dry_run: bool = False) -> tuple[int, int]:
+    if not directory.exists():
+        logger.info(f"No {label} directory found")
         return 0, 0
 
-    log_files = list(logs_dir.glob("*.log"))
+    files: list[Path] = []
+    for pattern in patterns:
+        files.extend(directory.glob(pattern))
 
-    if not log_files:
-        logger.info("No log files found")
+    if not files:
+        logger.info(empty_msg)
         return 0, 0
 
-    logger.info(f"Found {len(log_files)} log files")
+    logger.info(f"Found {len(files)} {label} files")
 
     total_size_freed = 0
-    files_removed = 0
+    items_removed = 0
 
-    for log_file in log_files:
+    for file in files:
         try:
-            size_before = log_file.stat().st_size
+            size_before = file.stat().st_size
 
             if dry_run:
-                logger.info(f"Would remove: {log_file} ({format_size(size_before)})")
+                logger.info(f"Would remove: {file} ({format_size(size_before)})")
                 total_size_freed += size_before
-                files_removed += 1
+                items_removed += 1
             else:
-                log_file.unlink()
-                logger.info(f"Removed: {log_file} ({format_size(size_before)})")
+                file.unlink()
+                logger.info(f"Removed: {file} ({format_size(size_before)})")
                 total_size_freed += size_before
-                files_removed += 1
+                items_removed += 1
 
         except Exception as e:
-            logger.error(f"Failed to remove %s: %s", log_file, str(e).replace('\n', ' ').replace('\r', ''))
+            logger.error(f"Failed to remove %s: %s", file, str(e).replace('\n', ' ').replace('\r', ''))
 
-    return files_removed, total_size_freed
+    return items_removed, total_size_freed
+
+def cleanup_logs(logs_dir: Path, dry_run: bool = False) -> tuple[int, int]:
+    return _cleanup_files_by_patterns(
+        directory=logs_dir,
+        patterns=["*.log"],
+        empty_msg="No log files found",
+        label="log",
+        dry_run=dry_run,
+    )
 
 def cleanup_reports(reports_dir: Path, dry_run: bool = False) -> tuple[int, int]:
-    if not reports_dir.exists():
-        logger.info("No reports directory found")
-        return 0, 0
-
-
-    report_files = list(reports_dir.glob("*.json")) + list(reports_dir.glob("*.html"))
-
-    if not report_files:
-        logger.info("No report files found")
-        return 0, 0
-
-    logger.info(f"Found {len(report_files)} report files")
-
-    total_size_freed = 0
-    files_removed = 0
-
-    for report_file in report_files:
-        try:
-            size_before = report_file.stat().st_size
-
-            if dry_run:
-                logger.info(f"Would remove: {report_file} ({format_size(size_before)})")
-                total_size_freed += size_before
-                files_removed += 1
-            else:
-                report_file.unlink()
-                logger.info(f"Removed: {report_file} ({format_size(size_before)})")
-                total_size_freed += size_before
-                files_removed += 1
-
-        except Exception as e:
-            logger.error(f"Failed to remove %s: %s", report_file, str(e).replace('\n', ' ').replace('\r', ''))
-
-    return files_removed, total_size_freed
+    return _cleanup_files_by_patterns(
+        directory=reports_dir,
+        patterns=["*.json", "*.html"],
+        empty_msg="No report files found",
+        label="report",
+        dry_run=dry_run,
+    )
 
 def create_cleanup_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(

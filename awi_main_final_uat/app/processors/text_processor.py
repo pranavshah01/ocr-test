@@ -1,17 +1,17 @@
-
-import re
+import logging
 import logging
 import time
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any
 
 from docx import Document
-from docx.text.paragraph import Paragraph
 from docx.table import Table
+from docx.text.paragraph import Paragraph
 
-from ..core.models import ProcessingResult, MatchDetail, ProcessorType, MatchFlag, FallbackFlag
-from ..utils.text_utils.text_docx_utils import TextReconstructor, FontManager, PatternMatcher, create_pattern_matcher, load_patterns_and_mappings
 from config import DEFAULT_MAPPING, DEFAULT_SEPARATOR, PROCESSING_MODES
+from ..core.models import ProcessingResult, MatchDetail, ProcessorType, MatchFlag, FallbackFlag
+from ..utils.text_utils.text_docx_utils import TextReconstructor, FontManager, create_pattern_matcher, \
+    load_patterns_and_mappings
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +105,7 @@ class TextProcessor:
         self.mappings = {}
         self.pattern_matcher = None
         self.text_replacer = None
-        self.mode = getattr(config, 'mode', PROCESSING_MODES['APPEND'])
+        self.mode = getattr(config, 'text_mode', PROCESSING_MODES['APPEND'])
         self.separator = getattr(config, 'separator', DEFAULT_SEPARATOR)
         self.default_mapping = getattr(config, 'default_mapping', DEFAULT_MAPPING)
 
@@ -580,6 +580,9 @@ class TextProcessor:
         font_size = font_info.get('font_size', '12.0')
         font_color = font_info.get('color', '000000')
 
+        is_matched = detection.get('is_matched', False)
+        mapped_text_val = detection.get('replacement_text', '') if is_matched else self.default_mapping
+
         return {
             'sr_no': sr_no,
             'type': processor_type,
@@ -589,11 +592,11 @@ class TextProcessor:
             'src_text_color': font_color,
             'src_text_size': font_size,
             'src_dimension': detection.get('dimension', ''),
-            'mapped_text': detection.get('replacement_text', ''),
+            'mapped_text': mapped_text_val,
             'mapped_text_font': font_family,
             'mapped_text_color': font_color,
             'mapped_text_size': font_size,
-            'match_flag': 'Y' if detection.get('is_matched', False) else 'N',
+            'match_flag': 'Y' if is_matched else 'N',
             'is_fallback': 'N',
             'reasoning': None,
             'reconstructed': False

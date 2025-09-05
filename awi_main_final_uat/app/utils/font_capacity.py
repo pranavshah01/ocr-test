@@ -1,17 +1,14 @@
 
 from __future__ import annotations
 
-from typing import Dict, Tuple
 import json
 from pathlib import Path
+from typing import Dict, Tuple
+
 from config import (
     POINTS_PER_INCH,
     CM_PER_INCH,
 )
-
-
-
-
 
 FALLBACK_DEFAULTS = {
     'width_multiplier': 0.6,
