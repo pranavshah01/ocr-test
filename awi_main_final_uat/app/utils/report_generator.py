@@ -603,6 +603,17 @@ class ReportGenerator:
         docx_mb = "" if not docx_file_size else f"{docx_file_size/(1024*1024):.2f}"
         processed_mb = "" if not processed_size_disp else f"{processed_size_disp/(1024*1024):.2f}"
 
+        # Document-level comments (e.g., unsupported images)
+        comments_list = []
+        try:
+            if file_report.metadata and isinstance(file_report.metadata, dict):
+                comments_list = file_report.metadata.get('file_comments', []) or []
+        except Exception:
+            comments_list = []
+        comments_html = ""
+        if comments_list:
+            comments_html = "<div class='section'><h2>Document Comments</h2><ul>" + "".join(f"<li>{c}</li>" for c in comments_list) + "</ul></div>"
+
         html = f"""
 <!DOCTYPE html>
 <html lang="en">
@@ -715,7 +726,7 @@ class ReportGenerator:
                 <textarea class="failure-reason" readonly>{file_report.error_message or ""}</textarea>
             </div>
         </div>
-
+        {comments_html}
         <div class="section match-details">
             <h2>Match Details</h2>
             <table>

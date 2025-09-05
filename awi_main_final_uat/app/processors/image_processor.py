@@ -14,7 +14,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
-from PIL import Image
+from io import BytesIO
+from PIL import Image, UnidentifiedImageError
 from docx import Document
 
 from config import (
@@ -33,6 +34,13 @@ from ..utils.image_utils.platform_utils import PathManager
 from ..utils.image_utils.precise_append import PreciseAppendReplacer
 
 logger = logging.getLogger(__name__)
+
+# Supported vector types we will skip (report-only)
+VECTOR_CTYPES = {
+    'image/wmf', 'image/x-wmf', 'application/x-msmetafile',
+    'image/emf', 'image/x-emf', 'application/emf'
+}
+VECTOR_EXTS = {'.wmf', '.emf'}
 
 @dataclass
 class EnhancedImageMatch:
@@ -99,7 +107,10 @@ class ImageProcessor(BaseProcessor):
         self.confidence_min = confidence_min
         self.use_gpu = use_gpu
         self.enable_debugging = enable_debugging
-
+        
+        # Document-level comments to surface in HTML report (e.g., unsupported images)
+        self._file_comments: List[str] = []
+        
         self.pattern_matcher = None
         self.ocr_manager = None
         self.ocr_comparison_data = []
@@ -218,6 +229,13 @@ class ImageProcessor(BaseProcessor):
                 'ocr_comparison_data': ocr_comp,
                 'processor_info': processor_info
             })
+            # Attach document-level comments (e.g., unsupported images)
+            if self._file_comments:
+                try:
+                    processing_result.metadata.setdefault('file_comments', [])
+                    processing_result.metadata['file_comments'].extend(self._file_comments)
+                except Exception:
+                    pass
             processing_result.success = True
             return processing_result
         except Exception as e:
@@ -619,21 +637,38 @@ class ImageProcessor(BaseProcessor):
                     try:
                         image_data = rel.target_part.blob
                         content_type = rel.target_part.content_type
-                        if 'jpeg' in content_type:
-                            ext = '.jpg'
-                        elif 'png' in content_type:
-                            ext = '.png'
-                        elif 'gif' in content_type:
-                            ext = '.gif'
-                        else:
-                            ext = '.jpg'
                         # Prefer actual media filename from relationship if present
                         try:
                             media_name = Path(rel.target_ref).name
-                            if not media_name:
-                                media_name = f"image_{i}{ext}"
                         except Exception:
+                            media_name = ""
+                        # Derive extension from content type when absent
+                        ext = Path(media_name).suffix.lower()
+                        if not ext:
+                            if 'jpeg' in content_type:
+                                ext = '.jpg'
+                            elif 'png' in content_type:
+                                ext = '.png'
+                            elif 'gif' in content_type:
+                                ext = '.gif'
+                            else:
+                                ext = '.jpg'
+                        if not media_name:
                             media_name = f"image_{i}{ext}"
+                        # Capability-based check: try verifying with Pillow in-memory
+                        try:
+                            with Image.open(BytesIO(image_data)) as im:
+                                im.verify()
+                        except (UnidentifiedImageError, OSError, RuntimeError) as e:
+                            reason = f"Skipped image '{media_name}' ({content_type or ext}): unsupported image format - {e}"
+                            logger.warning(reason)
+                            self._file_comments.append(reason)
+                            continue
+                        except Exception as e:
+                            reason = f"Skipped image '{media_name}' ({content_type or ext}): image verification error - {e}"
+                            logger.warning(reason)
+                            self._file_comments.append(reason)
+                            continue
                         image_filename = media_name
                         temp_image_path = temp_dir / image_filename
                         
@@ -654,11 +689,27 @@ class ImageProcessor(BaseProcessor):
                             logger.debug(f"Extracted image: {temp_image_path}")
                         except Exception as e:
                             logger.error(f"Failed to write image data to {temp_image_path}: {e}")
+                            # Add doc-level comment for write failure
+                            try:
+                                self._file_comments.append(f"Skipped image '{media_name}' ({content_type}): write error - {e}")
+                            except Exception:
+                                pass
                             # Clean up partial file if it exists
                             if temp_image_path.exists():
                                 self._safe_cleanup_temp_file(temp_image_path)
                     except Exception as e:
                         logger.error(f"Failed to extract image from {rel.target_ref}: {e}")
+                        # Add doc-level comment for extraction failure
+                        try:
+                            failed_name = None
+                            try:
+                                failed_name = Path(rel.target_ref).name
+                            except Exception:
+                                failed_name = str(rel.target_ref)
+                            ct = getattr(rel.target_part, 'content_type', '') if hasattr(rel, 'target_part') else ''
+                            self._file_comments.append(f"Skipped image '{failed_name}' ({ct}): extraction failed - {e}")
+                        except Exception:
+                            pass
             logger.debug(f"Extracted {len(image_info_list)} images from document")
         except Exception as e:
             logger.error(f"Error extracting images from document: {e}")
