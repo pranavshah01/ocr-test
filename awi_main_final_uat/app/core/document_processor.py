@@ -7,8 +7,11 @@ import shutil
 import subprocess
 import tempfile
 import zipfile
+import platform
 from pathlib import Path
 from typing import Optional, Tuple, List, Dict, Any
+
+from app.core.doc_converter import DocConverter, ConversionError
 
 from config import (
     MAX_FILE_SIZE_MB,
@@ -741,6 +744,14 @@ class DocumentProcessor:
             return False
 
     def convert_if_needed(self, src_path: Path) -> Tuple[bool, Optional[Path], str]:
+        """
+        Ensures the input is a .docx.
+        - If src is already .docx: returns (True, src, message)
+        - If src is .doc: converts using DocConverter with platform-specific preference,
+          places the converted .docx alongside the source, and archives the original .doc
+          into <source_root>/orig_doc_files just like before.
+        - Any other extension: returns (False, None, 'Unsupported input type: ...')
+        """
         suffix = src_path.suffix.lower()
         if suffix == ".docx":
             return True, src_path, "Source is already .docx"
@@ -749,33 +760,34 @@ class DocumentProcessor:
 
         parent = src_path.parent
         target = parent / f"{src_path.stem}.docx"
+
         try:
+            # Instantiate the converter
+            converter = DocConverter()
 
-            soffice = shutil.which("soffice")
-            if not soffice:
-                mac_path = "/Applications/LibreOffice.app/Contents/MacOS/soffice"
-                if Path(mac_path).exists():
-                    soffice = mac_path
-            if not soffice:
-                return False, target, "LibreOffice (soffice) not found; cannot convert .doc"
+            # Enforce platform-specific preference
+            system = platform.system()
+            if system == "Windows" and "word_com" in getattr(converter, "available_tools", []):
+                converter.preferred_tool = "word_com"
+            elif system in ("Darwin", "Linux") and "libreoffice" in getattr(converter, "available_tools", []):
+                converter.preferred_tool = "libreoffice"
 
+            # Convert to a temporary location managed by the converter
+            converted_path = converter.convert_to_docx(src_path)
 
-            cmd = [
-                soffice,
-                "--headless",
-                "--convert-to",
-                "docx",
-                "--outdir",
-                str(parent),
-                str(src_path)
-            ]
-            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            if proc.returncode != 0:
-                return False, target, f"Conversion failed: {proc.stderr.strip() or proc.stdout.strip()}"
-            if not target.exists():
-                return False, target, "Conversion reported success but target .docx not found"
+            # Move converted file next to the source with standard name
+            try:
+                if target.exists():
+                    try:
+                        target.unlink()
+                    except Exception:
+                        pass
+                shutil.move(str(converted_path), str(target))
+            finally:
+                # Converter can clean its own temp folder if needed
+                pass
 
-
+            # Archive the original .doc
             try:
                 source_root = Path(self.config.source_dir)
             except Exception:
@@ -785,11 +797,13 @@ class DocumentProcessor:
             dest = archive_dir / src_path.name
             try:
                 shutil.move(str(src_path), str(dest))
+                archive_msg = " and archived original"
             except Exception as move_err:
-                return True, target, f"Converted, but failed to move original: {move_err}"
+                return True, target, f"Converted .doc to .docx but failed to move original: {move_err}"
 
-            return True, target, "Converted .doc to .docx and archived original"
-        except FileNotFoundError:
-            return False, target, "LibreOffice (soffice) not found; cannot convert .doc"
+            return True, target, f"Converted .doc to .docx{archive_msg}"
+
+        except ConversionError as e:
+            return False, target, f"Conversion failed: {e}"
         except Exception as e:
             return False, target, f"Unexpected conversion error: {e}"

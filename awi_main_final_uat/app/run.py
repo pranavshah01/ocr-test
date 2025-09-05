@@ -96,7 +96,7 @@ def save_processed_file_with_suffix(document, file_path: Path, config_obj) -> bo
 
 
 def process_with_retry(doc_path: Path, doc_processor, cli_parameters=None, max_retries: int = 3,
-                      base_delay: float = 2.0) -> Optional[ProcessingResult]:
+                     base_delay: float = 2.0) -> Optional[ProcessingResult]:
     for attempt in range(max_retries):
         try:
 
@@ -112,14 +112,21 @@ def process_with_retry(doc_path: Path, doc_processor, cli_parameters=None, max_r
                     logger.error("System resources critical (circuit breaker), stopping processing")
                     return None
 
-
+            # Preserve original .doc info if converting
+            original_doc_info = None
             if doc_path.suffix.lower() == '.doc':
+                try:
+                    original_doc_info = {
+                        'name': doc_path.name,
+                        'size': doc_path.stat().st_size
+                    }
+                except Exception:
+                    original_doc_info = None
 
                 success, out_path, msg = doc_processor.convert_if_needed(doc_path)
                 if not success:
                     raise Exception(f"Conversion failed: {msg}")
                 doc_path = out_path
-
 
             from docx import Document
             
@@ -138,12 +145,25 @@ def process_with_retry(doc_path: Path, doc_processor, cli_parameters=None, max_r
             # Load document with the determined parser
             document = Document(str(doc_path))
 
-
             result = create_pending_result(doc_path, doc_processor.config, doc_processor, cli_parameters)
+
+            # If this file originated as .doc, populate src .doc info for reporting
+            if original_doc_info:
+                try:
+                    result.doc_file_name = original_doc_info['name']
+                    result.doc_file_size = original_doc_info['size']
+                except Exception:
+                    pass
+                # Ensure docx metadata reflects the effective input
+                try:
+                    result.docx_file_name = doc_path.name
+                    result.docx_file_size = doc_path.stat().st_size
+                except Exception:
+                    pass
             
             # Update the parser field in the result
             result.parser = parser_type
-
+            
             # Process document with centralized AttValue error handling
             try:
                 success = doc_processor.process_document_text(document, result)
@@ -412,7 +432,9 @@ def main():
                         else:
 
                             from docx import Document
-                            document = Document(str(doc_path))
+                            # Use the effective input path (handles .doc converted to .docx)
+                            effective_input = result.input_path if getattr(result, 'input_path', None) else doc_path
+                            document = Document(str(effective_input))
                             document.save(str(processed_path))
                             logger.warning(f"Saved original document (no modified document found): {result.processed_file_name}")
 
@@ -423,7 +445,8 @@ def main():
                             result.processed_file_size = 0
 
 
-                    move_source_file_to_complete(doc_path, config_obj)
+                    # Move the effective source file (handles .doc converted to .docx)
+                    move_source_file_to_complete(result.input_path if getattr(result, 'input_path', None) else doc_path, config_obj)
 
 
                     # Snapshot performance metrics into the file result for reporting
