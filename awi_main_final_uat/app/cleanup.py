@@ -203,7 +203,7 @@ Examples:
 def main():
     try:
 
-        logger = setup_cleanup_logging()
+        setup_cleanup_logging()
 
 
         parser = create_cleanup_argument_parser()

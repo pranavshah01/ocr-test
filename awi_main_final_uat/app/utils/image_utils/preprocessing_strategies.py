@@ -478,7 +478,8 @@ class PreprocessingStrategyManager:
             try:
                 original = cv2.imread(str(image_path))
                 return [original] if original is not None else []
-            except:
+            except Exception as read_err:
+                logger.debug(f"Failed to read original image for fallback: {read_err}")
                 return []
     
     def _save_strategy_debug(self, original_path: Path, original_image: np.ndarray, variants: List[np.ndarray]):

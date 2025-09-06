@@ -5,7 +5,7 @@ Provides adaptive image enhancement techniques to improve OCR accuracy.
 
 import logging
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 
 import cv2
 import numpy as np
@@ -17,7 +17,7 @@ class ImagePreprocessor:
     
     def __init__(self):
         """Initialize image preprocessor with default settings."""
-        self.preprocessing_methods = {
+        self.preprocessing_methods: Dict[str, Callable[[np.ndarray], np.ndarray]] = {
             'contrast_enhancement': self.enhance_contrast,
             'noise_reduction': self.reduce_noise,
             'deskewing': self.deskew_text,
@@ -48,13 +48,16 @@ class ImagePreprocessor:
         
         # Apply individual methods
         for method_name in methods:
-            if method_name in self.preprocessing_methods:
+            func = self.preprocessing_methods.get(method_name)
+            if callable(func):
                 try:
-                    enhanced = self.preprocessing_methods[method_name](image.copy())
+                    enhanced = func(image.copy())
                     enhanced_images.append(enhanced)
                     logger.debug(f"Applied {method_name} successfully")
                 except Exception as e:
                     logger.warning(f"Failed to apply {method_name}: {e}")
+            else:
+                logger.warning(f"Preprocessing method '{method_name}' is not callable or not found")
         
         # Apply combinations of methods for difficult cases
         if len(methods) > 1:
@@ -399,7 +402,8 @@ class ImagePreprocessor:
             try:
                 original = cv2.imread(str(image_path))
                 return [original] if original is not None else []
-            except:
+            except Exception as read_err:
+                logger.debug(f"Failed to read original image for fallback: {read_err}")
                 return []
     
     def _save_preprocessing_variants(self, original_path: Path, variants: List[np.ndarray], 

@@ -268,7 +268,7 @@ class ImageProcessor(BaseProcessor):
                 self._safe_cleanup_temp_directory(self._current_temp_dir)
                 self._current_temp_dir = None
 
-    def _phase1_extraction(self, document: Document, **kwargs) -> List[Dict]:
+    def _phase1_extraction(self, document: Document, **kwargs) -> List[Dict[str, Any]]:
         extraction_results: List[Dict[str, Any]] = []
         try:
             image_info_list = self._extract_images_with_mapping(document, **kwargs)
@@ -300,7 +300,7 @@ class ImageProcessor(BaseProcessor):
             logger.error(f"Error in extraction phase: {e}")
         return extraction_results
 
-    def _phase2_match_and_wipe(self, extraction_results: List[Dict]) -> List[Dict]:
+    def _phase2_match_and_wipe(self, extraction_results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         wipe_results: List[Dict[str, Any]] = []
         for extraction_result in extraction_results:
             try:
@@ -716,7 +716,7 @@ class ImageProcessor(BaseProcessor):
         # Note: temp directory cleanup is handled at the end of _process_images method
         return image_info_list
 
-    def _store_ocr_comparison_data(self, location: str, image_path: Path, ocr_comparison: Dict[str, List[OCRResult]]):
+    def _store_ocr_comparison_data(self, location: str, image_path: Path, ocr_comparison: Dict[str, List[OCRResult]]) -> None:
         try:
             # Store stable, document-relative image reference instead of temp absolute path
             comparison_entry = {
@@ -881,8 +881,8 @@ class ImageProcessor(BaseProcessor):
                         try:
                             import os
                             os.remove(str(temp_path))
-                        except:
-                            pass
+                        except Exception as remove_err:
+                            logger.debug(f"os.remove fallback failed for {temp_path}: {remove_err}")
                 except FileNotFoundError:
                     # File already deleted, that's fine
                     logger.debug(f"Temp file already deleted: {temp_path.name}")
@@ -931,16 +931,16 @@ class ImageProcessor(BaseProcessor):
                                 for file in files:
                                     try:
                                         os.remove(os.path.join(root, file))
-                                    except:
-                                        pass
+                                    except Exception as remove_err:
+                                        logger.debug(f"Failed to remove file during temp dir cleanup: {os.path.join(root, file)} - {remove_err}")
                                 for dir in dirs:
                                     try:
                                         os.rmdir(os.path.join(root, dir))
-                                    except:
-                                        pass
+                                    except Exception as rmdir_err:
+                                        logger.debug(f"Failed to remove directory during temp dir cleanup: {os.path.join(root, dir)} - {rmdir_err}")
                             os.rmdir(temp_dir)
-                        except:
-                            pass
+                        except Exception as final_cleanup_err:
+                            logger.debug(f"Final temp dir removal failed for {temp_dir}: {final_cleanup_err}")
                 except FileNotFoundError:
                     # Directory already deleted, that's fine
                     logger.debug(f"Temp directory already deleted: {temp_dir}")

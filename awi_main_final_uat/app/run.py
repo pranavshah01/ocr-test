@@ -7,7 +7,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Union, Tuple, Any
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -20,6 +20,7 @@ from app.core.models import (
     ProcessingResult, BatchReport, CLIParameters,
     PatternInfo, ProcessingStatus
 )
+from docx import Document
 
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -31,7 +32,7 @@ logger = logging.getLogger(__name__)
 PROCESSING_LOG_FILE = "processing_log.json"
 
 
-def save_processing_log(results: List[ProcessingResult], config_obj) -> bool:
+def save_processing_log(results: List[ProcessingResult], config_obj: Any) -> bool:
     try:
         log_data = {
             'timestamp': datetime.now().isoformat(),
@@ -56,7 +57,7 @@ def save_processing_log(results: List[ProcessingResult], config_obj) -> bool:
         return False
 
 
-def move_source_file_to_complete(file_path: Path, config_obj) -> bool:
+def move_source_file_to_complete(file_path: Path, config_obj: Any) -> bool:
     try:
 
         complete_dir = Path(config_obj.complete_dir)
@@ -74,7 +75,7 @@ def move_source_file_to_complete(file_path: Path, config_obj) -> bool:
         return False
 
 
-def save_processed_file_with_suffix(document, file_path: Path, config_obj) -> bool:
+def save_processed_file_with_suffix(document: Document, file_path: Path, config_obj: Any) -> bool:
     try:
 
         processed_dir = Path(config_obj.output_dir)
@@ -96,7 +97,7 @@ def save_processed_file_with_suffix(document, file_path: Path, config_obj) -> bo
 
 
 def process_with_retry(doc_path: Path, doc_processor, cli_parameters=None, max_retries: int = 3,
-                     base_delay: float = 2.0) -> Optional[ProcessingResult]:
+                     base_delay: float = 2.0) -> Optional[Union[ProcessingResult, Tuple[ProcessingResult, Document]]]:
     for attempt in range(max_retries):
         try:
 
@@ -262,7 +263,7 @@ def process_with_retry(doc_path: Path, doc_processor, cli_parameters=None, max_r
 
 
 def log_progress(current: int, total: int, start_time: float,
-                successful: int, failed: int, performance_monitor: Optional[PerformanceMonitor] = None):
+                successful: int, failed: int, performance_monitor: Optional[PerformanceMonitor] = None) -> None:
     elapsed = time.time() - start_time
     elapsed_hours = elapsed / 3600
 
@@ -555,7 +556,7 @@ def main():
 _FILE_DISCOVERY_CACHE = {}
 _CACHE_REFRESH_INTERVAL = 60  # seconds
 
-def discover_input_files(config_obj, force_refresh: bool = False):
+def discover_input_files(config_obj: Any, force_refresh: bool = False) -> List[Path]:
     """Optimized file discovery with caching to avoid repeated recursive scans."""
     import time
     
@@ -724,7 +725,7 @@ def discover_input_files(config_obj, force_refresh: bool = False):
     return final_files
 
 
-def create_pending_result(file_path: Path, config_obj, doc_processor=None, cli_parameters=None):
+def create_pending_result(file_path: Path, config_obj: Any, doc_processor=None, cli_parameters=None) -> ProcessingResult:
     from app.core.models import ProcessingResult, ProcessingStatus
 
     intended_processed_name = f"{file_path.stem}{config_obj.suffix}.docx"
@@ -778,7 +779,7 @@ def create_pending_result(file_path: Path, config_obj, doc_processor=None, cli_p
     return result
 
 
-def generate_reports_from_results(config_obj, results, cli_parameters=None, performance_monitor=None, original_args=None):
+def generate_reports_from_results(config_obj: Any, results: List[ProcessingResult], cli_parameters=None, performance_monitor=None, original_args=None) -> None:
     report_generator = ReportGenerator(output_dir=config_obj.reports_dir, config=config_obj)
 
 

@@ -108,11 +108,13 @@ class TextProcessor:
         self.mode = getattr(config, 'text_mode', PROCESSING_MODES['APPEND'])
         self.separator = getattr(config, 'separator', DEFAULT_SEPARATOR)
         self.default_mapping = getattr(config, 'default_mapping', DEFAULT_MAPPING)
-
+        
+        # Initialize document reference to avoid "attribute defined outside __init__" warnings
+        self.document = None
 
         self._load_patterns_and_mappings()
 
-    def _load_patterns_and_mappings(self):
+    def _load_patterns_and_mappings(self) -> None:
         self.patterns, self.mappings = load_patterns_and_mappings(self.config)
 
     def initialize(self) -> bool:
@@ -490,7 +492,7 @@ class TextProcessor:
 
         return all_detections
 
-    def _update_processing_result(self, processing_result: ProcessingResult, detections: List[Dict[str, Any]]):
+    def _update_processing_result(self, processing_result: ProcessingResult, detections: List[Dict[str, Any]]) -> None:
 
         text_matches = 0
         graphics_matches = 0
@@ -602,7 +604,7 @@ class TextProcessor:
             'reconstructed': False
         }
 
-    def _update_reconstruction_status(self, processing_result: ProcessingResult, detections: List[Dict[str, Any]], reconstruction_results: Dict[str, bool]):
+    def _update_reconstruction_status(self, processing_result: ProcessingResult, detections: List[Dict[str, Any]], reconstruction_results: Dict[str, bool]) -> None:
         for match_detail in processing_result.match_details:
 
             for detection in detections:
@@ -616,7 +618,7 @@ class TextProcessor:
                     match_detail.reconstructed = reconstruction_results.get(detection_key, False)
                     break
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         logger.info("Cleaning up text processor")
         self.initialized = False
 

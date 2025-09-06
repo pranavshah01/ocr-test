@@ -11,12 +11,10 @@ This module provides comprehensive document conversion capabilities including:
 import subprocess
 import shutil
 import tempfile
-import os
 import platform
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 import logging
-import time
 
 logger = logging.getLogger(__name__)
 
@@ -222,7 +220,7 @@ class DocConverter:
         except subprocess.TimeoutExpired:
             raise ConversionError("LibreOffice conversion timed out")
         except Exception as e:
-            raise ConversionError(f"LibreOffice conversion error: {e}")
+            raise ConversionError(f"LibreOffice conversion error: {e}") from e
     
     def _convert_with_word_com(self, input_path: Path, output_path: Path) -> Optional[Path]:
         """Convert document using Microsoft Word COM interface (Windows only)."""
@@ -255,14 +253,14 @@ class DocConverter:
                 # Ensure Word is closed even if conversion fails
                 try:
                     word_app.Quit()
-                except:
-                    pass
-                raise e
+                except Exception as quit_err:
+                    logger.debug(f"Failed to quit Word after exception: {quit_err}")
+                raise
                 
         except ImportError:
             raise ConversionError("pywin32 not available for Word COM interface")
         except Exception as e:
-            raise ConversionError(f"Word COM conversion error: {e}")
+            raise ConversionError(f"Word COM conversion error: {e}") from e
     
     
     def _validate_docx_file(self, file_path: Path) -> bool:

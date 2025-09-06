@@ -25,7 +25,7 @@ class BaseProcessor:
     def process(self, document, **kwargs) -> ProcessingResult:
         raise NotImplementedError
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         pass
 
     def is_initialized(self) -> bool:

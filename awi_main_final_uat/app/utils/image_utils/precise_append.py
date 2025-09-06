@@ -212,7 +212,7 @@ class PreciseAppendReplacer:
             if len(non_white_pixels) == 0:
                 # Fallback to black color if no dark pixels found
                 logger.debug("Color detection: No non-white pixels found, using black fallback")
-                return (0, 0, 0)  # Black color in RGB
+                return 0, 0, 0  # Black color in RGB
             
             # Find the darkest color (minimum sum) instead of mean
             pixel_sums = np.sum(non_white_pixels, axis=1)
@@ -227,17 +227,17 @@ class PreciseAppendReplacer:
             # Ensure we have a reasonable color (not too dark or too light)
             if r + g + b < 50:  # Too dark - reduced threshold
                 logger.debug("Color detection: Color too dark, using black fallback")
-                return (0, 0, 0)  # Default black
+                return 0, 0, 0  # Default black
             elif r + g + b > 700:  # Too light - increased threshold
                 logger.debug("Color detection: Color too light, using black fallback")
-                return (0, 0, 0)  # Default black
+                return 0, 0, 0  # Default black
             
             logger.debug(f"Detected text color: RGB({r}, {g}, {b})")
-            return (r, g, b)
+            return r, g, b
             
         except Exception as e:
             logger.warning(f"Color detection failed: {e}, using default black")
-            return (0, 0, 0)  # Default black color
+            return 0, 0, 0  # Default black color
 
     def _draw_text_with_bg(self, image: np.ndarray, text: str, origin: Tuple[int, int],
                             font_scale: float, thickness: int = 1,
@@ -567,7 +567,7 @@ class PreciseAppendReplacer:
             logger.info(f" WIPE RECT: Character positions {wipe_start}-{wipe_end} -> pixels {wipe_start_x}-{wipe_end_x}")
             logger.info(f" WIPE RECT: Original bbox: ({x}, {y}, {width}, {height})")
             
-            return (wipe_start_x, wipe_y, wipe_width, wipe_height)
+            return wipe_start_x, wipe_y, wipe_width, wipe_height
             
         except Exception as e:
             logger.error(f"Failed to calculate precise wipe rect: {e}")
@@ -709,7 +709,7 @@ class PreciseAppendReplacer:
 
             if union_left is None:
                 return None
-            return (union_left, union_top, max(1, union_right - union_left), max(1, union_bottom - union_top))
+            return union_left, union_top, max(1, union_right - union_left), max(1, union_bottom - union_top)
         except Exception as e:
             logger.error(f"Exact pattern wipe failed: {e}")
             return None
@@ -996,7 +996,7 @@ class PreciseAppendReplacer:
             else:
                 break
 
-        return (left, top, max(1, right - left), max(1, bottom - top))
+        return left, top, max(1, right - left), max(1, bottom - top)
 
     def _detect_red_box_bounds(self, image: np.ndarray, anchor_bbox: Tuple[int, int, int, int]) -> Optional[Tuple[int, int, int, int]]:
         """Detect the red annotation rectangle surrounding the anchor area.
@@ -1035,7 +1035,7 @@ class PreciseAppendReplacer:
                 return None
             candidates.sort(key=lambda t: t[4])
             x, y, w, h, _ = candidates[0]
-            return (x, y, w, h)
+            return x, y, w, h
         except Exception:
             return None
 

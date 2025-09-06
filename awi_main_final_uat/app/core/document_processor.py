@@ -337,10 +337,10 @@ class DocumentProcessor:
                                 break
                         else:
                             # Non-AttValue error, re-raise
-                            raise e
+                            raise
                     except Exception as e:
                         # Other parsing errors, re-raise
-                        raise e
+                        raise
                 
                 if iteration >= max_iterations:
                     logger.error("Maximum iterations reached, could not resolve all AttValue errors")
@@ -405,7 +405,7 @@ class DocumentProcessor:
                 
             except Exception as inner_e:
                 logger.error(f"Error in enhanced parser inner processing: {inner_e}")
-                raise inner_e
+                raise
                         
         except Exception as e:
             logger.error(f"Enhanced parser failed: {e}")
@@ -501,7 +501,7 @@ class DocumentProcessor:
             logger.error(f"Failed to apply parked attributes: {e}")
             return False
 
-    def clear_memory(self, force_gc: bool = False):
+    def clear_memory(self, force_gc: bool = False) -> None:
         """
         Clear memory and optionally perform garbage collection.
         

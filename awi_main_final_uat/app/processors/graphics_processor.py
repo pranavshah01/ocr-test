@@ -43,6 +43,7 @@ class GraphicsProcessor(BaseProcessor):
         self.default_mapping = default_mapping
 
         self.pattern_matcher = None
+        self.document = None
 
         logger.info(f"Graphics processor initialized with mode: {mode}, separator: '{separator}', default_mapping: '{default_mapping}'")
 
@@ -493,7 +494,7 @@ class GraphicsProcessor(BaseProcessor):
 
         return detection_results, reconstruction_results
 
-    def _update_processing_result(self, processing_result: ProcessingResult, detections: List[Dict[str, Any]], reconstructions: List[Dict[str, Any]] = None):
+    def _update_processing_result(self, processing_result: ProcessingResult, detections: List[Dict[str, Any]], reconstructions: List[Dict[str, Any]] = None) -> None:
         if reconstructions is None:
             reconstructions = []
 
@@ -1264,7 +1265,7 @@ class GraphicsProcessor(BaseProcessor):
             logger.error(f"Error replacing text in w:t elements: {e}")
             return False
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         """Clean up graphics processor resources."""
         logger.info("Cleaning up graphics processor")
         self.initialized = False
